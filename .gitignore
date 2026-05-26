@@ -1,0 +1,57 @@
+# Dependencies
+node_modules/
+.pnpm-store
+.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# Build / cache
+.next/
+out/
+dist/
+build/
+.turbo/
+.cache/
+*.tsbuildinfo
+
+# Drizzle / DB
+drizzle/.snapshot/
+*.sqlite
+*.sqlite-journal
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# Test / coverage
+coverage/
+.nyc_output/
+*.lcov
+
+# Local Claude state (per-machine)
+.claude/
+.claude/settings.local.json
+memory/
+plan/
+docs/
+.agents/

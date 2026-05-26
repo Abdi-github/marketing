@@ -1,0 +1,23 @@
+{
+  "name": "@marketing/workers",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --max-warnings 0",
+    "check:boundaries": "depcruise src --config ../../.dependency-cruiser.cjs"
+  },
+  "dependencies": {
+    "@marketing/shared": "workspace:*",
+    "bullmq": "^5.34.3",
+    "ioredis": "^5.4.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

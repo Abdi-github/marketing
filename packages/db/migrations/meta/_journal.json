@@ -1,0 +1,20 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1779789315445,
+      "tag": "0000_elite_fenris",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1779791916108,
+      "tag": "0001_fixed_enchantress",
+      "breakpoints": true
+    }
+  ]
+}
