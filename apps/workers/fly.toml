@@ -1,0 +1,27 @@
+# fly.toml for apps/workers
+# Deploy: fly deploy --config apps/workers/fly.toml --build-arg PNPM_FILTER=@marketing/workers
+# Secrets (set before first deploy):
+#   fly secrets set REDIS_URL=... DATABASE_URL=... ANTHROPIC_API_KEY=... --app marketing-workers
+
+app = "marketing-workers"
+primary_region = "fra"   # Frankfurt — closest to CH, lowest latency to Supabase CH-region
+
+[build]
+  dockerfile = "../../Dockerfile.workers"
+
+[env]
+  NODE_ENV       = "production"
+  LOG_LEVEL      = "info"
+  OTEL_SERVICE_NAME = "marketing-workers"
+
+# Workers process: no inbound HTTP.
+# Health check: we rely on Fly process monitoring (not HTTP).
+[processes]
+  app = "node dist/index.js"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
+
+# Scale to 1 replica to start. Scale up when queue depth grows.
+# No http_service — workers have no inbound HTTP. Fly monitors the process directly.

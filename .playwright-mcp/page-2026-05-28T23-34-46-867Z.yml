@@ -1,0 +1,57 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - heading "Ops — Tenant Management" [level=1] [ref=e3]
+    - table [ref=e5]:
+      - rowgroup [ref=e6]:
+        - row "Name Slug Plan Status Suspended MTD AI Cost Created Actions" [ref=e7]:
+          - columnheader "Name" [ref=e8]
+          - columnheader "Slug" [ref=e9]
+          - columnheader "Plan" [ref=e10]
+          - columnheader "Status" [ref=e11]
+          - columnheader "Suspended" [ref=e12]
+          - columnheader "MTD AI Cost" [ref=e13]
+          - columnheader "Created" [ref=e14]
+          - columnheader "Actions" [ref=e15]
+      - rowgroup [ref=e16]:
+        - row "Zurich Cafe E2E zurich-cafe-e2e-bb36l trial active Active Load 29.5.2026 Suspend" [ref=e17]:
+          - cell "Zurich Cafe E2E" [ref=e18]
+          - cell "zurich-cafe-e2e-bb36l" [ref=e19]
+          - cell "trial" [ref=e20]:
+            - generic [ref=e21]: trial
+          - cell "active" [ref=e22]
+          - cell "Active" [ref=e23]:
+            - generic [ref=e24]: Active
+          - cell "Load" [ref=e25]:
+            - button "Load" [ref=e26] [cursor=pointer]
+          - cell "29.5.2026" [ref=e27]
+          - cell "Suspend" [ref=e28]:
+            - button "Suspend" [ref=e30] [cursor=pointer]
+        - row "Geneva Restaurant E2E geneva-restaurant-e2e-jz3bc starter active Active Load 29.5.2026 Suspend" [ref=e31]:
+          - cell "Geneva Restaurant E2E" [ref=e32]
+          - cell "geneva-restaurant-e2e-jz3bc" [ref=e33]
+          - cell "starter" [ref=e34]:
+            - generic [ref=e35]: starter
+          - cell "active" [ref=e36]
+          - cell "Active" [ref=e37]:
+            - generic [ref=e38]: Active
+          - cell "Load" [ref=e39]:
+            - button "Load" [ref=e40] [cursor=pointer]
+          - cell "29.5.2026" [ref=e41]
+          - cell "Suspend" [ref=e42]:
+            - button "Suspend" [ref=e44] [cursor=pointer]
+        - row "Platform Admin E2E platform-admin-e2e-rae7r trial active Active Load 29.5.2026 Suspend" [ref=e45]:
+          - cell "Platform Admin E2E" [ref=e46]
+          - cell "platform-admin-e2e-rae7r" [ref=e47]
+          - cell "trial" [ref=e48]:
+            - generic [ref=e49]: trial
+          - cell "active" [ref=e50]
+          - cell "Active" [ref=e51]:
+            - generic [ref=e52]: Active
+          - cell "Load" [ref=e53]:
+            - button "Load" [ref=e54] [cursor=pointer]
+          - cell "29.5.2026" [ref=e55]
+          - cell "Suspend" [ref=e56]:
+            - button "Suspend" [ref=e58] [cursor=pointer]
+  - button "Open Next.js Dev Tools" [ref=e64] [cursor=pointer]:
+    - img [ref=e65]
+  - alert [ref=e68]: Ops — Tenant Management

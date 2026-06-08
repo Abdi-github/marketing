@@ -1,0 +1,87 @@
+- generic [ref=e2]:
+  - navigation [ref=e3]:
+    - generic [ref=e4]:
+      - link "MarketingAI CH" [ref=e5] [cursor=pointer]:
+        - /url: /de
+      - generic [ref=e6]:
+        - link "Funktionen" [ref=e7] [cursor=pointer]:
+          - /url: "#features"
+        - link "Preise" [ref=e8] [cursor=pointer]:
+          - /url: "#pricing"
+      - generic [ref=e9]:
+        - link "Anmelden" [ref=e10] [cursor=pointer]:
+          - /url: /de/login
+        - link "Kostenlos starten" [ref=e11] [cursor=pointer]:
+          - /url: /de/signup
+  - generic [ref=e13]:
+    - text: GA · Schweiz · DE / FR
+    - heading "AI-Marketing für Schweizer KMU" [level=1] [ref=e14]
+    - paragraph [ref=e15]: Automatisiere dein Marketing mit KI — für Cafés, Restaurants und Fitnessstudios.
+    - generic [ref=e16]:
+      - link "Kostenlos testen" [ref=e17] [cursor=pointer]:
+        - /url: /de/signup
+      - link "Mehr erfahren" [ref=e18] [cursor=pointer]:
+        - /url: "#features"
+    - paragraph [ref=e19]: "Datenspeicherung: Schweiz / EU"
+  - generic [ref=e21]:
+    - heading "Was dich erwartet" [level=2] [ref=e22]
+    - generic [ref=e23]:
+      - generic [ref=e24]:
+        - generic [ref=e25]: ✍️
+        - heading "KI-Social-Media-Posts" [level=3] [ref=e26]
+        - paragraph [ref=e27]: Erstelle in Sekunden ansprechende Posts für Instagram und Facebook — auf Schweizerdeutsch, abgestimmt auf dein Lokal.
+      - generic [ref=e28]:
+        - generic [ref=e29]: 🚀
+        - heading "Landingpages auf Knopfdruck" [level=3] [ref=e30]
+        - paragraph [ref=e31]: Beschreibe dein Angebot in einem Satz. Die KI erstellt eine vollständige Landingpage mit Lead-Formular.
+      - generic [ref=e32]:
+        - generic [ref=e33]: 🔗
+        - heading "Schweizer Integrationen" [level=3] [ref=e34]
+        - paragraph [ref=e35]: Verbinde dein Kassensystem (Gastrofix, Lightspeed CH) oder dein Buchungstool (Eversports) — Daten fliessen automatisch.
+  - generic [ref=e37]:
+    - heading "Transparente Preise in CHF" [level=2] [ref=e38]
+    - paragraph [ref=e39]: Keine versteckten Kosten. Keine USD-Überraschungen.
+    - generic [ref=e40]:
+      - generic [ref=e41]:
+        - generic [ref=e42]: Trial
+        - generic [ref=e43]: Kostenlos14 Tage
+        - list [ref=e44]:
+          - listitem [ref=e45]: ✓1 Brand
+          - listitem [ref=e46]: ✓50 KI-Generierungen
+          - listitem [ref=e47]: ✓Social Posts + Landingpages
+        - link "Jetzt starten" [ref=e48] [cursor=pointer]:
+          - /url: /de/signup
+      - generic [ref=e49]:
+        - generic [ref=e50]: Starter
+        - generic [ref=e51]: CHF 49/ Monat
+        - list [ref=e52]:
+          - listitem [ref=e53]: ✓1 Brand · 1 Nutzer
+          - listitem [ref=e54]: ✓150 KI-Generierungen / Monat
+          - listitem [ref=e55]: ✓Social Posts + Landingpages + CRM
+        - link "Starter wählen" [ref=e56] [cursor=pointer]:
+          - /url: /de/signup
+      - generic [ref=e57]:
+        - generic [ref=e58]: Growth
+        - generic [ref=e59]: CHF 149/ Monat
+        - list [ref=e60]:
+          - listitem [ref=e61]: ✓3 Brands · 5 Nutzer
+          - listitem [ref=e62]: ✓600 KI-Generierungen / Monat
+          - listitem [ref=e63]: ✓Alle Funktionen + Schweizer POS-Integrationen
+        - link "Growth wählen" [ref=e64] [cursor=pointer]:
+          - /url: /de/signup
+  - contentinfo [ref=e65]:
+    - generic [ref=e66]:
+      - generic [ref=e67]:
+        - link "Datenschutz" [ref=e68] [cursor=pointer]:
+          - /url: "#"
+        - link "AGB" [ref=e69] [cursor=pointer]:
+          - /url: "#"
+        - link "Impressum" [ref=e70] [cursor=pointer]:
+          - /url: "#"
+      - paragraph [ref=e71]: "Datenspeicherung: Schweiz / EU"
+      - generic [ref=e72]:
+        - link "DE" [ref=e73] [cursor=pointer]:
+          - /url: /de
+        - text: ·
+        - link "FR" [ref=e74] [cursor=pointer]:
+          - /url: /fr

@@ -1,0 +1,23 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - heading "Neuen Social-Media-Post erstellen" [level=1] [ref=e4]
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - generic [ref=e7]: Thema *
+        - textbox "Thema *" [ref=e8]:
+          - /placeholder: z.B. Mittagsmenü, Neues Gericht, Saisonangebot…
+          - text: Frisches Mittagsmenü mit saisonalen Zutaten
+      - generic [ref=e9]:
+        - generic [ref=e10]: Besonderheiten
+        - textbox "Besonderheiten" [ref=e11]:
+          - /placeholder: z.B. frisch aus dem Tessin, täglich wechselndes Menü, vegane Option…
+      - button "Post generieren" [ref=e24] [cursor=pointer]
+    - generic [ref=e25]:
+      - heading "Generierter Post" [level=2] [ref=e26]
+      - paragraph [ref=e27]: "Mittags bei uns: Frische vom Markt auf dem Teller. Diese Woche mit saisonalen Gemüsen und lokalen Produkten, die wir morgens einkaufen. 🥗 Komm vorbei und lass dich überraschen – solange der Vorrat reicht!"
+      - generic [ref=e28]:
+        - button "Kopieren" [ref=e29] [cursor=pointer]
+        - button "Neuer Post" [ref=e30] [cursor=pointer]
+  - button "Open Next.js Dev Tools" [ref=e18] [cursor=pointer]:
+    - img [ref=e19]
+  - alert [ref=e22]

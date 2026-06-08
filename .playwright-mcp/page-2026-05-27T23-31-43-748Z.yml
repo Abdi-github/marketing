@@ -1,0 +1,1 @@
+- generic [ref=e2]: "{\"status\":\"degraded\",\"timestamp\":\"2026-05-27T23:31:43.452Z\",\"version\":\"dev\",\"checks\":{\"db\":\"ok\",\"dbLatencyMs\":922,\"redis\":\"error\"}}"

@@ -1,0 +1,17 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - heading "Log in" [level=1] [ref=e4]
+    - generic [ref=e5]:
+      - generic [ref=e6]: Email
+      - textbox "Email" [ref=e7]: cafe-owner@e2e.test
+    - generic [ref=e8]:
+      - generic [ref=e9]: Password
+      - textbox "Password" [ref=e10]: E2eTestPass1!
+    - button "Logging in…" [disabled] [ref=e24]
+    - paragraph [ref=e12]:
+      - text: No account?
+      - link "Sign up" [ref=e13] [cursor=pointer]:
+        - /url: /signup
+  - button "Open Next.js Dev Tools" [ref=e19] [cursor=pointer]:
+    - img [ref=e20]
+  - alert [ref=e23]

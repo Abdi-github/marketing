@@ -1,0 +1,115 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - navigation [ref=e3]:
+      - generic [ref=e4]:
+        - link "MarketingAI CH" [ref=e5] [cursor=pointer]:
+          - /url: /it
+        - generic [ref=e6]:
+          - link "Funzionalità" [ref=e7] [cursor=pointer]:
+            - /url: "#features"
+          - link "Prezzi" [ref=e8] [cursor=pointer]:
+            - /url: "#pricing"
+        - generic [ref=e9]:
+          - link "Accedi" [ref=e10] [cursor=pointer]:
+            - /url: /it/login
+          - link "Prova gratuitamente" [ref=e11] [cursor=pointer]:
+            - /url: /it/signup
+    - generic [ref=e13]:
+      - generic [ref=e14]: GA · Schweiz · DE / FR
+      - heading "Marketing IA per le PMI svizzere" [level=1] [ref=e15]
+      - paragraph [ref=e16]: Automatizza il tuo marketing con l'IA — per caffè, ristoranti e studi di fitness.
+      - generic [ref=e17]:
+        - link "Prova gratuitamente" [ref=e18] [cursor=pointer]:
+          - /url: /it/signup
+        - link "Scopri di più" [ref=e19] [cursor=pointer]:
+          - /url: "#features"
+      - paragraph [ref=e20]: "Dati ospitati: Svizzera / UE"
+    - generic [ref=e22]:
+      - heading "Cosa ti aspetta" [level=2] [ref=e23]
+      - generic [ref=e24]:
+        - generic [ref=e25]:
+          - generic [ref=e26]: ✍️
+          - heading "Post sui social media con l'IA" [level=3] [ref=e27]
+          - paragraph [ref=e28]: Crea in pochi secondi post accattivanti per Instagram e Facebook — in italiano ticinese, adattati alla tua attività.
+        - generic [ref=e29]:
+          - generic [ref=e30]: 🚀
+          - heading "Landing page con un clic" [level=3] [ref=e31]
+          - paragraph [ref=e32]: Descrivi la tua offerta in una frase. L'IA crea una pagina completa con modulo di acquisizione lead.
+        - generic [ref=e33]:
+          - generic [ref=e34]: 🔗
+          - heading "Integrazioni svizzere" [level=3] [ref=e35]
+          - paragraph [ref=e36]: Collega il tuo sistema di cassa (Gastrofix, Lightspeed CH) o il tuo strumento di prenotazione (Eversports) — i dati fluiscono automaticamente.
+    - generic [ref=e38]:
+      - heading "Prezzi trasparenti in CHF" [level=2] [ref=e39]
+      - paragraph [ref=e40]: Nessun costo nascosto. Nessuna sorpresa in USD.
+      - generic [ref=e41]:
+        - generic [ref=e42]:
+          - generic [ref=e43]: Prova
+          - generic [ref=e44]:
+            - generic [ref=e45]: Gratuito
+            - generic [ref=e46]: 14 giorni
+          - list [ref=e47]:
+            - listitem [ref=e48]:
+              - generic [ref=e49]: ✓
+              - generic [ref=e50]: 1 brand
+            - listitem [ref=e51]:
+              - generic [ref=e52]: ✓
+              - generic [ref=e53]: 50 generazioni IA
+            - listitem [ref=e54]:
+              - generic [ref=e55]: ✓
+              - generic [ref=e56]: Post + landing page
+          - link "Inizia ora" [ref=e57] [cursor=pointer]:
+            - /url: /it/signup
+        - generic [ref=e58]:
+          - generic [ref=e59]: Starter
+          - generic [ref=e60]:
+            - generic [ref=e61]: CHF 49
+            - generic [ref=e62]: / mese
+          - list [ref=e63]:
+            - listitem [ref=e64]:
+              - generic [ref=e65]: ✓
+              - generic [ref=e66]: 1 brand · 1 utente
+            - listitem [ref=e67]:
+              - generic [ref=e68]: ✓
+              - generic [ref=e69]: 150 generazioni IA / mese
+            - listitem [ref=e70]:
+              - generic [ref=e71]: ✓
+              - generic [ref=e72]: Post + landing page + CRM
+          - link "Scegli Starter" [ref=e73] [cursor=pointer]:
+            - /url: /it/signup
+        - generic [ref=e74]:
+          - generic [ref=e75]: Growth
+          - generic [ref=e76]:
+            - generic [ref=e77]: CHF 149
+            - generic [ref=e78]: / mese
+          - list [ref=e79]:
+            - listitem [ref=e80]:
+              - generic [ref=e81]: ✓
+              - generic [ref=e82]: 3 brand · 5 utenti
+            - listitem [ref=e83]:
+              - generic [ref=e84]: ✓
+              - generic [ref=e85]: 600 generazioni IA / mese
+            - listitem [ref=e86]:
+              - generic [ref=e87]: ✓
+              - generic [ref=e88]: Tutte le funzionalità + integrazioni POS svizzere
+          - link "Scegli Growth" [ref=e89] [cursor=pointer]:
+            - /url: /it/signup
+    - contentinfo [ref=e90]:
+      - generic [ref=e91]:
+        - generic [ref=e92]:
+          - link "Privacy" [ref=e93] [cursor=pointer]:
+            - /url: "#"
+          - link "CGC" [ref=e94] [cursor=pointer]:
+            - /url: "#"
+          - link "Note legali" [ref=e95] [cursor=pointer]:
+            - /url: "#"
+        - paragraph [ref=e96]: "Dati ospitati: Svizzera / UE"
+        - generic [ref=e97]:
+          - link "DE" [ref=e98] [cursor=pointer]:
+            - /url: /de
+          - generic [ref=e99]: ·
+          - link "FR" [ref=e100] [cursor=pointer]:
+            - /url: /fr
+  - button "Open Next.js Dev Tools" [ref=e106] [cursor=pointer]:
+    - img [ref=e107]
+  - alert [ref=e110]

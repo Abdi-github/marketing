@@ -1,0 +1,20 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - heading "Neuen Social-Media-Post erstellen" [level=1] [ref=e4]
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - generic [ref=e7]: Thema *
+        - textbox "Thema *" [ref=e8]:
+          - /placeholder: z.B. Mittagsmenü, Neues Gericht, Saisonangebot…
+          - text: "Tagesspecial: Hausgemachte Zürcher Rösti"
+      - generic [ref=e9]:
+        - generic [ref=e10]: Besonderheiten
+        - textbox "Besonderheiten" [ref=e11]:
+          - /placeholder: z.B. frisch aus dem Tessin, täglich wechselndes Menü, vegane Option…
+      - button "Wird generiert…" [disabled] [ref=e23]
+    - generic [ref=e24]:
+      - generic [ref=e25]: KI generiert deinen Post…
+      - paragraph [ref=e26]: "Job-ID: 8a1d384e-57d2-4066-9591-74ccb85c6f07"
+  - button "Open Next.js Dev Tools" [ref=e18] [cursor=pointer]:
+    - img [ref=e19]
+  - alert [ref=e22]

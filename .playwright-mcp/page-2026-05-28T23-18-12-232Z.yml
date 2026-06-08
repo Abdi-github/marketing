@@ -1,0 +1,39 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - heading "Billing" [level=1] [ref=e4]
+    - generic [ref=e16]:
+      - generic [ref=e17]:
+        - generic [ref=e18]:
+          - paragraph [ref=e19]: Aktueller Plan
+          - paragraph [ref=e20]: Trial
+        - generic [ref=e21]:
+          - paragraph [ref=e22]: Monatliches KI-Budget
+          - paragraph [ref=e23]: USD 1.00
+      - generic [ref=e24]:
+        - generic [ref=e25]:
+          - generic [ref=e26]: KI-Verbrauch diesen Monat
+          - generic [ref=e27]: USD 0.0000 / USD 1.00
+        - paragraph [ref=e29]: "Nächster Reset: 1. Juni 2026"
+    - generic [ref=e30]:
+      - heading "Upgrade" [level=2] [ref=e31]
+      - generic [ref=e32]:
+        - generic [ref=e33]:
+          - paragraph [ref=e34]: Starter
+          - paragraph [ref=e35]: CHF 49 / Monat
+          - list [ref=e36]:
+            - listitem [ref=e37]: USD 10 KI-Budget / Monat
+            - listitem [ref=e38]: Alle KI-Features
+            - listitem [ref=e39]: E-Mail-Support
+          - button "Auf Starter upgraden" [ref=e40] [cursor=pointer]
+        - generic [ref=e41]:
+          - paragraph [ref=e42]: Growth
+          - paragraph [ref=e43]: CHF 149 / Monat
+          - list [ref=e44]:
+            - listitem [ref=e45]: USD 40 KI-Budget / Monat
+            - listitem [ref=e46]: Claude Sonnet (premium)
+            - listitem [ref=e47]: Prioritäts-Support
+          - button "Auf Growth upgraden" [ref=e48] [cursor=pointer]
+      - paragraph [ref=e49]: Preise exkl. MwSt. · Jederzeit kündbar · Zahlung via Stripe
+  - button "Open Next.js Dev Tools" [ref=e11] [cursor=pointer]:
+    - img [ref=e12]
+  - alert [ref=e15]

@@ -1,0 +1,12 @@
+- generic [ref=e3]:
+  - heading "Neuen Social-Media-Post erstellen" [level=1] [ref=e4]
+  - generic [ref=e5]:
+    - generic [ref=e6]:
+      - generic [ref=e7]: Thema *
+      - textbox "Thema *" [ref=e8]:
+        - /placeholder: z.B. Mittagsmenü, Neues Gericht, Saisonangebot…
+    - generic [ref=e9]:
+      - generic [ref=e10]: Besonderheiten
+      - textbox "Besonderheiten" [ref=e11]:
+        - /placeholder: z.B. frisch aus dem Tessin, täglich wechselndes Menü, vegane Option…
+    - button "Post generieren" [disabled] [ref=e12]

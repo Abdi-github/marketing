@@ -1,0 +1,111 @@
+- generic [ref=e2]:
+  - navigation [ref=e3]:
+    - generic [ref=e4]:
+      - link "MarketingAI CH" [ref=e5] [cursor=pointer]:
+        - /url: /en
+      - generic [ref=e6]:
+        - link "Features" [ref=e7] [cursor=pointer]:
+          - /url: "#features"
+        - link "Pricing" [ref=e8] [cursor=pointer]:
+          - /url: "#pricing"
+      - generic [ref=e9]:
+        - link "Log in" [ref=e10] [cursor=pointer]:
+          - /url: /en/auth/login
+        - link "Try for free" [ref=e11] [cursor=pointer]:
+          - /url: /en/auth/signup
+  - generic [ref=e13]:
+    - generic [ref=e14]: GA · Schweiz · DE / FR
+    - heading "AI Marketing for Swiss SMEs" [level=1] [ref=e15]
+    - paragraph [ref=e16]: Automate your marketing with AI — for cafés, restaurants, and fitness studios.
+    - generic [ref=e17]:
+      - link "Try for free" [ref=e18] [cursor=pointer]:
+        - /url: /en/auth/signup
+      - link "Learn more" [ref=e19] [cursor=pointer]:
+        - /url: "#features"
+    - paragraph [ref=e20]: Data stored in Switzerland / EU
+  - generic [ref=e22]:
+    - heading "What's included" [level=2] [ref=e23]
+    - generic [ref=e24]:
+      - generic [ref=e25]:
+        - generic [ref=e26]: ✍️
+        - heading "AI Social Media Posts" [level=3] [ref=e27]
+        - paragraph [ref=e28]: Create engaging posts for Instagram and Facebook in seconds — tailored to your business in the right language.
+      - generic [ref=e29]:
+        - generic [ref=e30]: 🚀
+        - heading "Landing Pages on Demand" [level=3] [ref=e31]
+        - paragraph [ref=e32]: Describe your offer in one sentence. The AI builds a complete landing page with a lead capture form.
+      - generic [ref=e33]:
+        - generic [ref=e34]: 🔗
+        - heading "Swiss Integrations" [level=3] [ref=e35]
+        - paragraph [ref=e36]: Connect your POS (Gastrofix, Lightspeed CH) or booking tool (Eversports) — data flows automatically.
+  - generic [ref=e38]:
+    - heading "Transparent pricing in CHF" [level=2] [ref=e39]
+    - paragraph [ref=e40]: No hidden costs. No USD surprises.
+    - generic [ref=e41]:
+      - generic [ref=e42]:
+        - generic [ref=e43]: Trial
+        - generic [ref=e44]:
+          - generic [ref=e45]: Free
+          - generic [ref=e46]: 14 days
+        - list [ref=e47]:
+          - listitem [ref=e48]:
+            - generic [ref=e49]: ✓
+            - generic [ref=e50]: 1 brand
+          - listitem [ref=e51]:
+            - generic [ref=e52]: ✓
+            - generic [ref=e53]: 50 AI generations
+          - listitem [ref=e54]:
+            - generic [ref=e55]: ✓
+            - generic [ref=e56]: Social posts + landing pages
+        - link "Get started" [ref=e57] [cursor=pointer]:
+          - /url: /en/auth/signup
+      - generic [ref=e58]:
+        - generic [ref=e59]: Starter
+        - generic [ref=e60]:
+          - generic [ref=e61]: CHF 49
+          - generic [ref=e62]: / month
+        - list [ref=e63]:
+          - listitem [ref=e64]:
+            - generic [ref=e65]: ✓
+            - generic [ref=e66]: 1 brand · 1 user
+          - listitem [ref=e67]:
+            - generic [ref=e68]: ✓
+            - generic [ref=e69]: 150 AI generations / month
+          - listitem [ref=e70]:
+            - generic [ref=e71]: ✓
+            - generic [ref=e72]: Social posts + pages + CRM
+        - link "Choose Starter" [ref=e73] [cursor=pointer]:
+          - /url: /en/auth/signup
+      - generic [ref=e74]:
+        - generic [ref=e75]: Growth
+        - generic [ref=e76]:
+          - generic [ref=e77]: CHF 149
+          - generic [ref=e78]: / month
+        - list [ref=e79]:
+          - listitem [ref=e80]:
+            - generic [ref=e81]: ✓
+            - generic [ref=e82]: 3 brands · 5 users
+          - listitem [ref=e83]:
+            - generic [ref=e84]: ✓
+            - generic [ref=e85]: 600 AI generations / month
+          - listitem [ref=e86]:
+            - generic [ref=e87]: ✓
+            - generic [ref=e88]: All features + Swiss POS integrations
+        - link "Choose Growth" [ref=e89] [cursor=pointer]:
+          - /url: /en/auth/signup
+  - contentinfo [ref=e90]:
+    - generic [ref=e91]:
+      - generic [ref=e92]:
+        - link "Privacy" [ref=e93] [cursor=pointer]:
+          - /url: "#"
+        - link "Terms" [ref=e94] [cursor=pointer]:
+          - /url: "#"
+        - link "Imprint" [ref=e95] [cursor=pointer]:
+          - /url: "#"
+      - paragraph [ref=e96]: Data stored in Switzerland / EU
+      - generic [ref=e97]:
+        - link "DE" [ref=e98] [cursor=pointer]:
+          - /url: /de
+        - generic [ref=e99]: ·
+        - link "FR" [ref=e100] [cursor=pointer]:
+          - /url: /fr

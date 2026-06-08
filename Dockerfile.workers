@@ -1,0 +1,32 @@
+# Multi-stage build for apps/workers.
+# Built from the monorepo root: docker build -f Dockerfile.workers .
+
+FROM node:22-alpine AS base
+RUN npm install -g pnpm@11
+
+WORKDIR /app
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json ./
+COPY packages/ packages/
+COPY apps/workers/ apps/workers/
+
+# Install all workspace deps (prune to workers + its deps).
+FROM base AS deps
+RUN pnpm install --frozen-lockfile --filter @marketing/workers...
+
+# Build stage.
+FROM deps AS builder
+RUN pnpm --filter @marketing/workers build
+
+# Production image — esbuild bundle is self-contained.
+# Runner only needs bullmq + ioredis (the two external deps).
+# Fresh npm install avoids pnpm workspace symlink issues.
+FROM node:22-alpine AS runner
+WORKDIR /app
+
+COPY --from=builder /app/apps/workers/dist ./dist
+# Use a minimal package.json listing only the two external npm deps.
+COPY apps/workers/package.runner.json ./package.json
+RUN npm install --omit=dev --ignore-scripts
+
+ENV NODE_ENV=production
+CMD ["node", "dist/index.js"]
