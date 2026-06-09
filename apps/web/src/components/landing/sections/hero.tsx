@@ -44,6 +44,17 @@ export function HeroCentered({ section, brandPrimary }: { section: HeroSection; 
 export function HeroImageBgOverlay({ section, brandPrimary }: { section: HeroSection; brandPrimary: string }) {
   const { heading, body, extras } = section;
   const bgImg = extras?.backgroundImageUrl;
+  // Scrim opacity adapts to brand luminance: lighter brand palettes → stronger scrim so white
+  // text stays legible over bright Unsplash photos; darker brands need a lighter touch.
+  const h = brandPrimary.replace("#", "");
+  const lum = h.length >= 6
+    ? 0.299 * (parseInt(h.slice(0, 2), 16) / 255)
+      + 0.587 * (parseInt(h.slice(2, 4), 16) / 255)
+      + 0.114 * (parseInt(h.slice(4, 6), 16) / 255)
+    : 0.3;
+  const scrimBot = lum > 0.55 ? 0.88 : 0.72;
+  const scrimMid = lum > 0.55 ? 0.44 : 0.30;
+  const scrimTop = lum > 0.55 ? 0.20 : 0.07;
   return (
     <>
       <style>{`
@@ -56,8 +67,8 @@ export function HeroImageBgOverlay({ section, brandPrimary }: { section: HeroSec
       `}</style>
       <section className="lp-hio">
         {bgImg && <img src={bgImg} alt="" style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover" }} />}
-        <div style={{ position:"absolute", inset:0, background:"linear-gradient(to top,rgba(0,0,0,0.88) 0%,rgba(0,0,0,0.35) 55%,rgba(0,0,0,0.1) 100%)" }} />
-        <div style={{ position:"absolute", inset:0, background:"linear-gradient(to right,rgba(0,0,0,0.5) 0%,transparent 60%)" }} />
+        <div style={{ position:"absolute", inset:0, background:`linear-gradient(to top,rgba(0,0,0,${scrimBot}) 0%,rgba(0,0,0,${scrimMid}) 55%,rgba(0,0,0,${scrimTop}) 100%)` }} />
+        <div style={{ position:"absolute", inset:0, background:"linear-gradient(to right,rgba(0,0,0,0.45) 0%,transparent 60%)" }} />
         <div className="lp-hio__inner">
           <p className="lp-hio__eyebrow">Welcome</p>
           <h1 className="lp-hio__h1">{renderRich(heading)}</h1>
@@ -84,8 +95,8 @@ export function HeroSplitImageRight({ section, brandPrimary }: { section: HeroSe
       <style>{`
         .lp-hsi { min-height:88vh; display:flex; align-items:stretch; background:#fff; }
         .lp-hsi__content { flex:1 1 52%; display:flex; flex-direction:column; justify-content:center; padding:5rem 4rem 5rem max(3rem,6vw); }
-        .lp-hsi__image { flex:1 1 48%; position:relative; overflow:hidden; background:#f3f4f6; min-height:380px; }
-        @media(max-width:768px){ .lp-hsi{flex-direction:column-reverse;} .lp-hsi__content{padding:3.5rem 1.5rem;} .lp-hsi__image{min-height:280px;flex:0 0 280px;} }
+        .lp-hsi__image { flex:1 1 48%; position:relative; overflow:hidden; background:#f3f4f6; min-height:380px; border-radius:16px 0 0 16px; }
+        @media(max-width:768px){ .lp-hsi{flex-direction:column-reverse;} .lp-hsi__content{padding:3.5rem 1.5rem;} .lp-hsi__image{min-height:280px;flex:0 0 280px;border-radius:0 0 16px 16px;} }
         .lp-hsi__chip { display:inline-flex; align-items:center; gap:0.4rem; font-size:0.7rem; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:${brandPrimary}; background:${brandPrimary}18; padding:0.35rem 0.9rem; border-radius:9999px; margin-bottom:1.5rem; width:fit-content; }
         .lp-hsi__h1 { font-family:var(--font-heading,system-ui); font-size:clamp(2.25rem,5vw,3.75rem); font-weight:900; color:#111827; line-height:1.1; letter-spacing:-0.025em; margin:0 0 1.25rem; }
         .lp-hsi__lead { font-size:1.05rem; color:#6b7280; line-height:1.8; margin:0 0 2.5rem; max-width:440px; }
@@ -105,7 +116,7 @@ export function HeroSplitImageRight({ section, brandPrimary }: { section: HeroSe
         </div>
         <div className="lp-hsi__image">
           {img
-            ? <img src={img} alt={heading} style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover" }} />
+            ? <img src={img} alt={heading} style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover", objectPosition:"center top" }} />
             : <div style={{ position:"absolute", inset:0, background:`linear-gradient(135deg,${brandPrimary}18,${brandPrimary}08)`, display:"flex", alignItems:"center", justifyContent:"center" }}><span style={{ fontSize:"5rem", opacity:0.25 }}>🖼️</span></div>
           }
         </div>
@@ -152,6 +163,85 @@ export function HeroSplitFormRight({ section, brandPrimary }: { section: HeroSec
             <input type="email" placeholder="Email address" readOnly className="lp-hsf__field" />
             <a href="#contact" className="lp-hsf__submit">{extras?.ctaText ?? "Send request"}</a>
           </div>
+        </div>
+      </section>
+    </>
+  );
+}
+
+// ─── hero · editorial-bold ────────────────────────────────────────────────────
+// Oversized asymmetric editorial headline on a light canvas. Big type, lots of
+// whitespace, a thin accent rule. Modern magazine feel.
+export function HeroEditorialBold({ section, brandPrimary }: { section: HeroSection; brandPrimary: string }) {
+  const { heading, body, extras } = section;
+  return (
+    <>
+      <style>{`
+        .lp-heb { background:#fafaf9; padding:7rem 0 6rem; overflow:hidden; }
+        .lp-heb__inner { max-width:1200px; margin:0 auto; padding:0 max(1.5rem,5vw); }
+        .lp-heb__eyebrow { display:inline-flex; align-items:center; gap:0.65rem; font-size:0.72rem; font-weight:700; letter-spacing:0.18em; text-transform:uppercase; color:${brandPrimary}; margin-bottom:2.25rem; }
+        .lp-heb__eyebrow::before { content:""; width:2.75rem; height:2px; background:${brandPrimary}; }
+        .lp-heb__h1 { font-family:var(--font-heading,system-ui); font-size:clamp(2.75rem,8.5vw,6.5rem); font-weight:900; line-height:0.97; letter-spacing:-0.04em; color:#0a0a0a; margin:0; max-width:15ch; }
+        .lp-heb__row { display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:2rem; margin-top:3rem; }
+        .lp-heb__lead { font-size:1.15rem; color:#52525b; line-height:1.7; max-width:44ch; margin:0; }
+        .lp-heb__cta { display:inline-flex; align-items:center; gap:0.6rem; padding:1.05rem 2.4rem; border-radius:9999px; background:#0a0a0a; color:#fff; font-weight:700; font-size:1.02rem; text-decoration:none; white-space:nowrap; }
+        @media(max-width:640px){ .lp-heb__row{flex-direction:column;align-items:flex-start;} }
+      `}</style>
+      <section className="lp-heb">
+        <div className="lp-heb__inner">
+          <p className="lp-heb__eyebrow">Welcome</p>
+          <h1 className="lp-heb__h1">{renderRich(heading)}</h1>
+          <div className="lp-heb__row">
+            {body && <p className="lp-heb__lead">{renderRich(body)}</p>}
+            {extras?.ctaText && (
+              <a href={extras.ctaHref ?? "#contact"} className="lp-heb__cta">
+                {extras.ctaText}
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden><path fillRule="evenodd" d="M2 8a.75.75 0 01.75-.75h8.69L8.22 4.03a.75.75 0 011.06-1.06l4.5 4.5a.75.75 0 010 1.06l-4.5 4.5a.75.75 0 01-1.06-1.06l3.22-3.22H2.75A.75.75 0 012 8z" clipRule="evenodd" /></svg>
+              </a>
+            )}
+          </div>
+        </div>
+      </section>
+    </>
+  );
+}
+
+// ─── hero · gradient-spotlight ────────────────────────────────────────────────
+// Dark canvas with a soft radial gradient-mesh glow in the brand colour, a glass
+// pill chip, centered headline, white CTA. Contemporary SaaS / product feel.
+export function HeroGradientSpotlight({ section, brandPrimary }: { section: HeroSection; brandPrimary: string }) {
+  const { heading, body, extras } = section;
+  const bg = extras?.backgroundImageUrl;
+  return (
+    <>
+      <style>{`
+        .lp-hgs { position:relative; min-height:90vh; display:flex; align-items:center; justify-content:center; overflow:hidden; background:#08080c; }
+        .lp-hgs__mesh { position:absolute; inset:-25%; pointer-events:none; background:
+            radial-gradient(38% 46% at 22% 22%, ${brandPrimary}66, transparent 70%),
+            radial-gradient(40% 48% at 80% 28%, ${brandPrimary}3a, transparent 72%),
+            radial-gradient(55% 52% at 50% 102%, ${brandPrimary}55, transparent 72%);
+          filter:blur(24px); }
+        .lp-hgs__grid { position:absolute; inset:0; pointer-events:none; opacity:0.12; background-image:linear-gradient(rgba(255,255,255,0.6) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.6) 1px,transparent 1px); background-size:64px 64px; mask-image:radial-gradient(circle at 50% 40%,#000,transparent 75%); }
+        .lp-hgs__inner { position:relative; z-index:2; text-align:center; max-width:880px; padding:8rem 1.5rem; }
+        .lp-hgs__chip { display:inline-flex; align-items:center; gap:0.5rem; padding:0.45rem 1.05rem; border-radius:9999px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.16); color:rgba(255,255,255,0.85); font-size:0.78rem; font-weight:600; margin-bottom:1.85rem; backdrop-filter:blur(8px); }
+        .lp-hgs__h1 { font-family:var(--font-heading,system-ui); font-size:clamp(2.75rem,7vw,5.5rem); font-weight:800; line-height:1.04; letter-spacing:-0.03em; color:#fff; margin:0 0 1.5rem; }
+        .lp-hgs__lead { font-size:clamp(1.05rem,2vw,1.3rem); color:rgba(255,255,255,0.7); line-height:1.7; max-width:580px; margin:0 auto 2.5rem; }
+        .lp-hgs__cta { display:inline-flex; align-items:center; gap:0.5rem; padding:1.05rem 2.5rem; border-radius:9999px; background:#fff; color:#08080c; font-weight:700; font-size:1.05rem; text-decoration:none; box-shadow:0 8px 44px ${brandPrimary}55; }
+      `}</style>
+      <section className="lp-hgs">
+        <div className="lp-hgs__mesh" />
+        <div className="lp-hgs__grid" />
+        {bg && <img src={bg} alt="" style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover", opacity:0.22 }} />}
+        <div className="lp-hgs__inner">
+          <span className="lp-hgs__chip">✦ Now open</span>
+          <h1 className="lp-hgs__h1">{renderRich(heading)}</h1>
+          {body && <p className="lp-hgs__lead">{renderRich(body)}</p>}
+          {extras?.ctaText && (
+            <a href={extras.ctaHref ?? "#contact"} className="lp-hgs__cta">
+              {extras.ctaText}
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden><path fillRule="evenodd" d="M2 8a.75.75 0 01.75-.75h8.69L8.22 4.03a.75.75 0 011.06-1.06l4.5 4.5a.75.75 0 010 1.06l-4.5 4.5a.75.75 0 01-1.06-1.06l3.22-3.22H2.75A.75.75 0 012 8z" clipRule="evenodd" /></svg>
+            </a>
+          )}
         </div>
       </section>
     </>

@@ -6,31 +6,55 @@ type FaqItem = { question: string; answer: string };
 
 // ─── faq · accordion ──────────────────────────────────────────────────────────
 // Interactive details/summary accordion — clean and minimal.
-export function FAQAccordion({ section, brandPrimary }: Props) {
+export function FAQAccordion({ section, brandPrimary, darkMode = false }: Props & { darkMode?: boolean }) {
   const items: FaqItem[] = section.extras?.items ?? [];
+  const dm = darkMode ? " lp-faq--dark" : "";
   return (
-    <section style={{ padding:"6rem 0", background:"#fff" }}>
-      <div style={{ maxWidth:720, margin:"0 auto", padding:"0 1.5rem" }}>
-        <p style={{ fontSize:"0.7rem", fontWeight:700, letterSpacing:"0.14em", textTransform:"uppercase", color:brandPrimary, marginBottom:"0.75rem", textAlign:"center" }}>FAQ</p>
-        <h2 style={{ fontFamily:"var(--font-heading,system-ui)", fontSize:"clamp(1.75rem,4vw,2.75rem)", fontWeight:800, color:"#111827", lineHeight:1.15, letterSpacing:"-0.02em", margin:"0 0 1rem", textAlign:"center" }}>{renderRich(section.heading)}</h2>
-        {section.body && !items.length && <p style={{ fontSize:"1rem", color:"#6b7280", lineHeight:1.8, textAlign:"center", maxWidth:540, margin:"0 auto" }}>{renderRich(section.body)}</p>}
-        {items.length > 0 && (
-          <div style={{ display:"flex", flexDirection:"column", gap:"0.625rem", marginTop:"3rem" }}>
-            {items.map((item, i) => (
-              <details key={i} style={{ borderRadius:14, border:"1px solid #e5e7eb", overflow:"hidden" }}>
-                <summary style={{ padding:"1.25rem 1.5rem", fontWeight:600, fontSize:"0.975rem", color:"#111827", cursor:"pointer", display:"flex", justifyContent:"space-between", alignItems:"center", listStyle:"none", background:"#fff", userSelect:"none" }}>
-                  {item.question}
-                  <span style={{ color:brandPrimary, flexShrink:0, marginLeft:"1rem", fontSize:"1.4rem", lineHeight:1 }}>+</span>
-                </summary>
-                <div style={{ padding:"0.875rem 1.5rem 1.5rem", background:"#fafafa", borderTop:"1px solid #f3f4f6" }}>
-                  <p style={{ fontSize:"0.95rem", color:"#4b5563", lineHeight:1.8, margin:0 }}>{item.answer}</p>
-                </div>
-              </details>
-            ))}
-          </div>
-        )}
-      </div>
-    </section>
+    <>
+      <style>{`
+        .lp-faq { background:#fff; padding:6rem 0; }
+        .lp-faq__inner { max-width:720px; margin:0 auto; padding:0 1.5rem; }
+        .lp-faq__eyebrow { font-size:0.7rem; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; color:${brandPrimary}; margin-bottom:0.75rem; text-align:center; }
+        .lp-faq__h2 { font-family:var(--font-heading,system-ui); font-size:clamp(1.75rem,4vw,2.75rem); font-weight:800; color:#111827; line-height:1.15; letter-spacing:-0.02em; margin:0 0 1rem; text-align:center; }
+        .lp-faq__body { font-size:1rem; color:#6b7280; line-height:1.8; text-align:center; max-width:540px; margin:0 auto; }
+        .lp-faq__list { display:flex; flex-direction:column; gap:0.625rem; margin-top:3rem; }
+        .lp-faq__item { border-radius:14px; border:1px solid #e5e7eb; overflow:hidden; }
+        .lp-faq__summary { padding:1.25rem 1.5rem; font-weight:600; font-size:0.975rem; color:#111827; cursor:pointer; display:flex; justify-content:space-between; align-items:center; list-style:none; background:#fff; user-select:none; }
+        .lp-faq__plus { color:${brandPrimary}; flex-shrink:0; margin-left:1rem; font-size:1.4rem; line-height:1; }
+        .lp-faq__answer-wrap { padding:0.875rem 1.5rem 1.5rem; background:#fafafa; border-top:1px solid #f3f4f6; }
+        .lp-faq__answer { font-size:0.95rem; color:#4b5563; line-height:1.8; margin:0; }
+        /* — dark modifier — */
+        .lp-faq--dark { background:#0b0f1a; }
+        .lp-faq--dark .lp-faq__h2 { color:#fff; }
+        .lp-faq--dark .lp-faq__body { color:rgba(255,255,255,0.75); }
+        .lp-faq--dark .lp-faq__item { border:1px solid rgba(255,255,255,0.08); }
+        .lp-faq--dark .lp-faq__summary { background:rgba(255,255,255,0.05); color:#fff; }
+        .lp-faq--dark .lp-faq__answer-wrap { background:rgba(255,255,255,0.03); border-top:1px solid rgba(255,255,255,0.06); }
+        .lp-faq--dark .lp-faq__answer { color:rgba(255,255,255,0.75); }
+      `}</style>
+      <section className={`lp-faq${dm}`}>
+        <div className="lp-faq__inner">
+          <p className="lp-faq__eyebrow">FAQ</p>
+          <h2 className="lp-faq__h2">{renderRich(section.heading)}</h2>
+          {section.body && !items.length && <p className="lp-faq__body">{renderRich(section.body)}</p>}
+          {items.length > 0 && (
+            <div className="lp-faq__list">
+              {items.map((item, i) => (
+                <details key={i} className="lp-faq__item">
+                  <summary className="lp-faq__summary">
+                    {item.question}
+                    <span className="lp-faq__plus">+</span>
+                  </summary>
+                  <div className="lp-faq__answer-wrap">
+                    <p className="lp-faq__answer">{item.answer}</p>
+                  </div>
+                </details>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+    </>
   );
 }
 

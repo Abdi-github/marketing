@@ -88,6 +88,8 @@ const baseSection = {
   body: z.string().max(2000).optional(),
   /** LP-1: variant key from SECTION_VARIANTS registry. Optional for backwards-compatibility; renderer falls back to the type's DEFAULT_VARIANT. */
   variant: z.string().min(1).max(60).optional(),
+  /** Visual rhythm tone assigned by the design recipe after generation. Controls dark/light/accent rhythm across the page. */
+  tone: z.enum(["dark", "accent"]).optional(),
 };
 
 export const heroSectionSchema = z.object({

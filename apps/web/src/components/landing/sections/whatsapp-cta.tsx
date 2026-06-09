@@ -72,7 +72,7 @@ export function WhatsAppCtaBannerStrip({ section }: Props) {
           href={waHref(section)}
           target="_blank"
           rel="noopener noreferrer"
-          style={{ display:"inline-flex", alignItems:"center", gap:"0.5rem", padding:"0.75rem 1.75rem", borderRadius:9999, background:"#fff", color:WA_DARK, fontWeight:700, fontSize:"0.95rem", textDecoration:"none", whiteSpace:"nowrap", flexShrink:0 }}
+          style={{ display:"inline-flex", alignItems:"center", gap:"0.5rem", padding:"0.75rem 1.75rem", minHeight:"44px", borderRadius:9999, background:"#fff", color:WA_DARK, fontWeight:700, fontSize:"0.95rem", textDecoration:"none", whiteSpace:"nowrap", flexShrink:0 }}
         >
           {buttonText}
         </a>

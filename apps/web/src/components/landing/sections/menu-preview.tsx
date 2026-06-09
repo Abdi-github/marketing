@@ -55,7 +55,7 @@ export function MenuPreviewCardsGrid({ section, brandPrimary }: Props) {
         .lp-mcg__inner { max-width:1100px; margin:0 auto; padding:0 1.5rem; }
         .lp-mcg__grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:1.25rem; }
         .lp-mcg__card { border-radius:18px; overflow:hidden; border:1px solid #f0f0f0; box-shadow:0 2px 12px rgba(0,0,0,0.04); background:#fff; }
-        .lp-mcg__img { height:180px; position:relative; background:#f3f4f6; overflow:hidden; }
+        .lp-mcg__img { aspect-ratio:16/9; position:relative; background:#f3f4f6; overflow:hidden; }
         .lp-mcg__body { padding:1.25rem; }
         .lp-mcg__name { font-weight:700; font-size:1rem; color:#111827; margin:0 0 0.35rem; }
         .lp-mcg__desc { font-size:0.85rem; color:#6b7280; line-height:1.6; margin:0 0 1rem; }

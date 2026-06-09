@@ -28,7 +28,7 @@ export function GalleryMasonry3({ section, brandPrimary }: Props) {
         @media(max-width:768px){ .lp-gm3__masonry{columns:2;} }
         @media(max-width:480px){ .lp-gm3__masonry{columns:1;} }
         .lp-gm3__item { break-inside:avoid; margin-bottom:0.875rem; border-radius:16px; overflow:hidden; background:#f3f4f6; }
-        .lp-gm3__item img { width:100%; display:block; object-fit:cover; }
+        .lp-gm3__item img { width:100%; display:block; object-fit:cover; aspect-ratio:4/3; }
       `}</style>
       <section className="lp-gm3">
         <div className="lp-gm3__inner">

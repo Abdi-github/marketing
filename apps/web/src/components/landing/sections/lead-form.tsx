@@ -65,21 +65,28 @@ export function LeadFormSplitSideImage({ section, brandPrimary, formContent }: P
 }
 
 // ─── lead_form · full-width-bar ───────────────────────────────────────────────
-// Full-width colored bar with heading on left and inline form on right.
-export function LeadFormFullWidthBar({ section, brandPrimary, formContent }: Props) {
+// Full-width bar with heading on left and inline form on right.
+// accentMode (assigned by rhythm engine for this variant): brand-color bg, white text.
+export function LeadFormFullWidthBar({ section, brandPrimary, formContent, accentMode = false }: Props & { accentMode?: boolean }) {
+  const am = accentMode ? " lp-lfb--accent" : "";
   return (
     <>
       <style>{`
-        .lp-lfb { background:${brandPrimary}; padding:4rem 0; }
+        .lp-lfb { background:#f9fafb; padding:4rem 0; }
         .lp-lfb__inner { max-width:1100px; margin:0 auto; padding:0 1.5rem; display:flex; align-items:center; gap:3rem; }
         .lp-lfb__text { flex:1 1 40%; }
         .lp-lfb__form { flex:1 1 56%; }
         @media(max-width:768px){ .lp-lfb__inner{flex-direction:column;gap:2rem;} }
-        .lp-lfb__h2 { font-family:var(--font-heading,system-ui); font-size:clamp(1.5rem,3vw,2.25rem); font-weight:800; color:#fff; line-height:1.2; letter-spacing:-0.02em; margin:0 0 0.5rem; }
-        .lp-lfb__body { font-size:0.95rem; color:rgba(255,255,255,0.72); line-height:1.65; margin:0; }
-        .lp-lfb__card { background:#fff; border-radius:18px; padding:1.75rem; }
+        .lp-lfb__h2 { font-family:var(--font-heading,system-ui); font-size:clamp(1.5rem,3vw,2.25rem); font-weight:800; color:#111827; line-height:1.2; letter-spacing:-0.02em; margin:0 0 0.5rem; }
+        .lp-lfb__body { font-size:0.95rem; color:#6b7280; line-height:1.65; margin:0; }
+        .lp-lfb__card { background:#fff; border-radius:18px; padding:1.75rem; border:1px solid #f0f0f0; box-shadow:0 2px 12px rgba(0,0,0,0.04); }
+        /* — accent modifier (rhythm engine assigns for full-width-bar) — */
+        .lp-lfb--accent { background:${brandPrimary}; }
+        .lp-lfb--accent .lp-lfb__h2 { color:#fff; }
+        .lp-lfb--accent .lp-lfb__body { color:rgba(255,255,255,0.85); }
+        .lp-lfb--accent .lp-lfb__card { border:none; box-shadow:0 8px 32px rgba(0,0,0,0.15); }
       `}</style>
-      <section className="lp-lfb">
+      <section className={`lp-lfb${am}`}>
         <div className="lp-lfb__inner">
           <div className="lp-lfb__text">
             <h2 className="lp-lfb__h2">{renderRich(section.heading)}</h2>

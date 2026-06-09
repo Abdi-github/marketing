@@ -67,8 +67,9 @@ export function ContactSplitMap({ section, brandPrimary }: Props) {
 
 // ─── contact · cards-row ──────────────────────────────────────────────────────
 // Row of icon cards — great when no map embed is available.
-export function ContactCardsRow({ section, brandPrimary }: Props) {
+export function ContactCardsRow({ section, brandPrimary, darkMode = false }: Props & { darkMode?: boolean }) {
   const { heading, body, extras } = section;
+  const dm = darkMode ? " lp-ccr--dark" : "";
   const cards = [
     extras?.address ? { icon: "📍", label: "Address", value: extras.address, href: undefined } : null,
     extras?.phone   ? { icon: "📞", label: "Phone",   value: extras.phone,   href: `tel:${extras.phone}` } : null,
@@ -90,8 +91,14 @@ export function ContactCardsRow({ section, brandPrimary }: Props) {
         .lp-ccr__icon { font-size:2rem; margin-bottom:0.875rem; }
         .lp-ccr__label { font-size:0.72rem; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:${brandPrimary}; margin-bottom:0.5rem; }
         .lp-ccr__value { font-size:0.95rem; color:#374151; font-weight:500; line-height:1.5; }
+        /* — dark modifier — */
+        .lp-ccr--dark { background:#0b0f1a; }
+        .lp-ccr--dark .lp-ccr__h2 { color:#fff; }
+        .lp-ccr--dark .lp-ccr__body { color:rgba(255,255,255,0.75); }
+        .lp-ccr--dark .lp-ccr__card { background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.08); }
+        .lp-ccr--dark .lp-ccr__value { color:rgba(255,255,255,0.75); }
       `}</style>
-      <section className="lp-ccr">
+      <section className={`lp-ccr${dm}`}>
         <div className="lp-ccr__inner">
           <div className="lp-ccr__header">
             <p className="lp-ccr__eyebrow">Contact</p>

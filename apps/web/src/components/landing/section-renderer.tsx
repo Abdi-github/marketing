@@ -22,10 +22,10 @@ import { normalizeVariant } from "@marketing/ai-router";
 import type { ReactNode } from "react";
 
 import {
-  HeroCentered, HeroImageBgOverlay, HeroSplitImageRight, HeroSplitFormRight,
+  HeroCentered, HeroImageBgOverlay, HeroSplitImageRight, HeroSplitFormRight, HeroEditorialBold, HeroGradientSpotlight,
   AboutTextImageSplit, AboutTeamGrid, AboutValues3col,
   GalleryMasonry3, GalleryGrid2x2, GalleryCarouselStrip, GalleryFeatureSide,
-  TestimonialsCards3col, TestimonialsLargeQuote, TestimonialsListWithAvatars,
+  TestimonialsCards3col, TestimonialsLargeQuote, TestimonialsListWithAvatars, TestimonialsMarquee,
   MenuPreviewListBorders, MenuPreviewCardsGrid, MenuPreviewSplitImage,
   OfferBannerCentered, OfferSplitImagePrice, OfferCountdownBold,
   FAQAccordion, FAQTwoColumn, FAQNumberedList,
@@ -94,14 +94,17 @@ export function SectionBlock({
       if (v === "image-bg-overlay")  return <HeroImageBgOverlay section={s} brandPrimary={bp} />;
       if (v === "split-image-right") return <HeroSplitImageRight section={s} brandPrimary={bp} />;
       if (v === "split-form-right")  return <HeroSplitFormRight section={s} brandPrimary={bp} />;
+      if (v === "editorial-bold")    return <HeroEditorialBold section={s} brandPrimary={bp} />;
+      if (v === "gradient-spotlight") return <HeroGradientSpotlight section={s} brandPrimary={bp} />;
       return <HeroCentered section={s} brandPrimary={bp} />;
     }
 
     case "about": {
       const v = normalizeVariant("about", section.variant);
       const s = section as AboutSection;
+      const dark = section.tone === "dark";
       if (v === "team-grid")    return <AboutTeamGrid section={s} brandPrimary={bp} />;
-      if (v === "values-3col")  return <AboutValues3col section={s} brandPrimary={bp} />;
+      if (v === "values-3col")  return <AboutValues3col section={s} brandPrimary={bp} darkMode={dark} />;
       return <AboutTextImageSplit section={s} brandPrimary={bp} />;
     }
 
@@ -117,9 +120,11 @@ export function SectionBlock({
     case "testimonials": {
       const v = normalizeVariant("testimonials", section.variant);
       const s = section as TestimonialsSection;
-      if (v === "large-quote")        return <TestimonialsLargeQuote section={s} brandPrimary={bp} />;
-      if (v === "list-with-avatars")  return <TestimonialsListWithAvatars section={s} brandPrimary={bp} />;
-      return <TestimonialsCards3col section={s} brandPrimary={bp} />;
+      const dark = section.tone === "dark";
+      if (v === "large-quote")        return <TestimonialsLargeQuote section={s} brandPrimary={bp} darkMode={dark} />;
+      if (v === "list-with-avatars")  return <TestimonialsListWithAvatars section={s} brandPrimary={bp} darkMode={dark} />;
+      if (v === "marquee")            return <TestimonialsMarquee section={s} brandPrimary={bp} />;
+      return <TestimonialsCards3col section={s} brandPrimary={bp} darkMode={dark} />;
     }
 
     case "menu_preview": {
@@ -133,23 +138,26 @@ export function SectionBlock({
     case "offer": {
       const v = normalizeVariant("offer", section.variant);
       const s = section as OfferSection;
+      const accent = section.tone === "accent";
       if (v === "split-image-price")  return <OfferSplitImagePrice section={s} brandPrimary={bp} />;
       if (v === "countdown-bold")     return <OfferCountdownBold section={s} brandPrimary={bp} />;
-      return <OfferBannerCentered section={s} brandPrimary={bp} />;
+      return <OfferBannerCentered section={s} brandPrimary={bp} accentMode={accent} />;
     }
 
     case "faq": {
       const v = normalizeVariant("faq", section.variant);
       const s = section as FaqSection;
+      const dark = section.tone === "dark";
       if (v === "two-column")    return <FAQTwoColumn section={s} brandPrimary={bp} />;
       if (v === "numbered-list") return <FAQNumberedList section={s} brandPrimary={bp} />;
-      return <FAQAccordion section={s} brandPrimary={bp} />;
+      return <FAQAccordion section={s} brandPrimary={bp} darkMode={dark} />;
     }
 
     case "contact": {
       const v = normalizeVariant("contact", section.variant);
       const s = section as ContactSection;
-      if (v === "cards-row")          return <ContactCardsRow section={s} brandPrimary={bp} />;
+      const dark = section.tone === "dark";
+      if (v === "cards-row")          return <ContactCardsRow section={s} brandPrimary={bp} darkMode={dark} />;
       if (v === "full-map-overlay")   return <ContactFullMapOverlay section={s} brandPrimary={bp} />;
       return <ContactSplitMap section={s} brandPrimary={bp} />;
     }
@@ -157,8 +165,9 @@ export function SectionBlock({
     case "lead_form": {
       const v = normalizeVariant("lead_form", section.variant);
       const formContent = leadFormFor(section);
+      const accent = section.tone === "accent";
       if (v === "split-side-image")  return <LeadFormSplitSideImage section={section} brandPrimary={bp} formContent={formContent} />;
-      if (v === "full-width-bar")    return <LeadFormFullWidthBar section={section} brandPrimary={bp} formContent={formContent} />;
+      if (v === "full-width-bar")    return <LeadFormFullWidthBar section={section} brandPrimary={bp} formContent={formContent} accentMode={accent} />;
       return <LeadFormCardCentered section={section} brandPrimary={bp} formContent={formContent} />;
     }
 

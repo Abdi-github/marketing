@@ -4,31 +4,57 @@ import { renderRich } from "../rich-text";
 type Props = { section: OfferSection; brandPrimary: string };
 
 // ─── offer · banner-centered ──────────────────────────────────────────────────
-// Brand color full-width banner with centered price and CTA.
-export function OfferBannerCentered({ section, brandPrimary }: Props) {
+// Default: light bg with brand accents.
+// accentMode (assigned by rhythm engine for this variant): brand-color bg, white text, inverted CTA.
+export function OfferBannerCentered({ section, brandPrimary, accentMode = false }: Props & { accentMode?: boolean }) {
   const { heading, body, extras } = section;
+  const am = accentMode ? " lp-obc--accent" : "";
   return (
-    <section style={{ padding:"6rem 1.5rem", background:brandPrimary, position:"relative", overflow:"hidden" }}>
-      <div style={{ position:"absolute", top:"-6rem", right:"-6rem", width:"28rem", height:"28rem", borderRadius:"50%", border:"4rem solid rgba(255,255,255,0.06)", pointerEvents:"none" }} />
-      <div style={{ position:"absolute", bottom:"-4rem", left:"-4rem", width:"18rem", height:"18rem", borderRadius:"50%", border:"3rem solid rgba(255,255,255,0.06)", pointerEvents:"none" }} />
-      <div style={{ maxWidth:700, margin:"0 auto", textAlign:"center", position:"relative", zIndex:1 }}>
-        <p style={{ fontSize:"0.7rem", fontWeight:700, letterSpacing:"0.14em", textTransform:"uppercase", color:"rgba(255,255,255,0.6)", marginBottom:"1rem" }}>Special offer</p>
-        <h2 style={{ fontFamily:"var(--font-heading,system-ui)", fontSize:"clamp(2rem,5.5vw,3.75rem)", fontWeight:900, color:"#fff", lineHeight:1.1, letterSpacing:"-0.02em", margin:"0 0 1rem" }}>{renderRich(heading)}</h2>
-        {body && <p style={{ fontSize:"1.1rem", color:"rgba(255,255,255,0.78)", lineHeight:1.7, margin:"0 0 2.5rem" }}>{renderRich(body)}</p>}
-        {(extras?.price ?? extras?.oldPrice) && (
-          <div style={{ display:"flex", alignItems:"baseline", gap:"1.25rem", justifyContent:"center", margin:"0 0 2.5rem" }}>
-            {extras?.price && <span style={{ fontSize:"clamp(3rem,9vw,5.5rem)", fontWeight:900, color:"#fff", lineHeight:1, letterSpacing:"-0.03em" }}>{extras.price}</span>}
-            {extras?.oldPrice && <span style={{ fontSize:"1.75rem", color:"rgba(255,255,255,0.38)", textDecoration:"line-through" }}>{extras.oldPrice}</span>}
-          </div>
-        )}
-        {extras?.validUntil && <p style={{ fontSize:"0.85rem", color:"rgba(255,255,255,0.5)", margin:"0 0 2rem" }}>Valid until: {extras.validUntil}</p>}
-        {extras?.ctaText && (
-          <a href={extras.ctaHref ?? "#contact"} style={{ display:"inline-flex", alignItems:"center", gap:"0.5rem", padding:"1.1rem 2.75rem", borderRadius:9999, background:"#fff", color:brandPrimary, fontWeight:700, fontSize:"1.05rem", textDecoration:"none", boxShadow:"0 8px 32px rgba(0,0,0,0.25)" }}>
-            {extras.ctaText}
-          </a>
-        )}
-      </div>
-    </section>
+    <>
+      <style>{`
+        .lp-obc { background:#f9fafb; padding:6rem 1.5rem; position:relative; overflow:hidden; }
+        .lp-obc__deco { position:absolute; border-radius:50%; pointer-events:none; }
+        .lp-obc__inner { max-width:700px; margin:0 auto; text-align:center; position:relative; z-index:1; }
+        .lp-obc__eyebrow { font-size:0.7rem; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; color:${brandPrimary}; margin-bottom:1rem; }
+        .lp-obc__h2 { font-family:var(--font-heading,system-ui); font-size:clamp(2rem,5.5vw,3.75rem); font-weight:900; color:#111827; line-height:1.1; letter-spacing:-0.02em; margin:0 0 1rem; }
+        .lp-obc__body { font-size:1.1rem; color:#6b7280; line-height:1.7; margin:0 0 2.5rem; }
+        .lp-obc__price-row { display:flex; align-items:baseline; gap:1.25rem; justify-content:center; margin:0 0 2.5rem; }
+        .lp-obc__price { font-size:clamp(3rem,9vw,5.5rem); font-weight:900; color:${brandPrimary}; line-height:1; letter-spacing:-0.03em; }
+        .lp-obc__old-price { font-size:1.75rem; color:#d1d5db; text-decoration:line-through; }
+        .lp-obc__valid { font-size:0.85rem; color:#9ca3af; margin:0 0 2rem; }
+        .lp-obc__cta { display:inline-flex; align-items:center; gap:0.5rem; padding:1.1rem 2.75rem; border-radius:9999px; background:${brandPrimary}; color:#fff; font-weight:700; font-size:1.05rem; text-decoration:none; box-shadow:0 8px 32px rgba(0,0,0,0.15); }
+        /* — accent modifier (rhythm engine assigns for banner-centered) — */
+        .lp-obc--accent { background:${brandPrimary}; }
+        .lp-obc--accent .lp-obc__eyebrow { color:rgba(255,255,255,0.6); }
+        .lp-obc--accent .lp-obc__h2 { color:#fff; }
+        .lp-obc--accent .lp-obc__body { color:rgba(255,255,255,0.85); }
+        .lp-obc--accent .lp-obc__price { color:#fff; }
+        .lp-obc--accent .lp-obc__old-price { color:rgba(255,255,255,0.38); }
+        .lp-obc--accent .lp-obc__valid { color:rgba(255,255,255,0.5); }
+        .lp-obc--accent .lp-obc__cta { background:#fff; color:${brandPrimary}; box-shadow:0 8px 32px rgba(0,0,0,0.25); }
+      `}</style>
+      <section className={`lp-obc${am}`}>
+        <div className="lp-obc__deco" style={{ top:"-6rem", right:"-6rem", width:"28rem", height:"28rem", border:`4rem solid ${accentMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"}` }} />
+        <div className="lp-obc__deco" style={{ bottom:"-4rem", left:"-4rem", width:"18rem", height:"18rem", border:`3rem solid ${accentMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"}` }} />
+        <div className="lp-obc__inner">
+          <p className="lp-obc__eyebrow">Special offer</p>
+          <h2 className="lp-obc__h2">{renderRich(heading)}</h2>
+          {body && <p className="lp-obc__body">{renderRich(body)}</p>}
+          {(extras?.price ?? extras?.oldPrice) && (
+            <div className="lp-obc__price-row">
+              {extras?.price && <span className="lp-obc__price">{extras.price}</span>}
+              {extras?.oldPrice && <span className="lp-obc__old-price">{extras.oldPrice}</span>}
+            </div>
+          )}
+          {extras?.validUntil && <p className="lp-obc__valid">Valid until: {extras.validUntil}</p>}
+          {extras?.ctaText && (
+            <a href={extras.ctaHref ?? "#contact"} className="lp-obc__cta">
+              {extras.ctaText}
+            </a>
+          )}
+        </div>
+      </section>
+    </>
   );
 }
 
