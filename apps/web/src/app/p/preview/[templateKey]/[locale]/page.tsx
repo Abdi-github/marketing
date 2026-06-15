@@ -10,13 +10,10 @@ import { eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import type { LandingPageSection } from "@marketing/ai-router";
-import {
-  getTheme,
-  getPalette,
-  getFontPair,
-  isSwissLocale,
-} from "@marketing/landing-design-system";
+import { isSwissLocale } from "@marketing/landing-design-system";
 import { SectionBlock } from "../../../../../components/landing/section-renderer";
+import { Reveal } from "../../../../../components/landing/reveal";
+import { LANDING_THEME_GLOBAL_CSS, resolveLandingTheme } from "../../../../../lib/landing-theme";
 
 export const revalidate = 3600; // 1-hour ISR — templates change rarely
 
@@ -50,84 +47,70 @@ export default async function TemplatePreviewPage({ params }: Props) {
     LandingPageSection[]
   >;
   const sections =
-    sectionsByLocale[locale] ??
-    sectionsByLocale["de-CH"] ??
-    sectionsByLocale["en"] ??
-    [];
+    sectionsByLocale[locale] ?? sectionsByLocale["de-CH"] ?? sectionsByLocale["en"] ?? [];
 
   if (sections.length === 0) {
     return (
       <div style={{ padding: "4rem 2rem", textAlign: "center", color: "#6b7280" }}>
-        <p>No content for {templateKey} in {locale}.</p>
+        <p>
+          No content for {templateKey} in {locale}.
+        </p>
       </div>
     );
   }
 
   // Resolve theme bundle → brand colors + font pair.
-  const theme = template.themeKey ? getTheme(template.themeKey) : undefined;
-  const palette = theme ? getPalette(theme.paletteKey) : undefined;
-  const fontPair = theme ? getFontPair(theme.fontPairKey) : undefined;
-
-  const primary = palette?.colors.primary ?? "#111827";
-  const secondary = palette?.colors.secondary ?? "#6b7280";
-  const fontHeading = fontPair?.heading.family
-    ? `'${fontPair.heading.family}', ${fontPair.heading.fallback}`
-    : "system-ui";
-  const fontBody = fontPair?.body.family
-    ? `'${fontPair.body.family}', ${fontPair.body.fallback}`
-    : "system-ui";
-
-  // Google Fonts URL for the chosen pair (one network request).
-  let fontHref: string | null = null;
-  if (fontPair) {
-    const dedup =
-      fontPair.heading.family === fontPair.body.family
-        ? [fontPair.heading]
-        : [fontPair.heading, fontPair.body];
-    const params = dedup
-      .map((f) => `family=${f.family.replace(/ /g, "+")}:wght@${f.weights.join(";")}`)
-      .join("&");
-    fontHref = `https://fonts.googleapis.com/css2?${params}&display=swap`;
-  }
-
-  const cssVars = [
-    `--brand-primary: ${primary}`,
-    `--brand-secondary: ${secondary}`,
-    `--font-heading: ${fontHeading}`,
-    `--font-body: ${fontBody}`,
-  ].join("; ");
+  const theme = resolveLandingTheme({ themeKey: template.themeKey });
 
   return (
     <>
-      <style href="theme-vars" precedence="default">
-        {`:root { ${cssVars} } *, *::before, *::after { box-sizing: border-box; } body { margin: 0; }`}
+      <style href="landing-theme" precedence="default">
+        {LANDING_THEME_GLOBAL_CSS}
       </style>
-      {fontHref && (
-        // eslint-disable-next-line @next/next/no-css-tags
-        <link rel="stylesheet" href={fontHref} precedence="default" />
+      {theme.googleFontsHref && (
+        <link rel="stylesheet" href={theme.googleFontsHref} precedence="default" />
       )}
 
-      <div style={{ fontFamily: `var(--font-body, ${fontBody}, system-ui, sans-serif)`, background: "#fff" }}>
+      <div className="lp-themed-page" style={theme.cssVars}>
         {sections
           .slice()
           .sort((a, b) => a.order - b.order)
           .map((section, i) => (
-            <SectionBlock
-              key={i}
-              section={section}
-              brandPrimary={primary}
-              leadFormFor={() => (
-                <div style={{ textAlign: "center", padding: "2rem", color: "#9ca3af", fontSize: "0.875rem", fontStyle: "italic" }}>
-                  [Lead form preview — actual form configured per tenant]
-                </div>
-              )}
-            />
+            <Reveal key={i}>
+              <SectionBlock
+                section={section}
+                brandPrimary={theme.brandPrimary}
+                leadFormFor={() => (
+                  <div
+                    style={{
+                      textAlign: "center",
+                      padding: "2rem",
+                      color: "var(--lp-muted,#9ca3af)",
+                      fontSize: "0.875rem",
+                      fontStyle: "italic",
+                    }}
+                  >
+                    [Lead form preview — actual form configured per tenant]
+                  </div>
+                )}
+              />
+            </Reveal>
           ))}
+        <footer
+          style={{
+            background: "var(--lp-surface,#f9fafb)",
+            color: "var(--lp-muted,#9ca3af)",
+            textAlign: "center",
+            padding: "1.5rem",
+            fontSize: "0.75rem",
+            borderTop: "1px solid var(--lp-subtle,#f3f4f6)",
+          }}
+        >
+          <p style={{ margin: 0 }}>
+            Template preview - {template.key} - {locale}
+          </p>
+        </footer>
       </div>
-
-      <footer style={{ background: "#f9fafb", color: "#9ca3af", textAlign: "center", padding: "1.5rem", fontSize: "0.75rem", borderTop: "1px solid #f3f4f6" }}>
-        <p style={{ margin: 0 }}>Template preview · {template.key} · {locale}</p>
-      </footer>
     </>
   );
 }

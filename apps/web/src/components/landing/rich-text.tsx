@@ -17,7 +17,13 @@
 
 import React from "react";
 
-type Token = { text: string; bold?: boolean; italic?: boolean; underline?: boolean; strike?: boolean };
+type Token = {
+  text: string;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  strike?: boolean;
+};
 
 // Ordered so longer markers (**, __, ~~) are tried before single-char ones.
 const RULES: Array<{ re: RegExp; mark: keyof Omit<Token, "text"> }> = [
@@ -56,9 +62,10 @@ function styleFor(tok: Token): React.CSSProperties {
   return {
     fontWeight: tok.bold ? 700 : undefined,
     fontStyle: tok.italic ? "italic" : undefined,
-    textDecoration: [tok.underline ? "underline" : null, tok.strike ? "line-through" : null]
-      .filter(Boolean)
-      .join(" ") || undefined,
+    textDecoration:
+      [tok.underline ? "underline" : null, tok.strike ? "line-through" : null]
+        .filter(Boolean)
+        .join(" ") || undefined,
   };
 }
 
@@ -73,7 +80,9 @@ export function renderRich(text?: string | null): React.ReactNode {
         const style = styleFor(tok);
         const hasStyle = style.fontWeight || style.fontStyle || style.textDecoration;
         return hasStyle ? (
-          <span key={ti} style={style}>{tok.text}</span>
+          <span key={ti} style={style}>
+            {tok.text}
+          </span>
         ) : (
           <React.Fragment key={ti}>{tok.text}</React.Fragment>
         );

@@ -12,21 +12,16 @@ export type Context = {
   tenantCtx: TenantContext | null;
 };
 
-export async function createContext(
-  opts: FetchCreateContextFnOptions,
-): Promise<Context> {
+export async function createContext(opts: FetchCreateContextFnOptions): Promise<Context> {
   const session = await auth.api.getSession({ headers: opts.req.headers });
 
   if (!session) {
     return { session: null, tenantCtx: null };
   }
 
-  // Extract the session token from the cookie to resolve TenantContext.
-  const cookieHeader = opts.req.headers.get("cookie") ?? "";
-  const tokenMatch = cookieHeader.match(/better-auth\.session_token=([^;]+)/);
-  const token = tokenMatch?.[1];
-
-  const tenantCtx = token ? await buildTenantContext(token) : null;
+  // Use the token already extracted by Better-Auth rather than re-parsing the cookie.
+  const token = (session.session as { token: string }).token;
+  const tenantCtx = await buildTenantContext(token);
 
   return { session, tenantCtx };
 }
@@ -37,6 +32,7 @@ const t = initTRPC.context<Context>().create();
 
 export const router = t.router;
 export const publicProcedure = t.procedure;
+export const createCallerFactory = t.createCallerFactory;
 
 // ─── Authenticated procedure ──────────────────────────────────────────────────
 

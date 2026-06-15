@@ -27,6 +27,51 @@ export function listPromptIds(): string[] {
   return Array.from(registry.keys());
 }
 
+function socialVerticalLabel(value: string | undefined, locale: "de" | "fr" | "it" | "en"): string {
+  const key = (value ?? "").trim().toLowerCase();
+  const labels: Record<"de" | "fr" | "it" | "en", Record<string, string>> = {
+    de: {
+      restaurant: "Restaurant",
+      cafe: "Café",
+      fitness_studio: "Fitness-Studio",
+      fitness: "Fitness-Studio",
+      clinic: "Praxis",
+      retail: "Geschäft",
+      service: "Dienstleistungsunternehmen",
+    },
+    fr: {
+      restaurant: "restaurant",
+      cafe: "café",
+      fitness_studio: "studio de fitness",
+      fitness: "studio de fitness",
+      clinic: "cabinet",
+      retail: "commerce",
+      service: "entreprise de services",
+    },
+    it: {
+      restaurant: "ristorante",
+      cafe: "caffè",
+      fitness_studio: "studio di fitness",
+      fitness: "studio di fitness",
+      clinic: "studio medico",
+      retail: "negozio",
+      service: "azienda di servizi",
+    },
+    en: {
+      restaurant: "restaurant",
+      cafe: "café",
+      fitness_studio: "fitness studio",
+      fitness: "fitness studio",
+      clinic: "clinic",
+      retail: "retail business",
+      service: "service business",
+    },
+  };
+
+  const fallback = labels[locale]["service"] ?? "business";
+  return labels[locale][key] ?? value ?? fallback;
+}
+
 // ─── Built-in prompts ─────────────────────────────────────────────────────────
 // Landing-page prompts are imported at the bottom of this file so the social-post
 // prompt registration is not disturbed.
@@ -39,6 +84,7 @@ registerPrompt({
 
   systemPrompt: `Du bist ein Social-Media-Experte für KMU in der Deutschschweiz.
 Du erstellst ansprechende, authentische Social-Media-Posts auf Schweizerdeutsch-nahem Hochdeutsch.
+Du kannst für Restaurants, Cafés, Fitness-Studios, Praxen, Geschäfte und Dienstleistungsunternehmen schreiben.
 
 Richtlinien:
 - Schreibe kurz und direkt: 2–4 Sätze pro Post.
@@ -49,10 +95,8 @@ Richtlinien:
 - Ausgabe: nur den Post-Text, keine Hashtags, keine Erklärungen.`.trim(),
 
   buildUserPrompt(vars: PromptVars): string {
-    const vertical = vars["vertical"] ?? "Unternehmen";
-    const highlights = vars["highlights"]
-      ? `\nBesonderheiten: ${vars["highlights"]}`
-      : "";
+    const vertical = socialVerticalLabel(vars["vertical"], "de");
+    const highlights = vars["highlights"] ? `\nBesonderheiten: ${vars["highlights"]}` : "";
 
     return `Erstelle einen Instagram-Post für ${vars["businessName"]}, ein ${vertical} in ${vars["city"] ?? "der Deutschschweiz"}.
 Thema: ${vars["topic"]}${highlights}`.trim();
@@ -60,6 +104,87 @@ Thema: ${vars["topic"]}${highlights}`.trim();
 });
 
 // ─── landing-page-brief-v1 ────────────────────────────────────────────────────
+// social-post-fr-v1 - FR-CH social post generator for Suisse romande SMEs.
+registerPrompt({
+  id: "social-post-fr-v1",
+  version: 1,
+
+  systemPrompt: `Tu es expert social media pour les PME en Suisse romande.
+Tu crees des posts authentiques et engageants en francais de Suisse.
+
+Regles:
+- Ecris court et direct: 2 a 4 phrases par post.
+- Utilise au maximum 1 a 2 emojis par post.
+- Evite le langage marketing generique ("exceptionnel", "inoubliable", etc.).
+- Mentionne le contexte local ou saisonnier quand c'est pertinent.
+- Termine par un appel a l'action concret (reserver, passer, decouvrir).
+- Sortie: uniquement le texte du post, sans hashtags ni explications.`.trim(),
+
+  buildUserPrompt(vars: PromptVars): string {
+    const vertical = socialVerticalLabel(vars["vertical"], "fr");
+    const highlights = vars["highlights"] ? `\nPoints forts: ${vars["highlights"]}` : "";
+
+    return `Cree un post Instagram pour ${vars["businessName"]}, une ${vertical} a ${vars["city"] ?? "en Suisse romande"}.
+Sujet: ${vars["topic"]}${highlights}`.trim();
+  },
+});
+// social-creative-plan-v1 - turns a finished caption into a compact graphic brief.
+// The renderer still owns layout and pixels; the model only chooses message hierarchy.
+registerPrompt({
+  id: "social-creative-plan-v1",
+  version: 1,
+
+  systemPrompt: `You are a senior social creative director for Swiss SMEs.
+Create a concise, high-converting graphic plan for a Facebook/Instagram post.
+
+Return ONLY valid JSON matching this shape:
+{
+  "version": 1,
+  "template": "promo-badge" | "editorial-collage" | "event-poster" | "story-card" | "retail-offer" | "product-hero" | "testimonial-proof" | "carousel-cover",
+  "aspectRatio": "1:1" | "4:5" | "9:16",
+  "headline": "max 7 words",
+  "subheading": "max 16 words",
+  "badge": "max 4 words",
+  "cta": "max 4 words",
+  "footer": "business + city or short brand footer",
+  "visualCue": "photo | product | table | movement | care | brand",
+  "visualMotif": "specific visual subject, max 8 words",
+  "backgroundStyle": "product-scene | pattern | photo-led | typographic | editorial",
+  "tone": "promo" | "editorial" | "event" | "story"
+}
+
+Rules:
+- Do not include markdown, comments, or explanatory text.
+- Keep all text suitable for direct rendering on an image.
+- Match the post language when possible.
+- Treat the creative direction as mandatory art direction when present.
+- Make visualMotif concrete and product-specific. Example: for a vegetable discount, use "fresh vegetable market spread", not "offer background".
+- Use "product-scene" when the post is about a product, dish, retail item, produce, or offer with tangible goods.
+- Prefer "retail-offer" for discounts on tangible products or produce.
+- Prefer "product-hero" for a new product, dish, collection, treatment, or offer where one visual subject should dominate.
+- Prefer "testimonial-proof" for reviews, customer quotes, trust proof, or before/after proof.
+- Prefer "carousel-cover" when the post teaches, explains benefits, or could become a multi-slide carousel.
+- Prefer "event-poster" for events, "promo-badge" for simple offers, "story-card" when a photo is available, otherwise "editorial-collage".
+- Respect the requested template unless it is "auto".`.trim(),
+
+  buildUserPrompt(vars: PromptVars): string {
+    return `Business: ${vars["businessName"]}
+Vertical: ${vars["vertical"] ?? "SME"}
+City: ${vars["city"] ?? "Switzerland"}
+Locale: ${vars["locale"] ?? "de-CH"}
+Topic: ${vars["topic"] ?? ""}
+Highlights: ${vars["highlights"] ?? ""}
+Requested aspect ratio: ${vars["aspectRatio"] ?? "4:5"}
+Requested template: ${vars["template"] ?? "auto"}
+Has source image: ${vars["hasImage"] ?? "false"}
+Creative direction: ${vars["creativeDirection"] ?? ""}
+Variation seed: ${vars["variationSeed"] ?? ""}
+
+Post text:
+${vars["postText"]}`.trim();
+  },
+});
+
 // Brief step: expand the user's free-text prompt into a structured page brief
 // that the copy step can work from (tone, key messages, sections to include).
 registerPrompt({
@@ -80,7 +205,9 @@ Ausgabe: nur das Briefing als strukturierter Text. Kein Vorwort, keine Erklärun
 
   buildUserPrompt(vars: PromptVars): string {
     const vertical = vars["vertical"] ?? "Unternehmen";
-    const context = vars["brandContext"] ? `\n\nZusatzkontext aus dem Unternehmensprofil:\n${vars["brandContext"]}` : "";
+    const context = vars["brandContext"]
+      ? `\n\nZusatzkontext aus dem Unternehmensprofil:\n${vars["brandContext"]}`
+      : "";
 
     return `Unternehmen: ${vars["businessName"]}, ${vertical} in ${vars["city"] ?? "der Deutschschweiz"}
 Locale: ${vars["locale"] ?? "de-CH"}
@@ -179,10 +306,8 @@ Linee guida:
 - Output: solo il testo del post, niente hashtag, niente spiegazioni.`.trim(),
 
   buildUserPrompt(vars: PromptVars): string {
-    const vertical = vars["vertical"] ?? "azienda";
-    const highlights = vars["highlights"]
-      ? `\nParticolari: ${vars["highlights"]}`
-      : "";
+    const vertical = socialVerticalLabel(vars["vertical"], "it");
+    const highlights = vars["highlights"] ? `\nParticolari: ${vars["highlights"]}` : "";
 
     return `Crea un post Instagram per ${vars["businessName"]}, un ${vertical} a ${vars["city"] ?? "Ticino"}.
 Tema: ${vars["topic"]}${highlights}`.trim();
@@ -296,10 +421,8 @@ Guidelines:
 - Output: only the post text, no hashtags, no explanations.`.trim(),
 
   buildUserPrompt(vars: PromptVars): string {
-    const vertical = vars["vertical"] ?? "business";
-    const highlights = vars["highlights"]
-      ? `\nHighlights: ${vars["highlights"]}`
-      : "";
+    const vertical = socialVerticalLabel(vars["vertical"], "en");
+    const highlights = vars["highlights"] ? `\nHighlights: ${vars["highlights"]}` : "";
 
     return `Create an Instagram post for ${vars["businessName"]}, a ${vertical} in ${vars["city"] ?? "Switzerland"}.
 Topic: ${vars["topic"]}${highlights}`.trim();
@@ -428,6 +551,62 @@ Créez la composition finale de la page d'atterrissage avec les champs extras re
   },
 });
 
+// ─── FR-CH brief and copy prompts ────────────────────────────────────────────
+// Mirror of DE-CH prompts for the Swiss French-speaking market.
+
+registerPrompt({
+  id: "landing-page-brief-fr-v1",
+  version: 1,
+
+  systemPrompt: `Vous êtes un expert en stratégie marketing pour les PME en Suisse romande.
+Votre tâche : transformer une courte description d'entreprise en un briefing structuré pour une page d'atterrissage.
+
+Le briefing doit inclure :
+- Message principal (1 phrase)
+- Public cible (bref)
+- Ton (ex. : chaleureux et accueillant, dynamique, professionnel)
+- Liste des sections recommandées (2–6 parmi : hero, about, menu_preview, offer, gallery, testimonials, faq, contact, lead_form)
+- 3–5 messages clés que le texte doit transmettre
+
+Sortie : uniquement le briefing sous forme de texte structuré. Pas de préambule, pas d'explications.`.trim(),
+
+  buildUserPrompt(vars: PromptVars): string {
+    const vertical = vars["vertical"] ?? "entreprise";
+    const context = vars["brandContext"]
+      ? `\n\nContexte supplémentaire du profil d'entreprise :\n${vars["brandContext"]}`
+      : "";
+
+    return `Entreprise : ${vars["businessName"]}, ${vertical} à ${vars["city"] ?? "Suisse romande"}
+Locale : ${vars["locale"] ?? "fr-CH"}
+
+Description du client : ${vars["userPrompt"]}${context}`.trim();
+  },
+});
+
+registerPrompt({
+  id: "landing-page-copy-fr-v1",
+  version: 1,
+
+  systemPrompt: `Vous êtes un rédacteur pour des landing pages de PME en Suisse romande.
+Votre tâche : à partir d'un briefing marketing, créer des textes pour chaque section recommandée.
+
+Directives :
+- Écrivez en français suisse romand, ton chaleureux et direct.
+- Pas de clichés marketing.
+- Par section : un titre concis et 2–4 phrases de texte.
+- Utilisez l'outil generate_sections pour retourner les textes de façon structurée.`.trim(),
+
+  buildUserPrompt(vars: PromptVars): string {
+    return `Briefing :
+${vars["brief"]}
+
+Entreprise : ${vars["businessName"]} (${vars["vertical"]}, ${vars["city"] ?? "Suisse romande"})
+Sections recommandées : ${vars["sections"] ?? "hero, about, contact, lead_form"}
+
+Créez un texte convaincant pour chaque section recommandée.`.trim();
+  },
+});
+
 // ─── CRM follow-up draft ─────────────────────────────────────────────────────
 // Called synchronously from the tRPC endpoint (haiku, ~1-2s, low cost).
 // Drafts a short personalised follow-up message in the tenant's locale.
@@ -435,7 +614,8 @@ registerPrompt({
   id: "crm-follow-up-v1",
   version: 1,
 
-  systemPrompt: `You are a helpful assistant that drafts short follow-up messages for small business owners.
+  systemPrompt:
+    `You are a helpful assistant that drafts short follow-up messages for small business owners.
 The message is sent by the business owner to a lead who filled in a contact form.
 
 Guidelines:
@@ -490,6 +670,32 @@ Bitte überarbeite den Post entsprechend.`.trim();
   },
 });
 
+// social-post-refine-fr-v1 - FR-CH refinement
+registerPrompt({
+  id: "social-post-refine-fr-v1",
+  version: 1,
+
+  systemPrompt: `Tu es expert social media pour les PME en Suisse romande.
+Tu revises des posts social media selon un feedback utilisateur concret.
+
+Regles:
+- Garde le ton, la longueur et le style de l'original, sauf demande explicite contraire.
+- Applique la demande avec precision, rien de plus.
+- Sortie: uniquement le texte revise, sans explications ni hashtags.`.trim(),
+
+  buildUserPrompt(vars: PromptVars): string {
+    const highlights = vars["highlights"] ? `\nPoints forts: ${vars["highlights"]}` : "";
+    return `Entreprise: ${vars["businessName"]} (${vars["vertical"] ?? "PME"}, ${vars["city"] ?? "Suisse romande"})
+Sujet: ${vars["topic"]}${highlights}
+
+Post actuel:
+${vars["previousDraft"]}
+
+Feedback utilisateur: ${vars["refinementInstruction"]}
+
+Revise le post en consequence.`.trim();
+  },
+});
 // social-post-refine-it-v1 — IT-CH refinement
 registerPrompt({
   id: "social-post-refine-it-v1",
@@ -625,7 +831,9 @@ Conservez le ton général de la page. Pas d'introduction, pas d'explication —
 Utilisez l'outil rewrite_section pour une sortie structurée.`.trim(),
 
   buildUserPrompt(vars: PromptVars): string {
-    const instr = vars["instruction"] ? `\nInstruction de l'utilisateur : ${vars["instruction"]}` : "";
+    const instr = vars["instruction"]
+      ? `\nInstruction de l'utilisateur : ${vars["instruction"]}`
+      : "";
     return `Titre de la page : ${vars["pageTitle"]}
 Type de section : ${vars["sectionType"]}
 
@@ -1199,7 +1407,8 @@ registerPrompt({
   id: "whatsapp-greeter-v1",
   version: 1,
 
-  systemPrompt: `You are a warm, helpful assistant for a small Swiss business responding on WhatsApp.
+  systemPrompt:
+    `You are a warm, helpful assistant for a small Swiss business responding on WhatsApp.
 Write a short greeting reply to a new inbound WhatsApp message.
 
 Rules:

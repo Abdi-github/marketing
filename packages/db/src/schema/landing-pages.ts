@@ -82,9 +82,7 @@ export const landingPageTemplates = pgTable(
     /** True if the theme is Swiss-coded (Alpine Clean, Zurich Modern, etc.). */
     swissSpecific: boolean("swiss_specific").notNull().default(false),
     isActive: boolean("is_active").notNull().default(true),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     uniqueIndex("lp_templates_key_unique").on(t.key),
@@ -122,6 +120,8 @@ export const brandAssets = pgTable(
       .notNull()
       .references(() => tenants.id, { onDelete: "cascade" }),
     logoUrl: text("logo_url"),
+    faviconUrl: text("favicon_url"),
+    socialPreviewUrl: text("social_preview_url"),
     colorPrimary: text("color_primary").notNull().default("#111827"),
     colorSecondary: text("color_secondary").notNull().default("#6b7280"),
     fontHeading: text("font_heading").notNull().default("system-ui"),
@@ -164,12 +164,8 @@ export const landingPages = pgTable(
     locale: text("locale").notNull().default("de-CH"),
     /** Accumulates AI-step outputs keyed by step name (brief/copy/layout). ADR-0012. */
     stepData: jsonb("step_data").notNull().default({}),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("landing_pages_tenant_id_idx").on(t.tenantId),
@@ -198,9 +194,7 @@ export const landingPageVersions = pgTable(
     aiUsageId: uuid("ai_usage_id").references(() => aiUsage.id, {
       onDelete: "set null",
     }),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("landing_page_versions_tenant_id_idx").on(t.tenantId),
@@ -223,9 +217,7 @@ export const landingPageViews = pgTable(
     version: integer("version").notNull(),
     referrer: text("referrer"),
     countryCode: text("country_code"),
-    viewedAt: timestamp("viewed_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    viewedAt: timestamp("viewed_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("landing_page_views_tenant_id_idx").on(t.tenantId),
@@ -258,12 +250,8 @@ export const forms = pgTable(
       onDelete: "set null",
     }),
     isActive: boolean("is_active").notNull().default(true),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("forms_tenant_id_idx").on(t.tenantId),
@@ -285,26 +273,18 @@ export const leads = pgTable(
       .references(() => forms.id, { onDelete: "restrict" }),
     /** Raw submission payload validated against forms.schema. */
     payload: jsonb("payload").notNull(),
+    /** Lightweight operational workflow status for form inboxes. */
+    status: text("status").notNull().default("new"),
     sourceUrl: text("source_url"),
-    submittedAt: timestamp("submitted_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }).notNull().defaultNow(),
     /** Set by CRM dedup handler (Phase 7). Null at submission time. */
     contactId: uuid("contact_id"),
   },
-  (t) => [
-    index("leads_tenant_id_idx").on(t.tenantId),
-    index("leads_form_id_idx").on(t.formId),
-  ],
+  (t) => [index("leads_tenant_id_idx").on(t.tenantId), index("leads_form_id_idx").on(t.formId)],
 );
 
 // ─── brand_context_type enum ──────────────────────────────────────────────────
-export const brandContextTypeEnum = pgEnum("brand_context_type", [
-  "about",
-  "menu",
-  "offer",
-  "faq",
-]);
+export const brandContextTypeEnum = pgEnum("brand_context_type", ["about", "menu", "offer", "faq"]);
 
 // ─── brand_embeddings ─────────────────────────────────────────────────────────
 // pgvector store for tenant brand context. Used by the copy-generation step
@@ -322,26 +302,17 @@ export const brandEmbeddings = pgTable(
     /** Float32 embedding array stored as JSONB. Phase 7 will add a pgvector
      *  column + HNSW index once the production Postgres has the extension. */
     embedding: jsonb("embedding"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("brand_embeddings_tenant_id_idx").on(t.tenantId),
-    uniqueIndex("brand_embeddings_tenant_hash_unique").on(
-      t.tenantId,
-      t.contentHash,
-    ),
+    uniqueIndex("brand_embeddings_tenant_hash_unique").on(t.tenantId, t.contentHash),
   ],
 );
 
 // ─── landing_page_experiments ─────────────────────────────────────────────────
 // One experiment per page at a time. Tracks variant traffic split and winner.
-export const experimentStatusEnum = pgEnum("experiment_status", [
-  "running",
-  "stopped",
-  "complete",
-]);
+export const experimentStatusEnum = pgEnum("experiment_status", ["running", "stopped", "complete"]);
 
 export const landingPageExperiments = pgTable(
   "landing_page_experiments",
@@ -392,8 +363,7 @@ export type BrandAsset = typeof brandAssets.$inferSelect;
 export type NewBrandAsset = typeof brandAssets.$inferInsert;
 export type LandingPage = typeof landingPages.$inferSelect;
 export type NewLandingPage = typeof landingPages.$inferInsert;
-export type LandingPageStatus =
-  (typeof landingPageStatusEnum.enumValues)[number];
+export type LandingPageStatus = (typeof landingPageStatusEnum.enumValues)[number];
 export type LandingPageVersion = typeof landingPageVersions.$inferSelect;
 export type NewLandingPageVersion = typeof landingPageVersions.$inferInsert;
 export type LandingPageView = typeof landingPageViews.$inferSelect;
@@ -402,6 +372,7 @@ export type Form = typeof forms.$inferSelect;
 export type NewForm = typeof forms.$inferInsert;
 export type Lead = typeof leads.$inferSelect;
 export type NewLead = typeof leads.$inferInsert;
+export type LeadStatus = "new" | "contacted" | "qualified" | "archived";
 export type BrandEmbedding = typeof brandEmbeddings.$inferSelect;
 export type NewBrandEmbedding = typeof brandEmbeddings.$inferInsert;
 export type BrandContextType = (typeof brandContextTypeEnum.enumValues)[number];

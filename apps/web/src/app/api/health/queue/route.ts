@@ -18,13 +18,12 @@ function getRedis(): IORedis {
 
 export async function GET() {
   try {
-    const result = await getRedis().ping();
+    const redis = getRedis();
+    await redis.connect().catch(() => {}); // lazyConnect requires explicit connect
+    const result = await redis.ping();
     if (result !== "PONG") throw new Error("Unexpected ping response");
     return NextResponse.json({ status: "ok" });
   } catch (error) {
-    return NextResponse.json(
-      { status: "error", message: String(error) },
-      { status: 503 },
-    );
+    return NextResponse.json({ status: "error", message: String(error) }, { status: 503 });
   }
 }

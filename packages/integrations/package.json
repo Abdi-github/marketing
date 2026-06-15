@@ -3,18 +3,30 @@
   "version": "0.0.0",
   "private": true,
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./gastrofix": "./gastrofix/adapter.ts",
+    "./lightspeed-ch": "./lightspeed-ch/adapter.ts",
+    "./eversports": "./eversports/adapter.ts"
   },
   "types": "./src/index.ts",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src --max-warnings 0"
+    "lint": "eslint src --max-warnings 0",
+    "test": "vitest run"
   },
   "dependencies": {
+    "@marketing/auth": "workspace:*",
+    "@marketing/db": "workspace:*",
     "@marketing/shared": "workspace:*",
-    "@marketing/tenancy": "workspace:*"
+    "@marketing/tenancy": "workspace:*",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
-    "typescript": "^5.7.2"
+    "@testcontainers/postgresql": "^10.4.0",
+    "@types/node": "^22.10.2",
+    "drizzle-orm": "^0.36.4",
+    "postgres": "^3.4.5",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
   }
 }

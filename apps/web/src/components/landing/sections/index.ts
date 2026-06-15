@@ -1,8 +1,29 @@
-export { HeroCentered, HeroImageBgOverlay, HeroSplitImageRight, HeroSplitFormRight } from "./hero";
+export {
+  HeroCentered,
+  HeroImageBgOverlay,
+  HeroSplitImageRight,
+  HeroSplitFormRight,
+  HeroEditorialBold,
+  HeroGradientSpotlight,
+} from "./hero";
 export { AboutTextImageSplit, AboutTeamGrid, AboutValues3col } from "./about";
-export { GalleryMasonry3, GalleryGrid2x2, GalleryCarouselStrip, GalleryFeatureSide } from "./gallery";
-export { TestimonialsCards3col, TestimonialsLargeQuote, TestimonialsListWithAvatars } from "./testimonials";
-export { MenuPreviewListBorders, MenuPreviewCardsGrid, MenuPreviewSplitImage } from "./menu-preview";
+export {
+  GalleryMasonry3,
+  GalleryGrid2x2,
+  GalleryCarouselStrip,
+  GalleryFeatureSide,
+} from "./gallery";
+export {
+  TestimonialsCards3col,
+  TestimonialsLargeQuote,
+  TestimonialsListWithAvatars,
+  TestimonialsMarquee,
+} from "./testimonials";
+export {
+  MenuPreviewListBorders,
+  MenuPreviewCardsGrid,
+  MenuPreviewSplitImage,
+} from "./menu-preview";
 export { OfferBannerCentered, OfferSplitImagePrice, OfferCountdownBold } from "./offer";
 export { FAQAccordion, FAQTwoColumn, FAQNumberedList } from "./faq";
 export { ContactSplitMap, ContactCardsRow, ContactFullMapOverlay } from "./contact";

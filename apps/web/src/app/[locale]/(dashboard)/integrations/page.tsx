@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { trpc } from "../../../../lib/trpc";
 
 type Connection = Awaited<ReturnType<typeof trpc.integrations.list.query>>[number];
+type SyncRun = Awaited<ReturnType<typeof trpc.integrations.listSyncRuns.query>>[number];
 
 const PROVIDER_META: Record<
   string,
@@ -53,6 +54,14 @@ const STATUS_LABEL: Record<Connection["status"], string> = {
 };
 
 export default function IntegrationsPage() {
+  return (
+    <Suspense fallback={null}>
+      <IntegrationsPageContent />
+    </Suspense>
+  );
+}
+
+function IntegrationsPageContent() {
   const t = useTranslations("Integrations");
   const searchParams = useSearchParams();
   const metaParam = searchParams.get("meta");
@@ -65,11 +74,14 @@ export default function IntegrationsPage() {
   };
 
   const [connections, setConnections] = useState<Connection[]>([]);
+  const [syncRuns, setSyncRuns] = useState<SyncRun[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(
-    metaParam === "denied" ? "Meta connection was cancelled."
-    : metaParam === "error" ? `Meta connection failed: ${searchParams.get("reason") ?? "unknown"}`
-    : null,
+    metaParam === "denied"
+      ? "Meta connection was cancelled."
+      : metaParam === "error"
+        ? `Meta connection failed: ${searchParams.get("reason") ?? "unknown"}`
+        : null,
   );
   const [success, setSuccess] = useState<string | null>(
     metaParam === "connected" ? "Facebook page connected successfully!" : null,
@@ -85,8 +97,12 @@ export default function IntegrationsPage() {
 
   const loadConnections = useCallback(async () => {
     try {
-      const data = await trpc.integrations.list.query();
+      const [data, runs] = await Promise.all([
+        trpc.integrations.list.query(),
+        trpc.integrations.listSyncRuns.query({ limit: 20 }),
+      ]);
       setConnections(data);
+      setSyncRuns(runs);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Fehler beim Laden.");
     } finally {
@@ -97,6 +113,18 @@ export default function IntegrationsPage() {
   useEffect(() => {
     void loadConnections();
   }, [loadConnections]);
+
+  useEffect(() => {
+    if (!syncRuns.some((run) => run.status === "queued" || run.status === "running")) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      void loadConnections();
+    }, 2500);
+
+    return () => window.clearInterval(timer);
+  }, [loadConnections, syncRuns]);
 
   async function handleConnect(e: React.FormEvent) {
     e.preventDefault();
@@ -146,11 +174,10 @@ export default function IntegrationsPage() {
   async function handleSync(connectionId: string) {
     setSyncingId(connectionId);
     setError(null);
+    setSuccess(null);
     try {
       const result = await trpc.integrations.sync.mutate({ connectionId });
-      if (result.outcome === "error") {
-        setError(`Sync error: ${result.errorMessage ?? "unknown"}`);
-      }
+      setSuccess(`Sync queued for ${PROVIDER_META[result.provider]?.label ?? result.provider}.`);
       await loadConnections();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sync failed.");
@@ -162,26 +189,81 @@ export default function IntegrationsPage() {
   const connectedProviders = new Set(
     connections.filter((c) => c.status === "connected").map((c) => c.provider),
   );
+  const activeSyncConnectionIds = new Set(
+    syncRuns
+      .filter((run) => run.status === "queued" || run.status === "running")
+      .map((run) => run.connectionId),
+  );
+  const connectedCount = connections.filter((c) => c.status === "connected").length;
+  const attentionCount = connections.filter(
+    (c) => c.status === "error" || c.status === "token_expired",
+  ).length;
+  const lastSyncRun = syncRuns[0];
 
   if (loading) {
     return (
-      <div style={{ padding: "2rem", fontFamily: "system-ui, sans-serif", maxWidth: 900, margin: "0 auto" }}>
+      <div
+        style={{
+          padding: "2rem",
+          fontFamily: "system-ui, sans-serif",
+          maxWidth: 900,
+          margin: "0 auto",
+        }}
+      >
         <p>Loading…</p>
       </div>
     );
   }
 
   return (
-    <div style={{ padding: "2rem", fontFamily: "system-ui, sans-serif", maxWidth: 900, margin: "0 auto" }}>
-      <h1 style={{ fontSize: "1.5rem", fontWeight: 700, marginBottom: "0.5rem" }}>
-        {t("title")}
-      </h1>
-      <p style={{ color: "#6b7280", marginBottom: "2rem", fontSize: "0.9rem" }}>
-        {t("subtitle")}
-      </p>
+    <div
+      style={{
+        padding: "2rem",
+        fontFamily: "system-ui, sans-serif",
+        maxWidth: 900,
+        margin: "0 auto",
+      }}
+    >
+      <h1 style={{ fontSize: "1.5rem", fontWeight: 700, marginBottom: "0.5rem" }}>{t("title")}</h1>
+      <p style={{ color: "#6b7280", marginBottom: "2rem", fontSize: "0.9rem" }}>{t("subtitle")}</p>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+          gap: "0.75rem",
+          marginBottom: "1.5rem",
+        }}
+      >
+        <HealthCard label="Connected channels" value={String(connectedCount)} tone="#16a34a" />
+        <HealthCard
+          label="Needs attention"
+          value={String(attentionCount)}
+          tone={attentionCount > 0 ? "#dc2626" : "#64748b"}
+        />
+        <HealthCard
+          label="Last sync"
+          value={
+            lastSyncRun
+              ? formatDate(lastSyncRun.completedAt ?? lastSyncRun.createdAt)
+              : "No sync yet"
+          }
+          tone="#4f46e5"
+        />
+      </div>
 
       {success && (
-        <p style={{ color: "#16a34a", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 6, padding: "0.6rem 1rem", marginBottom: "1rem", fontSize: "0.9rem" }}>
+        <p
+          style={{
+            color: "#16a34a",
+            background: "#f0fdf4",
+            border: "1px solid #bbf7d0",
+            borderRadius: 6,
+            padding: "0.6rem 1rem",
+            marginBottom: "1rem",
+            fontSize: "0.9rem",
+          }}
+        >
           {success}
         </p>
       )}
@@ -191,7 +273,14 @@ export default function IntegrationsPage() {
       )}
 
       {/* Provider cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "1rem", marginBottom: "2rem" }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+          gap: "1rem",
+          marginBottom: "2rem",
+        }}
+      >
         {Object.entries(PROVIDER_META).map(([key, meta]) => {
           const connection = connections.find((c) => c.provider === key);
           const isConnected = connectedProviders.has(key as Connection["provider"]);
@@ -206,7 +295,27 @@ export default function IntegrationsPage() {
                 background: "#fff",
               }}
             >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "0.5rem" }}>
+              {connection && activeSyncConnectionIds.has(connection.id) && (
+                <div
+                  style={{
+                    height: 3,
+                    background: "#e0e7ff",
+                    borderRadius: 999,
+                    overflow: "hidden",
+                    margin: "-1.25rem -1.25rem 1rem",
+                  }}
+                >
+                  <div style={{ width: "55%", height: "100%", background: "#6366f1" }} />
+                </div>
+              )}
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "flex-start",
+                  marginBottom: "0.5rem",
+                }}
+              >
                 <div>
                   <div style={{ fontWeight: 700, fontSize: "1rem" }}>{meta.label}</div>
                   <div style={{ fontSize: "0.75rem", color: "#6b7280", marginTop: 2 }}>
@@ -237,8 +346,8 @@ export default function IntegrationsPage() {
                   {key === "meta" && connection.meta
                     ? `Page: ${(connection.meta as { pageName?: string }).pageName ?? connection.externalAccountId}${(connection.meta as { igConnected?: boolean }).igConnected ? " · Instagram linked" : ""}`
                     : connection.lastSyncAt
-                    ? `Letzter Sync: ${new Date(connection.lastSyncAt).toLocaleString("de-CH")}`
-                    : "Noch nicht synchronisiert"}
+                      ? `Letzter Sync: ${new Date(connection.lastSyncAt).toLocaleString("de-CH")}`
+                      : "Noch nicht synchronisiert"}
                 </div>
               )}
 
@@ -253,10 +362,7 @@ export default function IntegrationsPage() {
                       {metaConnecting ? "…" : t("connectMeta")}
                     </button>
                   ) : (
-                    <button
-                      onClick={() => setConnectProvider(key)}
-                      style={btnStyle("#3b82f6")}
-                    >
+                    <button onClick={() => setConnectProvider(key)} style={btnStyle("#3b82f6")}>
                       {t("connect")}
                     </button>
                   )
@@ -265,10 +371,39 @@ export default function IntegrationsPage() {
                     {!meta.isOAuth && (
                       <button
                         onClick={() => void handleSync(connection!.id)}
-                        disabled={syncingId === connection!.id}
-                        style={btnStyle(syncingId === connection!.id ? "#9ca3af" : "#6366f1")}
+                        disabled={
+                          syncingId === connection!.id ||
+                          activeSyncConnectionIds.has(connection!.id)
+                        }
+                        style={btnStyle(
+                          syncingId === connection!.id ||
+                            activeSyncConnectionIds.has(connection!.id)
+                            ? "#9ca3af"
+                            : "#6366f1",
+                        )}
                       >
-                        {syncingId === connection!.id ? "Sync…" : "Sync"}
+                        {syncingId === connection!.id || activeSyncConnectionIds.has(connection!.id)
+                          ? "Sync queued"
+                          : "Sync now"}
+                      </button>
+                    )}
+                    {meta.isOAuth && (
+                      <button
+                        onClick={() => void handleSync(connection!.id)}
+                        disabled={
+                          syncingId === connection!.id ||
+                          activeSyncConnectionIds.has(connection!.id)
+                        }
+                        style={btnStyle(
+                          syncingId === connection!.id ||
+                            activeSyncConnectionIds.has(connection!.id)
+                            ? "#9ca3af"
+                            : "#6366f1",
+                        )}
+                      >
+                        {syncingId === connection!.id || activeSyncConnectionIds.has(connection!.id)
+                          ? "Testing..."
+                          : "Test"}
                       </button>
                     )}
                     <button
@@ -284,6 +419,83 @@ export default function IntegrationsPage() {
           );
         })}
       </div>
+
+      <section
+        style={{
+          border: "1px solid #e5e7eb",
+          borderRadius: 10,
+          background: "#fff",
+          padding: "1.25rem",
+          marginBottom: "2rem",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: "1rem",
+            alignItems: "center",
+            marginBottom: "1rem",
+          }}
+        >
+          <div>
+            <h2 style={{ fontSize: "1rem", fontWeight: 700, margin: 0 }}>Sync history</h2>
+            <p style={{ color: "#6b7280", fontSize: "0.82rem", margin: "0.25rem 0 0" }}>
+              Recent channel checks and data syncs run safely in the worker.
+            </p>
+          </div>
+          <button onClick={() => void loadConnections()} style={btnStyle("#475569")}>
+            Refresh
+          </button>
+        </div>
+        {syncRuns.length === 0 ? (
+          <p style={{ color: "#94a3b8", fontSize: "0.85rem", margin: 0 }}>No sync runs yet.</p>
+        ) : (
+          <div style={{ display: "grid", gap: "0.5rem" }}>
+            {syncRuns.slice(0, 8).map((run) => (
+              <div
+                key={run.id}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr auto",
+                  gap: "1rem",
+                  border: "1px solid #f1f5f9",
+                  borderRadius: 8,
+                  padding: "0.75rem",
+                }}
+              >
+                <div>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "0.5rem",
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <strong style={{ fontSize: "0.88rem" }}>
+                      {PROVIDER_META[run.provider]?.label ?? run.provider}
+                    </strong>
+                    <span style={runBadgeStyle(run.status)}>{run.status}</span>
+                  </div>
+                  {run.errorMessage ? (
+                    <div style={{ color: "#dc2626", fontSize: "0.78rem", marginTop: "0.3rem" }}>
+                      {run.errorMessage}
+                    </div>
+                  ) : (
+                    <div style={{ color: "#64748b", fontSize: "0.78rem", marginTop: "0.3rem" }}>
+                      {run.recordsProcessed} records processed
+                    </div>
+                  )}
+                </div>
+                <time style={{ color: "#94a3b8", fontSize: "0.78rem", whiteSpace: "nowrap" }}>
+                  {formatDate(run.completedAt ?? run.startedAt ?? run.createdAt)}
+                </time>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       {/* Connect modal */}
       {connectProvider && (
@@ -356,6 +568,47 @@ export default function IntegrationsPage() {
       )}
     </div>
   );
+}
+
+function HealthCard({ label, value, tone }: { label: string; value: string; tone: string }) {
+  return (
+    <div
+      style={{ border: "1px solid #e5e7eb", borderRadius: 10, background: "#fff", padding: "1rem" }}
+    >
+      <div
+        style={{ color: "#64748b", fontSize: "0.78rem", fontWeight: 600, marginBottom: "0.35rem" }}
+      >
+        {label}
+      </div>
+      <div style={{ color: tone, fontSize: "1.2rem", fontWeight: 800 }}>{value}</div>
+    </div>
+  );
+}
+
+function formatDate(value: Date | string): string {
+  return new Date(value).toLocaleString("de-CH", {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
+}
+
+function runBadgeStyle(status: SyncRun["status"]): React.CSSProperties {
+  const color =
+    status === "success" || status === "noop"
+      ? "#16a34a"
+      : status === "partial" || status === "queued" || status === "running"
+        ? "#f59e0b"
+        : "#dc2626";
+
+  return {
+    borderRadius: 999,
+    background: `${color}18`,
+    color,
+    fontSize: "0.72rem",
+    fontWeight: 700,
+    padding: "0.15rem 0.45rem",
+    textTransform: "capitalize",
+  };
 }
 
 function btnStyle(bg: string): React.CSSProperties {

@@ -11,7 +11,7 @@ import { TRPCError } from "@trpc/server";
 import { and, eq, gte, sql } from "drizzle-orm";
 import IORedis from "ioredis";
 import { z } from "zod";
-import { tenantProcedure, router } from "../trpc";
+import { requires, tenantProcedure, router } from "../trpc";
 
 // Lazy Redis client — reads REDIS_URL from env. Reused across requests.
 let _redis: IORedis | null = null;
@@ -36,12 +36,7 @@ async function getMonthlySpend(tenantId: string): Promise<number> {
   const [row] = await db
     .select({ total: sql<string>`COALESCE(SUM(cost_usd), 0)` })
     .from(aiUsage)
-    .where(
-      and(
-        eq(aiUsage.tenantId, tenantId),
-        gte(aiUsage.createdAt, monthStart),
-      ),
-    );
+    .where(and(eq(aiUsage.tenantId, tenantId), gte(aiUsage.createdAt, monthStart)));
   return parseFloat(row?.total ?? "0");
 }
 
@@ -94,12 +89,7 @@ export const billingRouter = router({
         currentPeriodEnd: subscriptions.currentPeriodEnd,
       })
       .from(subscriptions)
-      .where(
-        and(
-          eq(subscriptions.tenantId, tenantId),
-          eq(subscriptions.status, "active"),
-        ),
-      );
+      .where(and(eq(subscriptions.tenantId, tenantId), eq(subscriptions.status, "active")));
 
     // Last 3 invoices.
     const recentInvoices = await db
@@ -129,7 +119,7 @@ export const billingRouter = router({
   }),
 
   // Creates a Stripe Checkout session and returns the URL to redirect to.
-  createCheckoutSession: tenantProcedure
+  createCheckoutSession: requires("admin")
     .input(
       z.object({
         plan: z.enum(["starter", "growth"]),
@@ -147,9 +137,7 @@ export const billingRouter = router({
       }
 
       const priceId =
-        input.plan === "starter"
-          ? env.STRIPE_STARTER_PRICE_ID
-          : env.STRIPE_GROWTH_PRICE_ID;
+        input.plan === "starter" ? env.STRIPE_STARTER_PRICE_ID : env.STRIPE_GROWTH_PRICE_ID;
 
       if (!priceId) {
         throw new TRPCError({
@@ -166,7 +154,10 @@ export const billingRouter = router({
         stripeCustomerId = await ensureStripeCustomer(tenantId, email, name);
       } catch (err) {
         logger.error({ err: String(err), tenantId }, "[billing] failed to create Stripe customer");
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Could not create billing customer." });
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Could not create billing customer.",
+        });
       }
 
       const baseUrl = env.APP_URL;

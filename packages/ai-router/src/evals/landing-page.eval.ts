@@ -22,6 +22,9 @@ import {
   contactSectionSchema,
   type LandingPageComposition,
 } from "../queues/landing-page.schema";
+import { enhanceCompositionWithWebsite, hasValidWebsiteShell } from "../queues/website-plan";
+import { createLandingPageDesignPlan, designPlanSeed } from "../queues/design-plan";
+import { applyStyleContractToComposition } from "../queues/design-recipe";
 
 const baseOpts = {
   tenantId: "00000000-0000-0000-0000-000000000001",
@@ -32,9 +35,137 @@ const baseOpts = {
 };
 
 const echo = new EchoProvider();
-const router = new ProviderRouter({ trial: echo, primary: echo, fallback: echo });
+const router = new ProviderRouter({
+  trial: echo,
+  primary: echo,
+  fallback: echo,
+});
 
 const TENANT_PLAN = "trial";
+
+describe("landing-page designPlan", () => {
+  const baseInput = {
+    tenantId: "00000000-0000-0000-0000-000000000001",
+    landingPageId: "00000000-0000-0000-0000-000000000101",
+    businessName: "Cafe Nord",
+    vertical: "specialty coffee and brunch cafe",
+    city: "Bern",
+    locale: "en",
+    userPrompt: "Warm independent cafe with brunch, terrace, and private events.",
+    goals: ["info_brochure", "event_signup"],
+    vibe: { minimalBold: 0.2, classicModern: 0.5, calmEnergetic: 0.1 },
+    imageStrategy: "curated",
+  };
+
+  it("is deterministic for the same page inputs", () => {
+    const a = createLandingPageDesignPlan(baseInput);
+    const b = createLandingPageDesignPlan(baseInput);
+    expect(a).toEqual(b);
+    expect(a.uniquenessFingerprint).toMatch(/^[a-f0-9]{12}$/);
+    expect(designPlanSeed(a)).toContain(a.uniquenessFingerprint);
+  });
+
+  it("changes fingerprint when the page identity changes", () => {
+    const a = createLandingPageDesignPlan(baseInput);
+    const b = createLandingPageDesignPlan({
+      ...baseInput,
+      landingPageId: "00000000-0000-0000-0000-000000000202",
+    });
+    expect(a.uniquenessFingerprint).not.toBe(b.uniquenessFingerprint);
+    expect(a.uniquenessSeed).not.toBe(b.uniquenessSeed);
+  });
+
+  it("classifies local business context into usable planning signals", () => {
+    const plan = createLandingPageDesignPlan(baseInput);
+    expect(plan.subvertical).toBe("cafe-bakery");
+    expect(plan.conversionGoal).toBe("info_brochure");
+    expect(["catalog-first", "story-first", "proof-first"]).toContain(plan.sectionTopology);
+    expect(["curated-local", "editorial-people", "ambient-space", "product-detail"]).toContain(
+      plan.imageDirection,
+    );
+  });
+
+  it("turns the style slider into distinct classic and modern contracts", () => {
+    const classic = createLandingPageDesignPlan({
+      ...baseInput,
+      vibe: { minimalBold: -0.4, classicModern: -0.8, calmEnergetic: -0.4 },
+    });
+    const modern = createLandingPageDesignPlan({
+      ...baseInput,
+      landingPageId: "00000000-0000-0000-0000-000000000303",
+      vibe: { minimalBold: 0.7, classicModern: 0.85, calmEnergetic: 0.6 },
+    });
+
+    expect(classic.styleContract.era).toBe("classic");
+    expect(classic.styleContract.navStyle).toBe("classic");
+    expect(classic.styleContract.heroVariants).toContain("centered");
+
+    expect(modern.styleContract.era).toBe("modern");
+    expect(["bold-pill", "editorial"]).toContain(modern.styleContract.navStyle);
+    expect(modern.styleContract.heroVariants).toContain("editorial-bold");
+    expect(modern.styleContract.sectionOrder).not.toEqual(classic.styleContract.sectionOrder);
+  });
+
+  it("applies style contracts to section order, hero family, tones, and nav style", () => {
+    const composition: LandingPageComposition = {
+      title: "Cafe Nord",
+      locale: "en",
+      sections: [
+        { type: "hero", order: 0, heading: "Cafe Nord" },
+        { type: "offer", order: 1, heading: "Seasonal brunch" },
+        { type: "about", order: 2, heading: "Our story" },
+        { type: "gallery", order: 3, heading: "Inside the cafe" },
+        { type: "menu_preview", order: 4, heading: "Menu" },
+        { type: "testimonials", order: 5, heading: "Guests say" },
+        { type: "contact", order: 6, heading: "Visit us" },
+        { type: "lead_form", order: 7, heading: "Book a table" },
+      ],
+      site: {
+        mode: "website",
+        nav: {
+          style: "compact-cta",
+          brandLabel: "Cafe Nord",
+          links: [{ label: "Home", pageSlug: "home" }],
+        },
+      },
+    };
+    const classic = createLandingPageDesignPlan({
+      ...baseInput,
+      vibe: { minimalBold: -0.4, classicModern: -0.8, calmEnergetic: -0.4 },
+    });
+    const modern = createLandingPageDesignPlan({
+      ...baseInput,
+      landingPageId: "00000000-0000-0000-0000-000000000404",
+      vibe: { minimalBold: 0.7, classicModern: 0.85, calmEnergetic: 0.6 },
+    });
+
+    const classicComposition = applyStyleContractToComposition({
+      composition,
+      designPlan: classic,
+      seed: designPlanSeed(classic),
+    });
+    const modernComposition = applyStyleContractToComposition({
+      composition,
+      designPlan: modern,
+      seed: designPlanSeed(modern),
+    });
+
+    expect(classicComposition.site?.nav?.style).toBe("classic");
+    expect(modernComposition.site?.nav?.style).toBe(modern.navStyle);
+    expect(classicComposition.sections.map((s) => s.type).slice(0, 3)).toEqual([
+      "hero",
+      "about",
+      "menu_preview",
+    ]);
+    expect(modernComposition.sections.map((s) => s.type).slice(0, 3)).toEqual([
+      "hero",
+      "gallery",
+      "offer",
+    ]);
+    expect(modern.styleContract.heroVariants).toContain(modernComposition.sections[0]?.variant);
+    expect(modernComposition.sections.some((section) => section.tone === "accent")).toBe(true);
+  });
+});
 
 // ─── Prompt rendering tests ───────────────────────────────────────────────────
 
@@ -125,7 +256,12 @@ describe("landingPageCompositionSchema", () => {
     title: "Café Züri — Kaffee & Kuchen",
     locale: "de-CH",
     sections: [
-      { type: "hero", order: 0, heading: "Willkommen", body: "Frischer Kaffee." },
+      {
+        type: "hero",
+        order: 0,
+        heading: "Willkommen",
+        body: "Frischer Kaffee.",
+      },
       { type: "lead_form", order: 1, heading: "Kontakt" },
     ],
   };
@@ -158,8 +294,203 @@ describe("landingPageCompositionSchema", () => {
   });
 
   it("has a non-empty title", () => {
-    const result = landingPageCompositionSchema.safeParse({ ...validComposition, title: "" });
+    const result = landingPageCompositionSchema.safeParse({
+      ...validComposition,
+      title: "",
+    });
     expect(result.success).toBe(false);
+  });
+
+  it("accepts an optional website shell with generated subpages", () => {
+    const result = landingPageCompositionSchema.safeParse({
+      ...validComposition,
+      site: {
+        mode: "website",
+        nav: {
+          style: "compact-cta",
+          brandLabel: "Cafe Test",
+          links: [
+            { label: "Home", pageSlug: "home" },
+            { label: "About", pageSlug: "about" },
+            { label: "Services", pageSlug: "services" },
+            { label: "Contact", pageSlug: "contact" },
+          ],
+          cta: { label: "Book", pageSlug: "contact" },
+        },
+        pages: [
+          {
+            slug: "about",
+            title: "About Cafe Test",
+            sections: validComposition.sections,
+          },
+          {
+            slug: "services",
+            title: "Services",
+            sections: validComposition.sections,
+          },
+          {
+            slug: "contact",
+            title: "Contact",
+            sections: validComposition.sections,
+          },
+        ],
+      },
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it("builds a website-mode composition with nav and at least three subpages", () => {
+    const composition = enhanceCompositionWithWebsite(validComposition, {
+      businessName: "Cafe Test",
+      vertical: "cafe",
+      locale: "en",
+      seed: "website-plan-test",
+      goals: ["lead_capture"],
+      vibe: { minimalBold: 0.4, classicModern: 0.7, calmEnergetic: 0.2 },
+    });
+
+    expect(composition.site?.mode).toBe("website");
+    expect(composition.site?.nav?.style).toBe("classic");
+    expect(composition.site?.nav?.links.map((link) => link.pageSlug)).toEqual([
+      "home",
+      "about",
+      "menu",
+      "contact",
+    ]);
+    expect(composition.site?.pages).toHaveLength(3);
+    expect(composition.site?.pages?.every((page) => page.sections.length >= 2)).toBe(true);
+    expect(landingPageCompositionSchema.safeParse(composition).success).toBe(true);
+    expect(hasValidWebsiteShell(composition)).toBe(true);
+  });
+
+  it("keeps template-based wizard output in website mode with modern nav", () => {
+    const plan = createLandingPageDesignPlan({
+      tenantId: "00000000-0000-0000-0000-000000000001",
+      landingPageId: "00000000-0000-0000-0000-000000000303",
+      businessName: "Studio Modern",
+      vertical: "service",
+      locale: "en",
+      userPrompt: "Modern consulting studio with a premium local offer.",
+      goals: ["lead_capture"],
+      vibe: { minimalBold: 0.5, classicModern: 0.8, calmEnergetic: 0.2 },
+      templateKey: "service-template",
+    });
+    const composition = enhanceCompositionWithWebsite(validComposition, {
+      businessName: "Studio Modern",
+      vertical: "service",
+      locale: "en",
+      seed: designPlanSeed(plan),
+      goals: ["lead_capture"],
+      vibe: { minimalBold: 0.5, classicModern: 0.8, calmEnergetic: 0.2 },
+      navStyle: plan.navStyle,
+      designPlan: plan,
+    });
+
+    expect(composition.site?.mode).toBe("website");
+    expect(composition.site?.nav?.links.length).toBeGreaterThanOrEqual(4);
+    expect(composition.site?.nav?.style).toBe(plan.navStyle);
+    expect(composition.site?.pages).toHaveLength(3);
+    expect(hasValidWebsiteShell(composition)).toBe(true);
+  });
+
+  it("preserves an already valid website shell", () => {
+    const existing: LandingPageComposition = {
+      ...validComposition,
+      site: {
+        mode: "website",
+        nav: {
+          style: "editorial",
+          brandLabel: "Existing Brand",
+          links: [
+            { label: "Home", pageSlug: "home" },
+            { label: "Story", pageSlug: "story" },
+            { label: "Work", pageSlug: "work" },
+            { label: "Contact", pageSlug: "contact" },
+          ],
+          cta: { label: "Call", pageSlug: "contact" },
+        },
+        pages: [
+          { slug: "story", title: "Story", sections: validComposition.sections },
+          { slug: "work", title: "Work", sections: validComposition.sections },
+          { slug: "contact", title: "Contact", sections: validComposition.sections },
+        ],
+        footer: {
+          text: "Existing footer",
+          links: [{ label: "Story", pageSlug: "story" }],
+        },
+      },
+    };
+
+    const composition = enhanceCompositionWithWebsite(existing, {
+      businessName: "New Brand",
+      vertical: "retail",
+      locale: "en",
+      seed: "preserve-test",
+      navStyle: "bold-pill",
+    });
+
+    expect(composition.site?.nav?.brandLabel).toBe("Existing Brand");
+    expect(composition.site?.nav?.style).toBe("editorial");
+    expect(composition.site?.pages?.map((page) => page.slug)).toEqual(["story", "work", "contact"]);
+    expect(hasValidWebsiteShell(composition)).toBe(true);
+  });
+
+  it("repairs incomplete website shells without replacing valid existing pages", () => {
+    const composition = enhanceCompositionWithWebsite(
+      {
+        ...validComposition,
+        site: {
+          mode: "website",
+          nav: {
+            links: [{ label: "Home", pageSlug: "home" }],
+          },
+          pages: [
+            {
+              slug: "about",
+              title: "Custom About",
+              sections: validComposition.sections,
+            },
+          ],
+        },
+      },
+      {
+        businessName: "Repair Test",
+        vertical: "clinic",
+        locale: "en",
+        seed: "repair-test",
+        goals: ["appointment_booking"],
+        navStyle: "compact-cta",
+      },
+    );
+
+    expect(composition.site?.nav?.style).toBe("compact-cta");
+    expect(composition.site?.pages?.find((page) => page.slug === "about")?.title).toBe(
+      "Custom About",
+    );
+    expect(composition.site?.nav?.links.map((link) => link.pageSlug)).toEqual([
+      "home",
+      "about",
+      "services",
+      "contact",
+    ]);
+    expect(hasValidWebsiteShell(composition)).toBe(true);
+  });
+
+  it("uses vertical-specific third page labels for retail", () => {
+    const composition = enhanceCompositionWithWebsite(validComposition, {
+      businessName: "Boutique Test",
+      vertical: "fashion retail boutique",
+      locale: "en",
+      seed: "retail-test",
+      goals: ["sales_promo"],
+      navStyle: "bold-pill",
+    });
+
+    expect(composition.site?.nav?.style).toBe("bold-pill");
+    expect(composition.site?.nav?.links.map((link) => link.pageSlug)).toContain("products");
+    expect(composition.site?.pages?.map((page) => page.slug)).toContain("products");
+    expect(hasValidWebsiteShell(composition)).toBe(true);
   });
 });
 
@@ -169,7 +500,13 @@ describe("EchoProvider — completionWithTools", () => {
   it("returns a toolResult with the tool name", async () => {
     const result = await echo.completionWithTools(
       { prompt: "Generate sections for a café" },
-      [{ name: "generate_sections", description: "Generate sections", inputSchema: { type: "object" as const, properties: {} } }],
+      [
+        {
+          name: "generate_sections",
+          description: "Generate sections",
+          inputSchema: { type: "object" as const, properties: {} },
+        },
+      ],
       baseOpts,
     );
     expect(result.toolResult).not.toBeNull();
@@ -178,10 +515,7 @@ describe("EchoProvider — completionWithTools", () => {
   });
 
   it("returns zero-cost embeddings", async () => {
-    const result = await echo.embed(
-      { texts: ["Café Züri", "Fitness Studio Bern"] },
-      baseOpts,
-    );
+    const result = await echo.embed({ texts: ["Café Züri", "Fitness Studio Bern"] }, baseOpts);
     expect(result.embeddings).toHaveLength(2);
     expect(result.embeddings[0]).toHaveLength(1536);
     expect(result.costUsd).toBe(0);
@@ -195,11 +529,19 @@ describe("ProviderRouter — routeWithTools", () => {
     const usageRecords: unknown[] = [];
     const result = await router.routeWithTools(
       { prompt: "Test tool-use" },
-      [{ name: "compose_layout", description: "Compose layout", inputSchema: { type: "object" as const, properties: {} } }],
+      [
+        {
+          name: "compose_layout",
+          description: "Compose layout",
+          inputSchema: { type: "object" as const, properties: {} },
+        },
+      ],
       { ...baseOpts, promptId: "landing-page-layout-v1" },
       {
         tenantPlan: TENANT_PLAN,
-        writeUsage: async (r) => { usageRecords.push(r); },
+        writeUsage: async (r) => {
+          usageRecords.push(r);
+        },
       },
     );
     expect(result.toolResult).toBeDefined();
@@ -215,7 +557,9 @@ describe("ProviderRouter — routeEmbed", () => {
       { ...baseOpts, promptId: "embed-v1" },
       {
         tenantPlan: TENANT_PLAN,
-        writeUsage: async (r) => { usageRecords.push(r); },
+        writeUsage: async (r) => {
+          usageRecords.push(r);
+        },
       },
     );
     expect(result.embeddings).toHaveLength(1);
@@ -304,7 +648,10 @@ describe("faqSectionSchema — typed extras", () => {
       extras: {
         items: [
           { question: "Wann öffnet ihr?", answer: "Täglich ab 8 Uhr." },
-          { question: "Gibt es vegane Optionen?", answer: "Ja, täglich wechselnde Angebote." },
+          {
+            question: "Gibt es vegane Optionen?",
+            answer: "Ja, täglich wechselnde Angebote.",
+          },
         ],
       },
     });
@@ -321,7 +668,11 @@ describe("menuPreviewSectionSchema — typed extras", () => {
       heading: "Unsere Spezialitäten",
       extras: {
         items: [
-          { name: "Zürcher Geschnetzeltes", price: "CHF 28", description: "Mit Rösti serviert." },
+          {
+            name: "Zürcher Geschnetzeltes",
+            price: "CHF 28",
+            description: "Mit Rösti serviert.",
+          },
           { name: "Vegane Bowl", price: "CHF 22" },
         ],
       },
@@ -374,7 +725,9 @@ describe("gallerySectionSchema — typed extras", () => {
       order: 3,
       heading: "Gallery",
       extras: {
-        images: Array.from({ length: 13 }, (_, i) => ({ url: `https://example.com/${i}.jpg` })),
+        images: Array.from({ length: 13 }, (_, i) => ({
+          url: `https://example.com/${i}.jpg`,
+        })),
       },
     });
     expect(result.success).toBe(false);
@@ -420,13 +773,22 @@ describe("discriminated union — full composition with all section types", () =
           type: "testimonials",
           order: 2,
           heading: "Kundenstimmen",
-          extras: { items: [{ quote: "Fantastisch!", author: "Anna B.", role: "Bern" }] },
+          extras: {
+            items: [{ quote: "Fantastisch!", author: "Anna B.", role: "Bern" }],
+          },
         },
         {
           type: "faq",
           order: 3,
           heading: "FAQ",
-          extras: { items: [{ question: "Habt ihr Parkplätze?", answer: "Ja, direkt daneben." }] },
+          extras: {
+            items: [
+              {
+                question: "Habt ihr Parkplätze?",
+                answer: "Ja, direkt daneben.",
+              },
+            ],
+          },
         },
         {
           type: "contact",
@@ -455,10 +817,38 @@ const PERSONALIZE_LOCALES: Array<{
   /** A token that must appear in the system prompt so we know the locale wired correctly. */
   systemMarker: string;
 }> = [
-  { promptId: "landing-page-personalize-v1",    locale: "de-CH", city: "Zürich",  vibePhrase: "bold, modern, energetic", cliches: ["erstklassig", "weltklasse"], systemMarker: "Vibe-Übersetzung" },
-  { promptId: "landing-page-personalize-en-v1", locale: "en",    city: "Geneva",  vibePhrase: "minimal, classic, calm",   cliches: ["world-class", "premium"],   systemMarker: "Vibe translation" },
-  { promptId: "landing-page-personalize-fr-v1", locale: "fr-CH", city: "Genève",  vibePhrase: "modern, energetic",       cliches: ["incontournable"],            systemMarker: "Traduction de vibe" },
-  { promptId: "landing-page-personalize-it-v1", locale: "it-CH", city: "Lugano",  vibePhrase: "elegant, calm",           cliches: ["imperdibile"],               systemMarker: "Traduzione vibe" },
+  {
+    promptId: "landing-page-personalize-v1",
+    locale: "de-CH",
+    city: "Zürich",
+    vibePhrase: "bold, modern, energetic",
+    cliches: ["erstklassig", "weltklasse"],
+    systemMarker: "Vibe-Übersetzung",
+  },
+  {
+    promptId: "landing-page-personalize-en-v1",
+    locale: "en",
+    city: "Geneva",
+    vibePhrase: "minimal, classic, calm",
+    cliches: ["world-class", "premium"],
+    systemMarker: "Vibe translation",
+  },
+  {
+    promptId: "landing-page-personalize-fr-v1",
+    locale: "fr-CH",
+    city: "Genève",
+    vibePhrase: "modern, energetic",
+    cliches: ["incontournable"],
+    systemMarker: "Traduction de vibe",
+  },
+  {
+    promptId: "landing-page-personalize-it-v1",
+    locale: "it-CH",
+    city: "Lugano",
+    vibePhrase: "elegant, calm",
+    cliches: ["imperdibile"],
+    systemMarker: "Traduzione vibe",
+  },
 ];
 
 describe.each(PERSONALIZE_LOCALES)(
@@ -505,7 +895,12 @@ describe.each(PERSONALIZE_LOCALES)(
       expect(out).toContain("contact");
       expect(out).toContain(vibePhrase);
       // brandHints must appear under a locale-appropriate label, never raw.
-      expect(out.includes("Brand vibe") || out.includes("Brand-Vibe") || out.includes("Vibe de marque") || out.includes("Vibe del brand")).toBe(true);
+      expect(
+        out.includes("Brand vibe") ||
+          out.includes("Brand-Vibe") ||
+          out.includes("Vibe de marque") ||
+          out.includes("Vibe del brand"),
+      ).toBe(true);
     });
 
     it("buildUserPrompt omits brandHints label cleanly when no hints provided", () => {
@@ -581,64 +976,77 @@ const PERSONALIZE_FIXTURES: PersonalizeFixture[] = [
     promptId: "landing-page-personalize-v1",
     locale: "de-CH",
     input: {
-      brief: "Spezialitätenkaffee in Zürich mit Sonntags-Brunch. Wir wollen neue Stammgäste gewinnen.",
+      brief:
+        "Spezialitätenkaffee in Zürich mit Sonntags-Brunch. Wir wollen neue Stammgäste gewinnen.",
       businessName: "Café Bern",
       vertical: "cafe",
       city: "Zürich",
       sections: "hero, about, menu_preview, lead_form",
-      brandHints: "Vibe: bold, modern, energetic. Primary goal: lead_capture. Palette: sport-orange.",
+      brandHints:
+        "Vibe: bold, modern, energetic. Primary goal: lead_capture. Palette: sport-orange.",
     },
-    expectedVibe: "bold, modern, energetic — punchy short headlines, action verbs, energy in every sentence",
+    expectedVibe:
+      "bold, modern, energetic — punchy short headlines, action verbs, energy in every sentence",
     forbiddenSubstrings: ["ß", "weltklasse", "erstklassig", "unvergesslich"],
-    judgeRubric: "The copy should feel BOLD and ENERGETIC. Headlines should be short and punchy. Body should use action verbs. It should match Swiss-German conventions (no 'ß', use 'ss'). It should avoid marketing clichés like 'weltklasse', 'erstklassig', 'unvergesslich'. Locale: de-CH.",
+    judgeRubric:
+      "The copy should feel BOLD and ENERGETIC. Headlines should be short and punchy. Body should use action verbs. It should match Swiss-German conventions (no 'ß', use 'ss'). It should avoid marketing clichés like 'weltklasse', 'erstklassig', 'unvergesslich'. Locale: de-CH.",
   },
   {
     name: "minimal-classic-clinic-EN",
     promptId: "landing-page-personalize-en-v1",
     locale: "en",
     input: {
-      brief: "Family dental clinic in Geneva offering preventive and aesthetic care. We want to attract new patients.",
+      brief:
+        "Family dental clinic in Geneva offering preventive and aesthetic care. We want to attract new patients.",
       businessName: "Geneva Dental Care",
       vertical: "clinic",
       city: "Geneva",
       sections: "hero, about, contact, lead_form",
-      brandHints: "Vibe: minimal, classic, calm. Primary goal: appointment_booking. Palette: alpine-clean.",
+      brandHints:
+        "Vibe: minimal, classic, calm. Primary goal: appointment_booking. Palette: alpine-clean.",
     },
     expectedVibe: "minimal, classic, calm — concise, trust-building, no exclamation marks",
     forbiddenSubstrings: ["world-class", "premium", "exceptional", "best-in-class"],
-    judgeRubric: "The copy should feel MINIMAL and CALM. Short sentences. Trust-building tone for a medical clinic. Avoid marketing clichés like 'world-class', 'premium', 'exceptional'. Should mention appointment booking subtly, not aggressively. Locale: English (international, no Britishisms or Americanisms).",
+    judgeRubric:
+      "The copy should feel MINIMAL and CALM. Short sentences. Trust-building tone for a medical clinic. Avoid marketing clichés like 'world-class', 'premium', 'exceptional'. Should mention appointment booking subtly, not aggressively. Locale: English (international, no Britishisms or Americanisms).",
   },
   {
     name: "modern-energetic-fitness-FR",
     promptId: "landing-page-personalize-fr-v1",
     locale: "fr-CH",
     input: {
-      brief: "Studio de fitness boutique à Lausanne, coaching personnalisé et petits groupes. Inscriptions ouvertes.",
+      brief:
+        "Studio de fitness boutique à Lausanne, coaching personnalisé et petits groupes. Inscriptions ouvertes.",
       businessName: "Studio Forme",
       vertical: "fitness",
       city: "Lausanne",
       sections: "hero, offer, testimonials, lead_form",
-      brandHints: "Vibe: bold, modern, energetic. Primary goal: lead_capture. Palette: sport-orange.",
+      brandHints:
+        "Vibe: bold, modern, energetic. Primary goal: lead_capture. Palette: sport-orange.",
     },
     expectedVibe: "modern, energetic — French romand tone, vouvoiement, action-driving CTAs",
     forbiddenSubstrings: ["incontournable", "unique en son genre", "exceptionnel"],
-    judgeRubric: "The copy should feel ENERGETIC and MODERN. Use Swiss French (Suisse romande) conventions, vouvoiement (vous-form). Action-driving verbs. Avoid marketing clichés like 'incontournable', 'unique en son genre'. Locale: fr-CH.",
+    judgeRubric:
+      "The copy should feel ENERGETIC and MODERN. Use Swiss French (Suisse romande) conventions, vouvoiement (vous-form). Action-driving verbs. Avoid marketing clichés like 'incontournable', 'unique en son genre'. Locale: fr-CH.",
   },
   {
     name: "elegant-calm-restaurant-IT",
     promptId: "landing-page-personalize-it-v1",
     locale: "it-CH",
     input: {
-      brief: "Ristorante di alta cucina a Lugano, menù degustazione stagionale. Cerchiamo prenotazioni per la cena.",
+      brief:
+        "Ristorante di alta cucina a Lugano, menù degustazione stagionale. Cerchiamo prenotazioni per la cena.",
       businessName: "Osteria del Lago",
       vertical: "restaurant",
       city: "Lugano",
       sections: "hero, menu_preview, gallery, contact, lead_form",
-      brandHints: "Vibe: classic, elegant, calm. Primary goal: appointment_booking. Palette: geneve-elegance.",
+      brandHints:
+        "Vibe: classic, elegant, calm. Primary goal: appointment_booking. Palette: geneve-elegance.",
     },
     expectedVibe: "elegant, calm — Ticino-Italian register, formal Lei, refined vocabulary",
     forbiddenSubstrings: ["imperdibile", "esperienza unica", "eccezionale"],
-    judgeRubric: "The copy should feel ELEGANT and CALM. Use Swiss Italian (Ticino) register, formal Lei address. Refined vocabulary. Avoid marketing clichés like 'imperdibile', 'esperienza unica'. Locale: it-CH.",
+    judgeRubric:
+      "The copy should feel ELEGANT and CALM. Use Swiss Italian (Ticino) register, formal Lei address. Refined vocabulary. Avoid marketing clichés like 'imperdibile', 'esperienza unica'. Locale: it-CH.",
   },
 ];
 
@@ -679,10 +1087,10 @@ describe.runIf(RUN_LLM_EVALS)("personalize prompts — Haiku-as-judge quality ev
       inputSchema: {
         type: "object" as const,
         properties: {
-          vibeMatch:        { type: "integer", minimum: 0, maximum: 5 },
-          localeFidelity:   { type: "integer", minimum: 0, maximum: 5 },
-          clicheAvoidance:  { type: "integer", minimum: 0, maximum: 5 },
-          reasoning:        { type: "string", maxLength: 400 },
+          vibeMatch: { type: "integer", minimum: 0, maximum: 5 },
+          localeFidelity: { type: "integer", minimum: 0, maximum: 5 },
+          clicheAvoidance: { type: "integer", minimum: 0, maximum: 5 },
+          reasoning: { type: "string", maxLength: 400 },
         },
         required: ["vibeMatch", "localeFidelity", "clicheAvoidance", "reasoning"],
       },
@@ -695,12 +1103,28 @@ describe.runIf(RUN_LLM_EVALS)("personalize prompts — Haiku-as-judge quality ev
       const userPrompt = prompt.buildUserPrompt(fx.input);
 
       const gen = await sonnet.completionWithTools(
-        { prompt: userPrompt, systemPrompt: prompt.systemPrompt, maxTokens: 1200, temperature: 0.4 },
+        {
+          prompt: userPrompt,
+          systemPrompt: prompt.systemPrompt,
+          maxTokens: 1200,
+          temperature: 0.4,
+        },
         [generateTool],
-        { tenantId: baseOpts.tenantId, jobId: `${baseOpts.jobId}-${fx.name}`, promptId: fx.promptId, promptVersion: 1, costBudgetCents: 25 },
+        {
+          tenantId: baseOpts.tenantId,
+          jobId: `${baseOpts.jobId}-${fx.name}`,
+          promptId: fx.promptId,
+          promptVersion: 1,
+          costBudgetCents: 25,
+        },
       );
 
-      const sectionsArr = (gen.toolResult as { sections?: Array<{ heading: string; body: string }> } | null)?.sections ?? [];
+      const sectionsArr =
+        (
+          gen.toolResult as {
+            sections?: Array<{ heading: string; body: string }>;
+          } | null
+        )?.sections ?? [];
       const flatText = sectionsArr.map((s) => `${s.heading}\n${s.body}`).join("\n\n");
 
       // Deterministic guards — substring blacklist (cliché lint).
@@ -710,33 +1134,52 @@ describe.runIf(RUN_LLM_EVALS)("personalize prompts — Haiku-as-judge quality ev
         }
       }
       if (flatText.length < 100) {
-        failures.push(`[${fx.name}] output too short (${flatText.length} chars) — likely truncated`);
+        failures.push(
+          `[${fx.name}] output too short (${flatText.length} chars) — likely truncated`,
+        );
       }
 
       // Haiku judges the qualitative properties.
       const judgement = await haiku.completionWithTools(
         {
           prompt: `Generated copy:\n\n${flatText}\n\nRubric:\n${fx.judgeRubric}\n\nScore 0-5 per axis and explain in one sentence per axis.`,
-          systemPrompt: "You are a strict copy editor scoring landing-page copy on three axes. Use the judge_copy tool with integer 0-5 scores.",
+          systemPrompt:
+            "You are a strict copy editor scoring landing-page copy on three axes. Use the judge_copy tool with integer 0-5 scores.",
           maxTokens: 400,
           temperature: 0,
         },
         [judgeTool],
-        { tenantId: baseOpts.tenantId, jobId: `${baseOpts.jobId}-judge-${fx.name}`, promptId: "haiku-judge", promptVersion: 1, costBudgetCents: 5 },
+        {
+          tenantId: baseOpts.tenantId,
+          jobId: `${baseOpts.jobId}-judge-${fx.name}`,
+          promptId: "haiku-judge",
+          promptVersion: 1,
+          costBudgetCents: 5,
+        },
       );
 
-      const j = judgement.toolResult as { vibeMatch?: number; localeFidelity?: number; clicheAvoidance?: number; reasoning?: string } | null;
+      const j = judgement.toolResult as {
+        vibeMatch?: number;
+        localeFidelity?: number;
+        clicheAvoidance?: number;
+        reasoning?: string;
+      } | null;
       if (!j) {
         failures.push(`[${fx.name}] judge returned no scores`);
         continue;
       }
       // 3/5 is the passing bar — a Haiku judge is conservative; 3 means
       // "acceptable" and reflects honest variance in AI output.
-      if ((j.vibeMatch ?? 0) < 3)       failures.push(`[${fx.name}] vibeMatch ${j.vibeMatch}/5 — ${j.reasoning}`);
-      if ((j.localeFidelity ?? 0) < 3)  failures.push(`[${fx.name}] localeFidelity ${j.localeFidelity}/5 — ${j.reasoning}`);
-      if ((j.clicheAvoidance ?? 0) < 3) failures.push(`[${fx.name}] clicheAvoidance ${j.clicheAvoidance}/5 — ${j.reasoning}`);
+      if ((j.vibeMatch ?? 0) < 3)
+        failures.push(`[${fx.name}] vibeMatch ${j.vibeMatch}/5 — ${j.reasoning}`);
+      if ((j.localeFidelity ?? 0) < 3)
+        failures.push(`[${fx.name}] localeFidelity ${j.localeFidelity}/5 — ${j.reasoning}`);
+      if ((j.clicheAvoidance ?? 0) < 3)
+        failures.push(`[${fx.name}] clicheAvoidance ${j.clicheAvoidance}/5 — ${j.reasoning}`);
     }
 
-    expect(failures, `Personalize prompt quality regressions:\n  ${failures.join("\n  ")}`).toEqual([]);
+    expect(failures, `Personalize prompt quality regressions:\n  ${failures.join("\n  ")}`).toEqual(
+      [],
+    );
   }, 120_000); // 2-minute total budget — 4 fixtures × ~15s each
 });

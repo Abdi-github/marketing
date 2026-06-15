@@ -9,9 +9,16 @@ import React, { useRef, useState, useCallback, useEffect } from "react";
 
 export function GalleryCarousel({
   brandPrimary,
+  settings,
   children,
 }: {
   brandPrimary: string;
+  settings?: {
+    enabled?: boolean;
+    mode?: "auto" | "manual";
+    delayMs?: number;
+    effect?: "fade" | "slide";
+  };
   children: React.ReactNode;
 }) {
   const stripRef = useRef<HTMLDivElement>(null);
@@ -43,9 +50,28 @@ export function GalleryCarousel({
     el.scrollBy({ left: dir * Math.max(320, el.clientWidth * 0.8), behavior: "smooth" });
   }, []);
 
+  useEffect(() => {
+    if (!settings?.enabled || settings.mode !== "auto") return undefined;
+    const delayMs = Math.min(15000, Math.max(1000, settings.delayMs ?? 4500));
+    const timer = window.setInterval(() => {
+      const el = stripRef.current;
+      if (!el) return;
+      const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 8;
+      if (atEnd) {
+        el.scrollTo({ left: 0, behavior: settings.effect === "fade" ? "auto" : "smooth" });
+      } else {
+        scrollByDir(1);
+      }
+    }, delayMs);
+    return () => window.clearInterval(timer);
+  }, [scrollByDir, settings?.delayMs, settings?.effect, settings?.enabled, settings?.mode]);
+
   // Click-drag to pan (desktop mouse).
   const drag = useRef<{ down: boolean; startX: number; startScroll: number; moved: boolean }>({
-    down: false, startX: 0, startScroll: 0, moved: false,
+    down: false,
+    startX: 0,
+    startScroll: 0,
+    moved: false,
   });
   const onPointerDown = (e: React.PointerEvent) => {
     const el = stripRef.current;
@@ -59,26 +85,60 @@ export function GalleryCarousel({
     if (Math.abs(dx) > 4) drag.current.moved = true;
     el.scrollLeft = drag.current.startScroll - dx;
   };
-  const endDrag = () => { drag.current.down = false; };
+  const endDrag = () => {
+    drag.current.down = false;
+  };
   // Suppress click (e.g. opening a lightbox) right after a drag.
   const onClickCapture = (e: React.MouseEvent) => {
-    if (drag.current.moved) { e.preventDefault(); e.stopPropagation(); drag.current.moved = false; }
+    if (drag.current.moved) {
+      e.preventDefault();
+      e.stopPropagation();
+      drag.current.moved = false;
+    }
   };
 
   const arrowStyle: React.CSSProperties = {
-    position: "absolute", top: "50%", transform: "translateY(-50%)", zIndex: 2,
-    width: 44, height: 44, borderRadius: "50%", border: "none", cursor: "pointer",
-    background: "#fff", color: brandPrimary, boxShadow: "0 4px 16px rgba(0,0,0,0.18)",
-    display: "flex", alignItems: "center", justifyContent: "center",
+    position: "absolute",
+    top: "50%",
+    transform: "translateY(-50%)",
+    zIndex: 2,
+    width: 44,
+    height: 44,
+    borderRadius: "50%",
+    border: "none",
+    cursor: "pointer",
+    background: "var(--lp-card,#fff)",
+    color: brandPrimary,
+    boxShadow: "0 4px 16px rgba(0,0,0,0.18)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
   };
 
   return (
     <div style={{ position: "relative" }}>
       <button
-        type="button" aria-label="Scroll left" onClick={() => scrollByDir(-1)}
-        style={{ ...arrowStyle, left: -6, opacity: canLeft ? 1 : 0, pointerEvents: canLeft ? "auto" : "none", transition: "opacity 0.2s" }}
+        type="button"
+        aria-label="Scroll left"
+        onClick={() => scrollByDir(-1)}
+        style={{
+          ...arrowStyle,
+          left: -6,
+          opacity: canLeft ? 1 : 0,
+          pointerEvents: canLeft ? "auto" : "none",
+          transition: "opacity 0.2s",
+        }}
       >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M15 18l-6-6 6-6"/></svg>
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+        >
+          <path d="M15 18l-6-6 6-6" />
+        </svg>
       </button>
       <div
         ref={stripRef}
@@ -93,10 +153,27 @@ export function GalleryCarousel({
         {children}
       </div>
       <button
-        type="button" aria-label="Scroll right" onClick={() => scrollByDir(1)}
-        style={{ ...arrowStyle, right: -6, opacity: canRight ? 1 : 0, pointerEvents: canRight ? "auto" : "none", transition: "opacity 0.2s" }}
+        type="button"
+        aria-label="Scroll right"
+        onClick={() => scrollByDir(1)}
+        style={{
+          ...arrowStyle,
+          right: -6,
+          opacity: canRight ? 1 : 0,
+          pointerEvents: canRight ? "auto" : "none",
+          transition: "opacity 0.2s",
+        }}
       >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+        >
+          <path d="M9 18l6-6-6-6" />
+        </svg>
       </button>
     </div>
   );

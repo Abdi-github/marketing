@@ -161,3 +161,30 @@ describe("social-post-v1 — prompt registry", () => {
     expect(out).not.toContain('"cafe"');
   });
 });
+
+describe("social-post FR-CH prompts", () => {
+  it("registers the FR-CH generation prompt", () => {
+    const prompt = getPrompt("social-post-fr-v1");
+    expect(prompt.systemPrompt).toContain("Suisse romande");
+
+    const userPrompt = prompt.buildUserPrompt({
+      businessName: "Epicerie du Lac",
+      vertical: "retail",
+      city: "Neuchatel",
+      topic: "20% sur les legumes",
+      highlights: "Produits locaux ce week-end",
+    });
+
+    expect(userPrompt).toContain("Epicerie du Lac");
+    expect(userPrompt).toContain("20% sur les legumes");
+    expect(userPrompt).toContain("Points forts");
+  });
+
+  it("registers the FR-CH refinement prompt", () => {
+    const prompt = getPrompt("social-post-refine-fr-v1");
+    expect(prompt.systemPrompt).toContain("Suisse romande");
+    expect(prompt.buildUserPrompt({ businessName: "Test", topic: "Offre" })).toContain(
+      "Post actuel",
+    );
+  });
+});

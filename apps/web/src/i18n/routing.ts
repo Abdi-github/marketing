@@ -1,8 +1,8 @@
 import { defineRouting } from "next-intl/routing";
 
-// MVP default: English. DE and FR are present for future switch — do NOT remove them.
-// When ready, set defaultLocale to "de" (DE-CH beachhead) or "fr" (Swiss French).
+// Locale expansion order per ADR-0014 D2: DE-CH (default) → FR-CH (GA) → IT-CH (step-17).
+// DE/AT expansion remains deferred to Phase 9+.
 export const routing = defineRouting({
-  locales: ["en", "de", "fr"],
+  locales: ["en", "de", "fr", "it"],
   defaultLocale: "en",
 });

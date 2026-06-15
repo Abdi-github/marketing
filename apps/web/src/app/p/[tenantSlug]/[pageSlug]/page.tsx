@@ -18,16 +18,29 @@ import { and, eq, desc } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import type { LandingPageComposition } from "@marketing/ai-router";
+import type { FormSettings, FormStep, LandingPageComposition } from "@marketing/ai-router";
 import LeadForm from "../../../../components/lead-form";
 import { SectionBlock } from "../../../../components/landing/section-renderer";
+import {
+  LandingSiteFooter,
+  LandingSiteNav,
+  getSitePageSections,
+} from "../../../../components/landing/site-shell";
+import { Reveal } from "../../../../components/landing/reveal";
 import { ConsentBanner } from "./consent-banner";
+import {
+  isLandingPageLocale,
+  normalizeLandingLanguagePreferences,
+} from "../../../../lib/landing-language";
+import { selectLocalizedComposition } from "../../../../lib/landing-localization";
+import { LANDING_THEME_GLOBAL_CSS, resolveLandingTheme } from "../../../../lib/landing-theme";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 type Props = {
   params: Promise<{ tenantSlug: string; pageSlug: string }>;
+  searchParams?: Promise<{ lang?: string }>;
 };
 
 // ─── SEO metadata ─────────────────────────────────────────────────────────────
@@ -79,8 +92,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 // ─── Page render ──────────────────────────────────────────────────────────────
 
-export default async function PublicLandingPage({ params }: Props) {
+export default async function PublicLandingPage({ params, searchParams }: Props) {
   const { tenantSlug, pageSlug } = await params;
+  const query = await searchParams;
 
   const [tenant] = await db
     .select({ id: tenants.id, slug: tenants.slug })
@@ -126,7 +140,11 @@ export default async function PublicLandingPage({ params }: Props) {
 
   if (activeExp) {
     const expVariants = await db
-      .select({ id: experimentVariants.id, versionId: experimentVariants.versionId, trafficPct: experimentVariants.trafficPct })
+      .select({
+        id: experimentVariants.id,
+        versionId: experimentVariants.versionId,
+        trafficPct: experimentVariants.trafficPct,
+      })
       .from(experimentVariants)
       .where(eq(experimentVariants.experimentId, activeExp.id));
 
@@ -153,27 +171,51 @@ export default async function PublicLandingPage({ params }: Props) {
   const [version] = await db
     .select()
     .from(landingPageVersions)
-    .where(
-      and(
-        eq(landingPageVersions.tenantId, tenant.id),
-        eq(landingPageVersions.id, versionId),
-      ),
-    );
+    .where(and(eq(landingPageVersions.tenantId, tenant.id), eq(landingPageVersions.id, versionId)));
 
   if (!version) notFound();
 
-  void db.insert(landingPageViews).values({
-    tenantId: tenant.id,
-    landingPageId: page.id,
-    version: version.version,
-    referrer: null,
-    countryCode: null,
-  }).catch(() => null);
+  void db
+    .insert(landingPageViews)
+    .values({
+      tenantId: tenant.id,
+      landingPageId: page.id,
+      version: version.version,
+      referrer: null,
+      countryCode: null,
+    })
+    .catch(() => null);
 
   const composition = version.composition as LandingPageComposition;
+  const stepData = (page.stepData ?? {}) as Record<string, unknown>;
+  const languagePreferences = normalizeLandingLanguagePreferences(
+    stepData["languagePreferences"],
+    page.locale,
+  );
+  const activeLocale = isLandingPageLocale(query?.lang)
+    ? query.lang
+    : languagePreferences.defaultLocale;
+  const renderComposition = selectLocalizedComposition({
+    composition,
+    stepData,
+    activeLocale,
+    defaultLocale: languagePreferences.defaultLocale,
+  });
+  const sections =
+    getSitePageSections(renderComposition) ??
+    renderComposition.sections.slice().sort((a, b) => a.order - b.order);
+  const basePath = `/p/${tenantSlug}/${pageSlug}`;
 
   const [form] = await db
-    .select({ id: forms.id, slug: forms.slug, schema: forms.schema, name: forms.name })
+    .select({
+      id: forms.id,
+      slug: forms.slug,
+      schema: forms.schema,
+      steps: forms.steps,
+      settings: forms.settings,
+      submitLabel: forms.submitLabel,
+      name: forms.name,
+    })
     .from(forms)
     .where(
       and(
@@ -183,26 +225,25 @@ export default async function PublicLandingPage({ params }: Props) {
       ),
     );
 
-  const [brand] = await db
-    .select()
-    .from(brandAssets)
-    .where(eq(brandAssets.tenantId, tenant.id));
+  const [brand] = await db.select().from(brandAssets).where(eq(brandAssets.tenantId, tenant.id));
 
-  const primary = brand?.colorPrimary ?? "#111827";
-  const secondary = brand?.colorSecondary ?? "#6b7280";
-  const fontHeading = brand?.fontHeading ?? "system-ui";
-  const fontBody = brand?.fontBody ?? "system-ui";
-
-  const cssVars = [
-    `--brand-primary: ${primary}`,
-    `--brand-secondary: ${secondary}`,
-    `--font-heading: ${fontHeading}`,
-    `--font-body: ${fontBody}`,
-  ].join("; ");
+  const theme = resolveLandingTheme({
+    themeKey: page.themeKey,
+    stepData,
+    brandFallback: {
+      colorPrimary: brand?.colorPrimary,
+      colorSecondary: brand?.colorSecondary,
+      fontHeading: brand?.fontHeading,
+      fontBody: brand?.fontBody,
+    },
+  });
 
   return (
     <>
-      <style href="brand-vars" precedence="default">{`:root { ${cssVars} } *, *::before, *::after { box-sizing: border-box; } body { margin: 0; }`}</style>
+      <style href="landing-theme" precedence="default">
+        {LANDING_THEME_GLOBAL_CSS}
+      </style>
+      {theme.googleFontsHref && <link rel="stylesheet" href={theme.googleFontsHref} />}
       {/* A/B experiment: set variant cookie + expose variant_id for track.js */}
       {assignedVariantId && (
         <script
@@ -212,33 +253,53 @@ export default async function PublicLandingPage({ params }: Props) {
         />
       )}
 
-      <div style={{ fontFamily: `var(--font-body, ${fontBody}, system-ui, sans-serif)`, background: "#fff" }}>
-        {composition.sections
-          .sort((a, b) => a.order - b.order)
-          .map((section, i) => (
-            <SectionBlock
-              key={i}
-              section={section}
-              brandPrimary={primary}
-              leadFormFor={(s) =>
-                s.type === "lead_form" && form ? (
-                  <LeadForm tenantSlug={tenantSlug} formSlug={form.slug} schema={form.schema as Record<string, unknown>} />
-                ) : (
-                  <div style={{ textAlign: "center", padding: "2rem", color: "#9ca3af", fontSize: "0.875rem" }}>
-                    Form not configured yet
-                  </div>
-                )
-              }
-            />
-          ))}
+      <div className="lp-themed-page" style={theme.cssVars}>
+        <LandingSiteNav
+          site={renderComposition.site}
+          basePath={basePath}
+          activePageSlug="home"
+          brandPrimary={theme.brandPrimary}
+          languagePreferences={languagePreferences}
+          activeLocale={activeLocale}
+        />
+
+        {sections.map((section, i) => (
+          <div key={i} id={`lp-section-${i}`} data-lp-section={i}>
+            <Reveal>
+              <SectionBlock
+                section={section}
+                brandPrimary={theme.brandPrimary}
+                leadFormFor={(s) =>
+                  s.type === "lead_form" && form ? (
+                    <LeadForm
+                      tenantSlug={tenantSlug}
+                      formSlug={form.slug}
+                      schema={form.schema as Record<string, unknown>}
+                      steps={form.steps as FormStep[] | undefined}
+                      settings={form.settings as Partial<FormSettings> | undefined}
+                      submitLabel={form.submitLabel ?? undefined}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        textAlign: "center",
+                        padding: "2rem",
+                        color: "var(--lp-muted,#9ca3af)",
+                        fontSize: "0.875rem",
+                      }}
+                    >
+                      Form not configured yet
+                    </div>
+                  )
+                }
+              />
+            </Reveal>
+          </div>
+        ))}
+
+        <LandingSiteFooter site={renderComposition.site} basePath={basePath} />
+        <ConsentBanner tenantSlug={tenantSlug} brandPrimary={theme.brandPrimary} />
       </div>
-
-      {/* Footer */}
-      <footer style={{ background: "#111827", color: "#6b7280", textAlign: "center", padding: "2.5rem 1.5rem", fontSize: "0.8rem" }}>
-        <p style={{ margin: 0 }}>© {new Date().getFullYear()} — All rights reserved</p>
-      </footer>
-
-      <ConsentBanner tenantSlug={tenantSlug} brandPrimary={primary} />
     </>
   );
 }

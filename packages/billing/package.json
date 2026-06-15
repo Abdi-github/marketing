@@ -8,13 +8,16 @@
   "types": "./src/index.ts",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src --max-warnings 0"
+    "lint": "eslint src --max-warnings 0",
+    "test": "vitest run"
   },
   "dependencies": {
     "@marketing/shared": "workspace:*",
-    "@marketing/tenancy": "workspace:*"
+    "@marketing/tenancy": "workspace:*",
+    "stripe": "^17.7.0"
   },
   "devDependencies": {
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.9"
   }
 }

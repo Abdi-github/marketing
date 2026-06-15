@@ -1,6 +1,7 @@
 // Landing-page FlowProducer worker — handles all 4 steps of the compose graph.
 // Step order (bottom-up): brief → copy → layout → publish (ADR-0012).
 // Each step is idempotent: if step_data already has the step's output, skip.
+import { createHash } from "node:crypto";
 import {
   type LandingPageJob,
   type LandingPageComposition,
@@ -16,13 +17,17 @@ import {
   createOpenAIMini,
   createReplicateProvider,
   findRelevantContext,
+  pickDesignRecipe,
+  applyStyleContractToComposition,
+  createLandingPageDesignPlan,
+  designPlanSeed,
+  enhanceCompositionWithWebsite,
   type EmbedStore,
+  type SectionType,
+  type LandingPageDesignPlan,
 } from "@marketing/ai-router";
-import {
-  getPlanCaps,
-  monthlyBudgetKey,
-  BUDGET_KEY_TTL_SECONDS,
-} from "@marketing/billing";
+import { pickBundleForVertical, buildUnsplashUrl } from "@marketing/landing-design-system";
+import { getPlanCaps, monthlyBudgetKey, BUDGET_KEY_TTL_SECONDS } from "@marketing/billing";
 import { db } from "@marketing/db";
 import {
   aiUsage,
@@ -37,11 +42,10 @@ import type { TenantContext } from "@marketing/tenancy";
 import type { Job } from "bullmq";
 import { Worker, UnrecoverableError } from "bullmq";
 import { eq, and, sql } from "drizzle-orm";
+import { ingestRemoteImageToMediaAsset } from "../../lib/media-assets";
 import { connection } from "../social-post/queue";
 
 // ─── Locale-aware prompt selector ────────────────────────────────────────────
-// Returns the prompt ID set for the given locale. FR-CH falls back to the
-// DE-CH variant until a French prompt is added (tracked in backlog).
 function landingPagePromptIds(locale: string): {
   brief: string;
   copy: string;
@@ -54,12 +58,66 @@ function landingPagePromptIds(locale: string): {
       layout: "landing-page-layout-it-v1",
     };
   }
+  if (locale === "en") {
+    return {
+      brief: "landing-page-brief-en-v1",
+      copy: "landing-page-copy-en-v1",
+      layout: "landing-page-layout-en-v1",
+    };
+  }
+  if (locale === "fr-CH") {
+    return {
+      brief: "landing-page-brief-fr-v1",
+      copy: "landing-page-copy-fr-v1",
+      layout: "landing-page-layout-fr-v1",
+    };
+  }
+  // de-CH default
   return {
     brief: "landing-page-brief-v1",
     copy: "landing-page-copy-v1",
     layout: "landing-page-layout-v1",
   };
 }
+
+function deriveUsageJobId(jobId: string, ...parts: string[]): string {
+  const raw = createHash("sha256")
+    .update([jobId, ...parts].join(":"))
+    .digest("hex")
+    .slice(0, 32)
+    .split("");
+  raw[12] = "5";
+  raw[16] = (8 + (Number.parseInt(raw[16] ?? "0", 16) % 4)).toString(16);
+  const hex = raw.join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+// ─── Default section set for free-form AI generation ─────────────────────────
+// Free-form pages (no template) use this to get a rich section list instead of
+// the bare minimum. Keyed by vertical keyword match so a café gets a menu section
+// and a fitness studio gets an offer section automatically.
+function defaultSectionsForVertical(vertical: string): string {
+  const v = vertical.toLowerCase();
+  if (/café|cafe|kaffee|coffee|barista|bakery|boulangerie|pâtisserie|brunch/.test(v))
+    return "hero, menu_preview, about, gallery, testimonials, contact";
+  if (/restaurant|gastro|bistro|trattoria|pizza|brasserie|dining|food|cuisine|ristorante/.test(v))
+    return "hero, menu_preview, gallery, testimonials, about, contact";
+  if (/gym|fitness|sport|crossfit|training|workout|yoga|pilates|wellness|spa/.test(v))
+    return "hero, offer, about, gallery, testimonials, faq, contact, lead_form";
+  if (/clinic|médecin|arzt|doctor|health|praxis|physio|osteo|chiro|dental/.test(v))
+    return "hero, about, testimonials, faq, contact, lead_form";
+  if (/boutique|fashion|mode|clothing|retail|store|shop|artisan|jewel/.test(v))
+    return "hero, offer, gallery, testimonials, about, contact, lead_form";
+  // Default: service / consulting / other
+  return "hero, about, offer, testimonials, faq, contact, lead_form";
+}
+
+type LanguagePreferences = {
+  locales: string[];
+  defaultLocale: string;
+};
+
+type LocalizedCompositions = Record<string, LandingPageComposition>;
 
 // ─── Provider router singleton ────────────────────────────────────────────────
 
@@ -72,9 +130,7 @@ function buildProviderRouter(): ProviderRouter {
     const haiku = createAnthropicHaiku();
     const sonnet = createAnthropicSonnet();
     const fallback =
-      env.AI_PROVIDER_FALLBACK === "openai" || env.OPENAI_API_KEY
-        ? createOpenAIMini()
-        : haiku;
+      env.AI_PROVIDER_FALLBACK === "openai" || env.OPENAI_API_KEY ? createOpenAIMini() : haiku;
     return new ProviderRouter({ trial: haiku, primary: sonnet, fallback });
   }
   if (env.OPENAI_API_KEY) {
@@ -108,10 +164,7 @@ async function getMonthlySpend(tenantId: string): Promise<number> {
     .select({ total: sql<string>`COALESCE(SUM(cost_usd), 0)` })
     .from(aiUsage)
     .where(
-      and(
-        eq(aiUsage.tenantId, tenantId),
-        sql`${aiUsage.createdAt} >= ${monthStart.toISOString()}`,
-      ),
+      and(eq(aiUsage.tenantId, tenantId), sql`${aiUsage.createdAt} >= ${monthStart.toISOString()}`),
     );
 
   const spendUsd = parseFloat(row?.total ?? "0");
@@ -173,10 +226,18 @@ async function updateStepData(
   stepKey: string,
   value: unknown,
 ): Promise<void> {
+  await updateStepDataPatch(ctx, pageId, { [stepKey]: value });
+}
+
+async function updateStepDataPatch(
+  ctx: TenantContext,
+  pageId: string,
+  patch: Record<string, unknown>,
+): Promise<void> {
   await db
     .update(landingPages)
     .set({
-      stepData: sql`${landingPages.stepData} || ${JSON.stringify({ [stepKey]: value })}::jsonb`,
+      stepData: sql`COALESCE(${landingPages.stepData}, '{}'::jsonb) || ${JSON.stringify(patch)}::jsonb`,
       updatedAt: new Date(),
     })
     .where(and(eq(landingPages.tenantId, ctx.tenantId), eq(landingPages.id, pageId)));
@@ -227,12 +288,7 @@ function makeEmbedStore(ctx: TenantContext): EmbedStore {
       const [row] = await db
         .select()
         .from(brandEmbeddings)
-        .where(
-          and(
-            eq(brandEmbeddings.tenantId, tenantId),
-            eq(brandEmbeddings.contentHash, hash),
-          ),
-        );
+        .where(and(eq(brandEmbeddings.tenantId, tenantId), eq(brandEmbeddings.contentHash, hash)));
       return row
         ? {
             id: row.id,
@@ -327,6 +383,337 @@ const COMPOSE_LAYOUT_TOOL = {
   },
 };
 
+const LOCALIZE_COMPOSITION_TOOL = {
+  name: "localize_landing_page",
+  description: "Return translated/localized landing-page copy using the same composition shape.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      title: { type: "string" },
+      locale: { type: "string" },
+      sections: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            heading: { type: "string" },
+            body: { type: "string" },
+            extras: { type: "object" },
+          },
+        },
+      },
+      site: { type: "object" },
+    },
+    required: ["title", "sections"],
+  },
+};
+
+function localeName(locale: string): string {
+  if (locale === "de-CH") return "Swiss High German for German-speaking Switzerland";
+  if (locale === "fr-CH") return "Swiss French for Romandy";
+  if (locale === "it-CH") return "Swiss Italian for Ticino";
+  if (locale === "en") return "clear international English for Switzerland";
+  return locale;
+}
+
+function normalizeLanguagePreferences(
+  data: LandingPageJob,
+  stepData: Record<string, unknown>,
+): LanguagePreferences {
+  const raw =
+    data.languagePreferences ??
+    (stepData["languagePreferences"] as LanguagePreferences | undefined);
+  const locales = Array.from(
+    new Set(
+      (raw?.locales?.length ? raw.locales : [data.locale]).filter(
+        (locale): locale is string => typeof locale === "string" && locale.length > 0,
+      ),
+    ),
+  );
+  if (locales.length === 0) locales.push(data.locale);
+  const defaultLocale =
+    raw?.defaultLocale && locales.includes(raw.defaultLocale)
+      ? raw.defaultLocale
+      : locales.includes(data.locale)
+        ? data.locale
+        : locales[0]!;
+  return { locales, defaultLocale };
+}
+
+function shouldPreserveExtraString(key: string): boolean {
+  const k = key.toLowerCase();
+  return (
+    k.includes("url") ||
+    k.includes("href") ||
+    k.includes("email") ||
+    k.includes("phone") ||
+    k.includes("number") ||
+    k.includes("embed") ||
+    k.includes("price")
+  );
+}
+
+function mergeLocalizedExtras(base: unknown, translated: unknown): unknown {
+  if (!base || typeof base !== "object" || Array.isArray(base)) return base;
+  const src = base as Record<string, unknown>;
+  const tx =
+    translated && typeof translated === "object" && !Array.isArray(translated)
+      ? (translated as Record<string, unknown>)
+      : {};
+  const out: Record<string, unknown> = { ...src };
+
+  for (const [key, value] of Object.entries(src)) {
+    const next = tx[key];
+    if (typeof value === "string") {
+      out[key] = typeof next === "string" && !shouldPreserveExtraString(key) ? next : value;
+    } else if (Array.isArray(value)) {
+      out[key] = value.map((item, index) =>
+        mergeLocalizedExtras(item, Array.isArray(next) ? next[index] : undefined),
+      );
+    } else if (value && typeof value === "object") {
+      out[key] = mergeLocalizedExtras(value, next);
+    }
+  }
+
+  return out;
+}
+
+function mergeLocalizedComposition(
+  base: LandingPageComposition,
+  candidate: unknown,
+  locale: string,
+): LandingPageComposition | null {
+  const raw =
+    candidate && typeof candidate === "object" && "composition" in candidate
+      ? (candidate as { composition?: unknown }).composition
+      : candidate;
+  if (!raw || typeof raw !== "object") return null;
+
+  const tx = raw as Partial<LandingPageComposition>;
+  const txSections = Array.isArray(tx.sections) ? tx.sections : [];
+  const mergeSections = (
+    baseSections: LandingPageComposition["sections"],
+    translatedSections: unknown[],
+  ) =>
+    baseSections.map((section, index) => {
+      const translated = translatedSections[index] as
+        | { heading?: unknown; body?: unknown; extras?: unknown }
+        | undefined;
+      return {
+        ...section,
+        heading:
+          typeof translated?.heading === "string" && translated.heading.trim()
+            ? translated.heading
+            : section.heading,
+        body: typeof translated?.body === "string" ? translated.body : section.body,
+        extras: mergeLocalizedExtras(section.extras, translated?.extras) as never,
+      };
+    });
+
+  const txSite = tx.site;
+  const site = base.site
+    ? {
+        ...base.site,
+        nav: base.site.nav
+          ? {
+              ...base.site.nav,
+              brandLabel:
+                typeof txSite?.nav?.brandLabel === "string"
+                  ? txSite.nav.brandLabel
+                  : base.site.nav.brandLabel,
+              links: base.site.nav.links.map((link, index) => ({
+                ...link,
+                label:
+                  typeof txSite?.nav?.links?.[index]?.label === "string"
+                    ? txSite.nav.links[index]!.label
+                    : link.label,
+              })),
+              cta: base.site.nav.cta
+                ? {
+                    ...base.site.nav.cta,
+                    label:
+                      typeof txSite?.nav?.cta?.label === "string"
+                        ? txSite.nav.cta.label
+                        : base.site.nav.cta.label,
+                  }
+                : undefined,
+            }
+          : undefined,
+        pages: base.site.pages?.map((page, pageIndex) => ({
+          ...page,
+          title:
+            typeof txSite?.pages?.[pageIndex]?.title === "string"
+              ? txSite.pages[pageIndex]!.title
+              : page.title,
+          description:
+            typeof txSite?.pages?.[pageIndex]?.description === "string"
+              ? txSite.pages[pageIndex]!.description
+              : page.description,
+          sections: mergeSections(page.sections, txSite?.pages?.[pageIndex]?.sections ?? []),
+        })),
+        footer: base.site.footer
+          ? {
+              ...base.site.footer,
+              text:
+                typeof txSite?.footer?.text === "string"
+                  ? txSite.footer.text
+                  : base.site.footer.text,
+              links: base.site.footer.links?.map((link, index) => ({
+                ...link,
+                label:
+                  typeof txSite?.footer?.links?.[index]?.label === "string"
+                    ? txSite.footer.links[index]!.label
+                    : link.label,
+              })),
+            }
+          : undefined,
+      }
+    : undefined;
+
+  const merged: LandingPageComposition = {
+    ...base,
+    locale,
+    title: typeof tx.title === "string" && tx.title.trim() ? tx.title : base.title,
+    sections: mergeSections(base.sections, txSections),
+    site,
+  };
+  const parsed = landingPageCompositionSchema.safeParse(merged);
+  return parsed.success ? parsed.data : null;
+}
+
+function rebuildLocalizedWebsiteShell(
+  composition: LandingPageComposition,
+  input: {
+    data: LandingPageJob;
+    stepData: Record<string, unknown>;
+    jobId: string;
+  },
+  locale: string,
+): LandingPageComposition {
+  if (composition.site?.mode !== "website") return composition;
+
+  const wizardPayload = input.stepData["wizardPayload"] as
+    | {
+        vibe?: Partial<{
+          minimalBold: number;
+          classicModern: number;
+          calmEnergetic: number;
+        }>;
+        goals?: string[];
+        goal?: string;
+      }
+    | undefined;
+  const goals = wizardPayload?.goals ?? (wizardPayload?.goal ? [wizardPayload.goal] : []);
+  const designPlan = input.stepData["designPlan"] as LandingPageDesignPlan | undefined;
+  const rebuilt = enhanceCompositionWithWebsite(
+    {
+      ...composition,
+      locale,
+      site: undefined,
+    },
+    {
+      businessName: input.data.businessName,
+      vertical: input.data.vertical,
+      city: input.data.city,
+      locale,
+      goals,
+      vibe: wizardPayload?.vibe ?? null,
+      seed: designPlan ? designPlanSeed(designPlan) : `${input.jobId}|${locale}`,
+      navStyle: designPlan?.navStyle ?? composition.site.nav?.style ?? null,
+      designPlan,
+    },
+  );
+
+  return {
+    ...composition,
+    site: rebuilt.site,
+  };
+}
+
+async function buildLocalizedCompositions(input: {
+  ctx: TenantContext;
+  data: LandingPageJob;
+  composition: LandingPageComposition;
+  stepData: Record<string, unknown>;
+  tenantPlan: string;
+  planCaps: ReturnType<typeof getPlanCaps>;
+  jobId: string;
+}): Promise<{
+  localizedCompositions: LocalizedCompositions;
+  localizedAiUsageIds: Record<string, string>;
+}> {
+  const preferences = normalizeLanguagePreferences(input.data, input.stepData);
+  const sourceLocale = preferences.defaultLocale || input.data.locale || input.composition.locale;
+  const localizedCompositions: LocalizedCompositions = {
+    ...((input.stepData["localizedCompositions"] as LocalizedCompositions | undefined) ?? {}),
+  };
+  const localizedAiUsageIds: Record<string, string> = {
+    ...((input.stepData["localizedAiUsageIds"] as Record<string, string> | undefined) ?? {}),
+  };
+
+  for (const locale of preferences.locales) {
+    if (input.data.forceLocalization) {
+      delete localizedCompositions[locale];
+      delete localizedAiUsageIds[locale];
+    }
+    if (locale === sourceLocale || localizedCompositions[locale]) continue;
+
+    let aiUsageId: string | undefined;
+    try {
+      const prompt = [
+        `Translate and localize this generated Swiss SME website from ${localeName(sourceLocale)} to ${localeName(locale)}.`,
+        "Keep the same structure, section count, section order, variants, image URLs, form behavior, slugs, hrefs, phone numbers, emails, prices, and map embeds.",
+        "Translate visitor-facing text only: page title, headings, body copy, CTA labels, nav labels, footer labels, FAQ answers/questions, testimonials, captions, menu descriptions, and offer wording.",
+        "Use natural local language, not literal machine translation. Avoid generic marketing cliches.",
+        "",
+        JSON.stringify(input.composition, null, 2),
+      ].join("\n");
+
+      const result = await getRouter().routeWithTools(
+        {
+          prompt,
+          systemPrompt:
+            "You localize landing-page composition JSON for Swiss SMEs. Return only the requested structured tool output. Preserve all non-text structure.",
+          maxTokens: 3000,
+          temperature: 0.2,
+        },
+        [LOCALIZE_COMPOSITION_TOOL],
+        {
+          tenantId: input.ctx.tenantId,
+          jobId: deriveUsageJobId(input.jobId, "localize", locale),
+          promptId: "landing-page-localize-v1",
+          promptVersion: 1,
+          costBudgetCents: input.planCaps.perJobBudgetCents,
+        },
+        {
+          tenantPlan: input.tenantPlan,
+          writeUsage: async (rec) => {
+            aiUsageId = await insertAiUsage(rec);
+            await incrementMonthlySpend(input.ctx.tenantId, rec.costUsd);
+          },
+        },
+      );
+      const merged = mergeLocalizedComposition(input.composition, result.toolResult, locale);
+      if (merged) {
+        localizedCompositions[locale] = rebuildLocalizedWebsiteShell(merged, input, locale);
+        if (aiUsageId) localizedAiUsageIds[locale] = aiUsageId;
+      } else {
+        logger.warn(
+          { jobId: input.jobId, locale },
+          "[landing-page] localized composition failed validation; falling back to default language",
+        );
+      }
+    } catch (err) {
+      logger.warn(
+        { jobId: input.jobId, locale, err: String(err) },
+        "[landing-page] localization failed; falling back to default language",
+      );
+    }
+  }
+
+  return { localizedCompositions, localizedAiUsageIds };
+}
+
 // ─── Step handlers ────────────────────────────────────────────────────────────
 
 async function handleBrief(
@@ -349,18 +736,13 @@ async function handleBrief(
   // "apply my brand". Otherwise we keep the template's own voice + theme so the result
   // matches what the user previewed (no surprise colour/tone drift). See draftFromPrompt.
   const embedStore = makeEmbedStore(ctx);
-  const primary = tenantPlan === "trial"
-    ? createAnthropicHaiku()
-    : createAnthropicSonnet();
+  const primary = tenantPlan === "trial" ? createAnthropicHaiku() : createAnthropicSonnet();
 
   const brandChunks = data.applyBrand
-    ? await findRelevantContext(
-        ctx.tenantId,
-        data.userPrompt,
-        primary,
-        embedStore,
-        { jobId, costBudgetCents: 5 },
-      ).catch(() => [] as string[])
+    ? await findRelevantContext(ctx.tenantId, data.userPrompt, primary, embedStore, {
+        jobId,
+        costBudgetCents: 5,
+      }).catch(() => [] as string[])
     : [];
 
   const prompt = getPrompt(landingPagePromptIds(data.locale).brief);
@@ -376,8 +758,19 @@ async function handleBrief(
   let aiUsageId: string;
 
   const result = await getRouter().route(
-    { prompt: userPrompt, systemPrompt: prompt.systemPrompt, maxTokens: 600, temperature: 0.3 },
-    { tenantId: ctx.tenantId, jobId, promptId: data.promptId, promptVersion: data.promptVersion, costBudgetCents: planCaps.perJobBudgetCents },
+    {
+      prompt: userPrompt,
+      systemPrompt: prompt.systemPrompt,
+      maxTokens: 600,
+      temperature: 0.3,
+    },
+    {
+      tenantId: ctx.tenantId,
+      jobId,
+      promptId: data.promptId,
+      promptVersion: data.promptVersion,
+      costBudgetCents: planCaps.perJobBudgetCents,
+    },
     {
       tenantPlan,
       writeUsage: async (rec) => {
@@ -414,16 +807,24 @@ async function handleCopy(
 
   // Template-seeded path: section structure fixed by the template.
   // Free-form path: AI determines sections from the brief.
-  const templateSections = stepData["templateSections"] as Array<{ type: string; order: number }> | undefined;
+  const templateSections = stepData["templateSections"] as
+    | Array<{ type: string; order: number }>
+    | undefined;
   const templateBrandHints = stepData["templateBrandHints"] as Record<string, string> | undefined;
   // LP-4: wizard payload (palette/font/vibe/goal) — informs copy tone & length.
   const wizardPayload = stepData["wizardPayload"] as
     | {
         paletteKey?: string;
         fontPairKey?: string;
-        vibe?: { minimalBold: number; classicModern: number; calmEnergetic: number };
+        vibe?: {
+          minimalBold: number;
+          classicModern: number;
+          calmEnergetic: number;
+        };
         goal?: string;
+        goals?: string[];
         imageStrategy?: string;
+        siteMode?: "website" | "campaign";
       }
     | undefined;
 
@@ -439,7 +840,7 @@ async function handleCopy(
     if (wizardPayload) {
       promptId = (() => {
         if (data.locale === "it-CH") return "landing-page-personalize-it-v1";
-        if (data.locale === "en")    return "landing-page-personalize-en-v1";
+        if (data.locale === "en") return "landing-page-personalize-en-v1";
         if (data.locale === "fr-CH") return "landing-page-personalize-fr-v1";
         return "landing-page-personalize-v1";
       })();
@@ -454,30 +855,57 @@ async function handleCopy(
         : landingPagePromptIds(data.locale).copy;
     }
   } else {
-    sectionsList = "hero, about, contact, lead_form";
-    promptId = landingPagePromptIds(data.locale).copy;
+    // Free-form (no template): use a vertical-appropriate section set.
+    sectionsList = defaultSectionsForVertical(data.vertical ?? "");
+    // Prefer the personalize prompt when the wizard vibe/goal is available.
+    if (wizardPayload) {
+      promptId = (() => {
+        if (data.locale === "it-CH") return "landing-page-personalize-it-v1";
+        if (data.locale === "en") return "landing-page-personalize-en-v1";
+        if (data.locale === "fr-CH") return "landing-page-personalize-fr-v1";
+        return "landing-page-personalize-v1";
+      })();
+    } else {
+      promptId = landingPagePromptIds(data.locale).copy;
+    }
   }
 
   // Compose brand hints: legacy template hints + wizard vibe + goal.
   const hintsParts: string[] = [];
   if (templateBrandHints) {
-    if (templateBrandHints["tone"])      hintsParts.push(`Tone: ${templateBrandHints["tone"]}.`);
-    if (templateBrandHints["colorHint"]) hintsParts.push(`Colors: ${templateBrandHints["colorHint"]}.`);
+    if (templateBrandHints["tone"]) hintsParts.push(`Tone: ${templateBrandHints["tone"]}.`);
+    if (templateBrandHints["colorHint"])
+      hintsParts.push(`Colors: ${templateBrandHints["colorHint"]}.`);
   }
   if (wizardPayload?.vibe) {
     const v = wizardPayload.vibe;
     const vibeAdj = [
-      Math.abs(v.minimalBold) < 0.2   ? null : v.minimalBold > 0   ? "bold"      : "minimal",
-      Math.abs(v.classicModern) < 0.2 ? null : v.classicModern > 0 ? "modern"    : "classic",
+      Math.abs(v.minimalBold) < 0.2 ? null : v.minimalBold > 0 ? "bold" : "minimal",
+      Math.abs(v.classicModern) < 0.2 ? null : v.classicModern > 0 ? "modern" : "classic",
       Math.abs(v.calmEnergetic) < 0.2 ? null : v.calmEnergetic > 0 ? "energetic" : "calm",
     ].filter(Boolean);
     if (vibeAdj.length > 0) hintsParts.push(`Vibe: ${vibeAdj.join(", ")}.`);
   }
-  if (wizardPayload?.goal) {
-    hintsParts.push(`Primary goal: ${wizardPayload.goal.replace(/_/g, " ")}.`);
+  // Goals: support one or many. The primary goal leads; any extras are listed as secondary.
+  const goalList = (
+    wizardPayload?.goals && wizardPayload.goals.length > 0
+      ? wizardPayload.goals
+      : wizardPayload?.goal
+        ? [wizardPayload.goal]
+        : []
+  ).map((g) => g.replace(/_/g, " "));
+  if (goalList.length === 1) {
+    hintsParts.push(`Primary goal: ${goalList[0]}.`);
+  } else if (goalList.length > 1) {
+    hintsParts.push(`Primary goal: ${goalList[0]}. Also support: ${goalList.slice(1).join(", ")}.`);
   }
   if (wizardPayload?.paletteKey) {
     hintsParts.push(`Palette: ${wizardPayload.paletteKey}.`);
+  }
+  if (wizardPayload?.siteMode === "campaign") {
+    hintsParts.push("Site type: focused campaign landing page with one primary action.");
+  } else if (wizardPayload?.siteMode === "website") {
+    hintsParts.push("Site type: small business website with supporting pages.");
   }
 
   const prompt = getPrompt(promptId);
@@ -493,9 +921,20 @@ async function handleCopy(
   let aiUsageId: string;
 
   const result = await getRouter().routeWithTools(
-    { prompt: userPrompt, systemPrompt: prompt.systemPrompt, maxTokens: 1500, temperature: 0.4 },
+    {
+      prompt: userPrompt,
+      systemPrompt: prompt.systemPrompt,
+      maxTokens: 1500,
+      temperature: 0.4,
+    },
     [GENERATE_SECTIONS_TOOL],
-    { tenantId: ctx.tenantId, jobId, promptId: data.promptId, promptVersion: data.promptVersion, costBudgetCents: planCaps.perJobBudgetCents },
+    {
+      tenantId: ctx.tenantId,
+      jobId,
+      promptId: data.promptId,
+      promptVersion: data.promptVersion,
+      costBudgetCents: planCaps.perJobBudgetCents,
+    },
     {
       tenantPlan,
       writeUsage: async (rec) => {
@@ -546,9 +985,20 @@ async function handleLayout(
   let aiUsageId: string;
 
   const result = await getRouter().routeWithTools(
-    { prompt: userPrompt, systemPrompt: prompt.systemPrompt, maxTokens: 2000, temperature: 0 },
+    {
+      prompt: userPrompt,
+      systemPrompt: prompt.systemPrompt,
+      maxTokens: 2000,
+      temperature: 0,
+    },
     [COMPOSE_LAYOUT_TOOL],
-    { tenantId: ctx.tenantId, jobId, promptId: data.promptId, promptVersion: data.promptVersion, costBudgetCents: planCaps.perJobBudgetCents },
+    {
+      tenantId: ctx.tenantId,
+      jobId,
+      promptId: data.promptId,
+      promptVersion: data.promptVersion,
+      costBudgetCents: planCaps.perJobBudgetCents,
+    },
     {
       tenantPlan,
       writeUsage: async (rec) => {
@@ -558,7 +1008,10 @@ async function handleLayout(
     },
   );
 
-  const rawComposition = result.toolResult ?? { title: data.businessName, sections: [] };
+  const rawComposition = result.toolResult ?? {
+    title: data.businessName,
+    sections: [],
+  };
 
   // Validate + coerce against the schema; fall back gracefully if malformed.
   const parseResult = landingPageCompositionSchema.safeParse(rawComposition);
@@ -568,26 +1021,223 @@ async function handleLayout(
         title: data.businessName,
         locale: data.locale,
         sections: [
-          { type: "hero", order: 0, heading: data.businessName, body: data.userPrompt },
+          {
+            type: "hero",
+            order: 0,
+            heading: data.businessName,
+            body: data.userPrompt,
+          },
           { type: "lead_form", order: 1, heading: "Kontakt" },
         ],
       };
+  composition = { ...composition, locale: data.locale };
 
   // LP-4 follow-up: FLUX image gen for the hero background.
   // Triggers when the wizard selected `imageStrategy: "ai"` AND REPLICATE_API_TOKEN is configured.
   // Failures are non-fatal — the composition still publishes with the AI-suggested URL or empty.
-  const wizardPayload = stepData["wizardPayload"] as { imageStrategy?: string } | undefined;
+  const wizardPayload = stepData["wizardPayload"] as
+    | {
+        imageStrategy?: string;
+        vibe?: {
+          minimalBold: number;
+          classicModern: number;
+          calmEnergetic: number;
+        };
+        goals?: string[];
+        goal?: string;
+        brief?: string;
+        siteMode?: "website" | "campaign";
+      }
+    | undefined;
+
+  const goals = wizardPayload?.goals ?? (wizardPayload?.goal ? [wizardPayload.goal] : []);
+  const designPlan =
+    (stepData["designPlan"] as LandingPageDesignPlan | undefined) ??
+    createLandingPageDesignPlan({
+      tenantId: ctx.tenantId,
+      landingPageId: data.landingPageId,
+      businessName: data.businessName,
+      vertical: data.vertical,
+      city: data.city,
+      locale: data.locale,
+      userPrompt: wizardPayload?.brief ?? data.userPrompt,
+      goals,
+      vibe: wizardPayload?.vibe ?? null,
+      imageStrategy: wizardPayload?.imageStrategy ?? null,
+      templateKey: data.templateKey ?? null,
+    });
+  const recipeSeed = designPlanSeed(designPlan);
+
+  // ADR-0029: apply a cohesive design recipe so AI pages aren't all the default layout.
+  // Assign a variant to every section based on vibe + goals + a per-page seed, and give
+  // palette-less pages a real theme instead of the purple fallback. Template-seeded sections
+  // that already carry a variant are left untouched.
+  {
+    const recipe = pickDesignRecipe({
+      vibe: wizardPayload?.vibe ?? null,
+      goals,
+      seed: recipeSeed,
+      sectionTypes: composition.sections.map((s) => s.type),
+      designPlan,
+    });
+    composition = {
+      ...composition,
+      sections: composition.sections.map((s) =>
+        s.variant
+          ? s
+          : {
+              ...s,
+              variant: recipe.variants[s.type as SectionType] ?? undefined,
+            },
+      ),
+    };
+    const themePatch: Record<string, string> = { themeFontPair: recipe.fontPairKey };
+    if (wizardPayload) themePatch["styleEra"] = designPlan.styleContract.era;
+    if (!page.themeKey) {
+      await db
+        .update(landingPages)
+        .set({
+          themeKey: recipe.paletteKey,
+          stepData: sql`COALESCE(${landingPages.stepData}, '{}'::jsonb) || ${JSON.stringify(themePatch)}::jsonb`,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(eq(landingPages.tenantId, ctx.tenantId), eq(landingPages.id, data.landingPageId)),
+        );
+    } else if (wizardPayload) {
+      await db
+        .update(landingPages)
+        .set({
+          stepData: sql`COALESCE(${landingPages.stepData}, '{}'::jsonb) || ${JSON.stringify(themePatch)}::jsonb`,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(eq(landingPages.tenantId, ctx.tenantId), eq(landingPages.id, data.landingPageId)),
+        );
+    }
+  }
+
+  // Auto-inject curated Unsplash images for sections that need visuals but have
+  // none yet. Skipped if FLUX ai-strategy already placed a backgroundImageUrl.
+  {
+    const bundle = pickBundleForVertical(data.vertical ?? "");
+    const heroPhotos = bundle.photos.filter((p) => p.role === "hero");
+    const lifestyle = bundle.photos.filter((p) => p.role === "lifestyle");
+    const gallerySet = bundle.photos.filter((p) => p.role === "gallery").slice(0, 6);
+
+    composition = {
+      ...composition,
+      sections: composition.sections.map((s) => {
+        if (s.type === "hero") {
+          const heroExtras = s.extras as { backgroundImageUrl?: string } | undefined;
+          if (!heroExtras?.backgroundImageUrl) {
+            const photo = heroPhotos[0] ?? bundle.photos[0];
+            if (photo) {
+              return {
+                ...s,
+                extras: {
+                  ...(s.extras ?? {}),
+                  backgroundImageUrl: buildUnsplashUrl(photo.id, {
+                    width: 1920,
+                    quality: 85,
+                  }),
+                },
+              };
+            }
+          }
+        }
+        if (s.type === "about") {
+          const aboutExtras = s.extras as { imageUrl?: string } | undefined;
+          if (!aboutExtras?.imageUrl) {
+            const photo = lifestyle[0] ?? bundle.photos.find((p) => p.role !== "hero");
+            if (photo) {
+              return {
+                ...s,
+                extras: {
+                  ...(s.extras ?? {}),
+                  imageUrl: buildUnsplashUrl(photo.id, {
+                    width: 1200,
+                    quality: 80,
+                  }),
+                },
+              };
+            }
+          }
+        }
+        if (s.type === "gallery") {
+          const galleryExtras = s.extras as
+            | { images?: { url: string; caption?: string }[] }
+            | undefined;
+          const existing = galleryExtras?.images ?? [];
+          const hasRealImages = existing.some((img) => !!img.url);
+          if (!hasRealImages && gallerySet.length > 0) {
+            return {
+              ...s,
+              extras: {
+                ...(s.extras ?? {}),
+                images: gallerySet.map((p) => ({
+                  url: buildUnsplashUrl(p.id, { width: 900, quality: 80 }),
+                  caption: p.caption,
+                })),
+              },
+            };
+          }
+        }
+        return s;
+      }),
+    };
+  }
+
+  composition = applyStyleContractToComposition({
+    composition,
+    designPlan,
+    seed: recipeSeed,
+  });
+
   if (wizardPayload?.imageStrategy === "ai" && env.REPLICATE_API_TOKEN) {
     try {
       composition = await generateHeroImage(composition, data, ctx, jobId, planCaps);
     } catch (err) {
-      logger.warn({ jobId, err: String(err) }, "[landing-page] FLUX hero image gen failed — continuing without");
+      logger.warn(
+        { jobId, err: String(err) },
+        "[landing-page] FLUX hero image gen failed — continuing without",
+      );
     }
   }
 
-  await updateStepData(ctx, data.landingPageId, "layout", {
+  if (wizardPayload && wizardPayload.siteMode !== "campaign") {
+    composition = enhanceCompositionWithWebsite(composition, {
+      businessName: data.businessName,
+      vertical: data.vertical,
+      city: data.city,
+      locale: data.locale,
+      goals,
+      vibe: wizardPayload?.vibe ?? null,
+      seed: recipeSeed,
+      navStyle: designPlan.navStyle,
+      designPlan,
+    });
+  }
+
+  const { localizedCompositions, localizedAiUsageIds } = await buildLocalizedCompositions({
+    ctx,
+    data,
     composition,
-    aiUsageId: aiUsageId!,
+    stepData,
+    tenantPlan,
+    planCaps,
+    jobId,
+  });
+
+  await updateStepDataPatch(ctx, data.landingPageId, {
+    designPlan,
+    uniquenessFingerprint: designPlan.uniquenessFingerprint,
+    localizedCompositions,
+    localizedAiUsageIds,
+    layout: {
+      composition,
+      aiUsageId: aiUsageId!,
+    },
   });
 }
 
@@ -614,7 +1264,9 @@ async function generateHeroImage(
     `Scene context: ${hero.heading}.`,
     hero.body ? `Mood: ${hero.body}` : null,
     "Professional, high-end, magazine-quality. Warm natural lighting. No text, no logos. Cinematic depth of field. 16:9 widescreen.",
-  ].filter(Boolean).join(" ");
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   const provider = createReplicateProvider(env.REPLICATE_API_TOKEN!);
   if (!provider.generateImage) {
@@ -628,18 +1280,28 @@ async function generateHeroImage(
     { prompt: fluxPrompt, aspectRatio: "16:9" },
     { tenantId: ctx.tenantId, jobId },
   );
+  const durableImage = await ingestRemoteImageToMediaAsset({
+    tenantId: ctx.tenantId,
+    scope: "section-image",
+    sourceUrl: imageResult.url,
+    originalFilenameBase: `landing-hero-${data.landingPageId}`,
+    storageKeyPrefix: `generated/landing-heroes/${ctx.tenantId}`,
+  });
 
-  logger.info({ jobId, costUsd: imageResult.costUsd, model: imageResult.model }, "[landing-page] FLUX hero image generated");
+  logger.info(
+    { jobId, costUsd: imageResult.costUsd, model: imageResult.model },
+    "[landing-page] FLUX hero image generated",
+  );
 
-  // Record the image gen cost in ai_usage. Use a job-suffixed key so it doesn't
-  // collide with the layout step's own ai_usage row (which already uses jobId).
+  // Record the image gen cost in ai_usage with a deterministic UUID so it does
+  // not collide with the layout step's own ai_usage row.
   await insertAiUsage({
     tenantId: ctx.tenantId,
     provider: imageResult.provider,
     model: imageResult.model,
     promptId: "landing-page-image-gen-v1",
     promptVersion: 1,
-    jobId: `${jobId}:image-gen`,
+    jobId: deriveUsageJobId(jobId, "image-gen"),
     inputTokens: 0,
     outputTokens: 0,
     costUsd: imageResult.costUsd,
@@ -650,7 +1312,7 @@ async function generateHeroImage(
   const newSections = [...composition.sections];
   const newHero = {
     ...hero,
-    extras: { ...(hero.extras ?? {}), backgroundImageUrl: imageResult.url },
+    extras: { ...(hero.extras ?? {}), backgroundImageUrl: durableImage.publicUrl },
   } as typeof hero;
   newSections[heroIdx] = newHero;
   return { ...composition, sections: newSections };
@@ -670,7 +1332,9 @@ async function handlePublish(
   }
 
   const stepData = (page.stepData ?? {}) as Record<string, unknown>;
-  const layout = stepData["layout"] as { composition: LandingPageComposition; aiUsageId: string } | undefined;
+  const layout = stepData["layout"] as
+    | { composition: LandingPageComposition; aiUsageId: string }
+    | undefined;
   if (!layout) throw new Error("Layout step output missing — cannot publish");
 
   const [version] = await db
@@ -703,7 +1367,69 @@ async function handlePublish(
     tenantId: ctx.tenantId,
   });
 
-  logger.info({ jobId, landingPageId: data.landingPageId, versionId }, "[landing-page] draft created");
+  logger.info(
+    { jobId, landingPageId: data.landingPageId, versionId },
+    "[landing-page] draft created",
+  );
+}
+
+async function handleLocalize(
+  ctx: TenantContext,
+  data: LandingPageJob,
+  tenantPlan: string,
+  planCaps: ReturnType<typeof getPlanCaps>,
+  jobId: string,
+): Promise<void> {
+  const page = await getLandingPage(ctx, data.landingPageId);
+  if (!page) throw new Error(`Landing page ${data.landingPageId} not found`);
+  if (!page.currentVersionId) {
+    throw new Error("Current version missing — cannot localize landing page");
+  }
+
+  const [version] = await db
+    .select({ composition: landingPageVersions.composition })
+    .from(landingPageVersions)
+    .where(
+      and(
+        eq(landingPageVersions.tenantId, ctx.tenantId),
+        eq(landingPageVersions.id, page.currentVersionId),
+      ),
+    );
+  if (!version) throw new Error("Current version missing — cannot localize landing page");
+
+  const parsed = landingPageCompositionSchema.safeParse(version.composition);
+  if (!parsed.success) {
+    throw new Error("Current landing-page composition failed validation");
+  }
+
+  const stepData = (page.stepData ?? {}) as Record<string, unknown>;
+  await updateStepDataPatch(ctx, data.landingPageId, {
+    localizationStatus: {
+      state: "processing",
+      requestedLocales: normalizeLanguagePreferences(data, stepData).locales,
+      updatedAt: new Date().toISOString(),
+    },
+  });
+
+  const { localizedCompositions, localizedAiUsageIds } = await buildLocalizedCompositions({
+    ctx,
+    data,
+    composition: parsed.data,
+    stepData,
+    tenantPlan,
+    planCaps,
+    jobId,
+  });
+
+  await updateStepDataPatch(ctx, data.landingPageId, {
+    localizedCompositions,
+    localizedAiUsageIds,
+    localizationStatus: {
+      state: "done",
+      requestedLocales: normalizeLanguagePreferences(data, stepData).locales,
+      updatedAt: new Date().toISOString(),
+    },
+  });
 }
 
 // ─── Main job handler ─────────────────────────────────────────────────────────
@@ -733,9 +1459,25 @@ export async function handleLandingPageJob(job: Job<LandingPageJob>): Promise<vo
   if (data.step !== "publish") {
     const monthlySpend = await getMonthlySpend(tenantId);
     if (monthlySpend >= planCaps.monthlyAiBudgetUsd) {
-      await markLandingPageFailed(ctx, landingPageId);
+      if (data.step === "localize") {
+        await updateStepDataPatch(ctx, landingPageId, {
+          localizationStatus: {
+            state: "failed",
+            requestedLocales: data.languagePreferences?.locales ?? [data.locale],
+            updatedAt: new Date().toISOString(),
+          },
+        }).catch(() => null);
+      } else {
+        await markLandingPageFailed(ctx, landingPageId);
+      }
       logger.warn(
-        { tenantId, tenantPlan, monthlySpend, cap: planCaps.monthlyAiBudgetUsd, step: data.step },
+        {
+          tenantId,
+          tenantPlan,
+          monthlySpend,
+          cap: planCaps.monthlyAiBudgetUsd,
+          step: data.step,
+        },
         "[landing-page] monthly budget exceeded — aborting",
       );
       throw new UnrecoverableError(
@@ -755,20 +1497,44 @@ export async function handleLandingPageJob(job: Job<LandingPageJob>): Promise<vo
       case "layout":
         await handleLayout(ctx, data, tenantPlan, planCaps, jobId);
         break;
+      case "localize":
+        await handleLocalize(ctx, data, tenantPlan, planCaps, jobId);
+        break;
       case "publish":
         await handlePublish(ctx, data, jobId);
         break;
     }
 
     logger.info({ jobId, step: data.step, landingPageId }, "[landing-page] step completed");
-    recordMetric("ai.job.completed", { queue: LANDING_PAGE_QUEUE_NAME, step: data.step, tenantIdHash: hashId(tenantId) });
+    recordMetric("ai.job.completed", {
+      queue: LANDING_PAGE_QUEUE_NAME,
+      step: data.step,
+      tenantIdHash: hashId(tenantId),
+    });
   } catch (err) {
-    // Only mark page failed on non-budget errors (budget errors already marked above).
-    if (!(err instanceof UnrecoverableError)) {
+    // Localization is additive; a translation failure should not break the usable draft.
+    if (data.step === "localize") {
+      await updateStepDataPatch(ctx, landingPageId, {
+        localizationStatus: {
+          state: "failed",
+          requestedLocales: data.languagePreferences?.locales ?? [data.locale],
+          updatedAt: new Date().toISOString(),
+        },
+      }).catch(() => null);
+    } else if (!(err instanceof UnrecoverableError)) {
+      // Only mark page failed on non-budget errors (budget errors already marked above).
       await markLandingPageFailed(ctx, landingPageId).catch(() => null);
     }
-    logger.error({ jobId, step: data.step, landingPageId, err: String(err) }, "[landing-page] step failed");
-    recordMetric("ai.job.failed", { queue: LANDING_PAGE_QUEUE_NAME, step: data.step, tenantIdHash: hashId(tenantId), err: String(err) });
+    logger.error(
+      { jobId, step: data.step, landingPageId, err: String(err) },
+      "[landing-page] step failed",
+    );
+    recordMetric("ai.job.failed", {
+      queue: LANDING_PAGE_QUEUE_NAME,
+      step: data.step,
+      tenantIdHash: hashId(tenantId),
+      err: String(err),
+    });
     throw err;
   }
 }
@@ -783,10 +1549,22 @@ export const landingPageWorker = new Worker<LandingPageJob>(
 
 landingPageWorker.on("completed", (job) => {
   logger.info({ jobId: job.id, step: job.data.step }, "[landing-page] BullMQ job completed");
-  recordMetric("queue.job.completed", { queue: LANDING_PAGE_QUEUE_NAME, jobId: job.id, step: job.data.step });
+  recordMetric("queue.job.completed", {
+    queue: LANDING_PAGE_QUEUE_NAME,
+    jobId: job.id,
+    step: job.data.step,
+  });
 });
 
 landingPageWorker.on("failed", (job, err) => {
-  logger.error({ jobId: job?.id, step: job?.data.step, err: err.message }, "[landing-page] BullMQ job failed");
-  recordMetric("queue.job.failed", { queue: LANDING_PAGE_QUEUE_NAME, jobId: job?.id, step: job?.data.step, err: err.message });
+  logger.error(
+    { jobId: job?.id, step: job?.data.step, err: err.message },
+    "[landing-page] BullMQ job failed",
+  );
+  recordMetric("queue.job.failed", {
+    queue: LANDING_PAGE_QUEUE_NAME,
+    jobId: job?.id,
+    step: job?.data.step,
+    err: err.message,
+  });
 });

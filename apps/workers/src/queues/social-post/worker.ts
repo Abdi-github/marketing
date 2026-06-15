@@ -10,20 +10,10 @@ import {
   createAnthropicHaiku,
   createOpenAIMini,
 } from "@marketing/ai-router";
-import {
-  getPlanCaps,
-  monthlyBudgetKey,
-  BUDGET_KEY_TTL_SECONDS,
-} from "@marketing/billing";
+import { getPlanCaps, monthlyBudgetKey, BUDGET_KEY_TTL_SECONDS } from "@marketing/billing";
 import { db } from "@marketing/db";
 import { aiUsage, socialPosts, tenants, outbox, tenantMetricsDaily } from "@marketing/db";
-import {
-  env,
-  logger,
-  recordMetric,
-  hashId,
-  TENANT_LIFECYCLE_EVENTS,
-} from "@marketing/shared";
+import { env, logger, recordMetric, hashId, TENANT_LIFECYCLE_EVENTS } from "@marketing/shared";
 import type { TenantContext } from "@marketing/tenancy";
 import type { Job } from "bullmq";
 import { Worker, UnrecoverableError } from "bullmq";
@@ -40,9 +30,7 @@ function buildProviderRouter(): ProviderRouter {
     const haiku = createAnthropicHaiku();
     const sonnet = createAnthropicSonnet();
     const fallback =
-      env.AI_PROVIDER_FALLBACK === "openai" || env.OPENAI_API_KEY
-        ? createOpenAIMini()
-        : haiku;
+      env.AI_PROVIDER_FALLBACK === "openai" || env.OPENAI_API_KEY ? createOpenAIMini() : haiku;
     return new ProviderRouter({ trial: haiku, primary: sonnet, fallback });
   }
   if (env.OPENAI_API_KEY) {
@@ -78,10 +66,7 @@ async function getMonthlySpend(tenantId: string): Promise<number> {
     .select({ total: sql<string>`COALESCE(SUM(cost_usd), 0)` })
     .from(aiUsage)
     .where(
-      and(
-        eq(aiUsage.tenantId, tenantId),
-        sql`${aiUsage.createdAt} >= ${monthStart.toISOString()}`,
-      ),
+      and(eq(aiUsage.tenantId, tenantId), sql`${aiUsage.createdAt} >= ${monthStart.toISOString()}`),
     );
 
   const spendUsd = parseFloat(row?.total ?? "0");
@@ -147,6 +132,7 @@ async function upsertSocialPostPending(
   threadId?: string,
   parentJobId?: string,
   refinementInstruction?: string,
+  imageUrl?: string | null,
 ) {
   await db
     .insert(socialPosts)
@@ -158,6 +144,9 @@ async function upsertSocialPostPending(
       threadId: threadId ?? jobId, // first post in thread is its own root
       parentJobId: parentJobId ?? null,
       refinementInstruction: refinementInstruction ?? null,
+      // Carry a previously generated image forward so refining the text
+      // doesn't drop the image the user already made.
+      imageUrl: imageUrl ?? null,
     })
     .onConflictDoNothing({ target: socialPosts.jobId });
 }
@@ -241,11 +230,7 @@ async function upsertDailyMetricsPost(ctx: TenantContext, vertical: string, plan
  * first_post_at stamped but no event in the outbox. Acceptable at design-partner
  * scale (< 10 tenants); wrap in a DB transaction if this becomes load-bearing.
  */
-async function maybeEmitFirstPost(
-  ctx: TenantContext,
-  vertical: string,
-  jobId: string,
-) {
+async function maybeEmitFirstPost(ctx: TenantContext, vertical: string, jobId: string) {
   const now = new Date();
   // UPDATE ... WHERE first_post_at IS NULL returns the row only if it was updated.
   const updated = await db
@@ -283,6 +268,14 @@ export async function handleSocialPostJob(job: Job<SocialPostJob>): Promise<void
     return;
   }
 
+  // For a refinement, inherit the parent post's image so iterating on the text
+  // keeps the image the user already generated.
+  let inheritedImageUrl: string | null = null;
+  if (data.parentJobId) {
+    const parent = await getSocialPostByJobId(ctx, data.parentJobId);
+    inheritedImageUrl = parent?.imageUrl ?? null;
+  }
+
   // Write pending row (noop on duplicate from a previous attempt).
   await upsertSocialPostPending(
     ctx,
@@ -297,6 +290,7 @@ export async function handleSocialPostJob(job: Job<SocialPostJob>): Promise<void
     data.threadId,
     data.parentJobId,
     data.refinementInstruction,
+    inheritedImageUrl,
   );
 
   const tenantPlan = await getTenantPlan(ctx);
@@ -390,14 +384,21 @@ export async function handleSocialPostJob(job: Job<SocialPostJob>): Promise<void
     });
 
     logger.info({ jobId, tenantId }, "[social-post] job completed");
-    recordMetric("ai.job.completed", { queue: SOCIAL_POST_QUEUE_NAME, tenantIdHash: hashId(tenantId) });
+    recordMetric("ai.job.completed", {
+      queue: SOCIAL_POST_QUEUE_NAME,
+      tenantIdHash: hashId(tenantId),
+    });
   } catch (err) {
     // Don't re-mark failed if it's already been set by the budget check.
     if (existing?.status !== "failed") {
       await markSocialPostFailed(ctx, jobId);
     }
     logger.error({ jobId, tenantId, err: String(err) }, "[social-post] job failed");
-    recordMetric("ai.job.failed", { queue: SOCIAL_POST_QUEUE_NAME, tenantIdHash: hashId(tenantId), err: String(err) });
+    recordMetric("ai.job.failed", {
+      queue: SOCIAL_POST_QUEUE_NAME,
+      tenantIdHash: hashId(tenantId),
+      err: String(err),
+    });
     throw err;
   }
 }
@@ -420,5 +421,9 @@ socialPostWorker.on("completed", (job) => {
 
 socialPostWorker.on("failed", (job, err) => {
   logger.error({ jobId: job?.id, err: err.message }, "[social-post] BullMQ job failed");
-  recordMetric("queue.job.failed", { queue: SOCIAL_POST_QUEUE_NAME, jobId: job?.id, err: err.message });
+  recordMetric("queue.job.failed", {
+    queue: SOCIAL_POST_QUEUE_NAME,
+    jobId: job?.id,
+    err: err.message,
+  });
 });

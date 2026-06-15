@@ -3,7 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./form-schema": "./src/queues/form.schema.ts",
+    "./section-variants": "./src/queues/section-variants.ts"
   },
   "types": "./src/index.ts",
   "scripts": {
@@ -12,7 +14,10 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@marketing/shared": "workspace:*"
+    "@anthropic-ai/sdk": "^0.98.0",
+    "@marketing/shared": "workspace:*",
+    "openai": "^6.39.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

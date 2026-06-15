@@ -10,10 +10,13 @@ import { cn } from "../ui/cn";
 
 export type DevicePreset = "phone" | "tablet" | "desktop";
 
-const DEVICE_DIMENSIONS: Record<DevicePreset, { width: number; height: number; label: string; icon: string }> = {
-  phone:   { width: 375,  height: 812,  label: "Phone",   icon: "📱" },
-  tablet:  { width: 768,  height: 1024, label: "Tablet",  icon: "📱" },
-  desktop: { width: 1280, height: 800,  label: "Desktop", icon: "💻" },
+const DEVICE_DIMENSIONS: Record<
+  DevicePreset,
+  { width: number; height: number; label: string; icon: string }
+> = {
+  phone: { width: 375, height: 812, label: "Phone", icon: "📱" },
+  tablet: { width: 768, height: 1024, label: "Tablet", icon: "📱" },
+  desktop: { width: 1280, height: 800, label: "Desktop", icon: "💻" },
 };
 
 type Props = {
@@ -25,7 +28,12 @@ type Props = {
   compact?: boolean;
 };
 
-export function DevicePreview({ url, initialDevice = "desktop", maxHeight = "70vh", compact = false }: Props) {
+export function DevicePreview({
+  url,
+  initialDevice = "desktop",
+  maxHeight = "70vh",
+  compact = false,
+}: Props) {
   const [device, setDevice] = React.useState<DevicePreset>(initialDevice);
   const containerRef = React.useRef<HTMLDivElement | null>(null);
   const [scale, setScale] = React.useState(1);
@@ -54,7 +62,12 @@ export function DevicePreview({ url, initialDevice = "desktop", maxHeight = "70v
   return (
     <div className="flex flex-col gap-3">
       {/* Toolbar */}
-      <div className={cn("flex items-center justify-center gap-1 rounded-xl bg-gray-100 p-1 self-center", compact && "scale-90")}>
+      <div
+        className={cn(
+          "flex items-center justify-center gap-1 self-center rounded-xl bg-gray-100 p-1",
+          compact && "scale-90",
+        )}
+      >
         {(Object.keys(DEVICE_DIMENSIONS) as DevicePreset[]).map((preset) => {
           const def = DEVICE_DIMENSIONS[preset];
           const active = device === preset;
@@ -65,16 +78,14 @@ export function DevicePreview({ url, initialDevice = "desktop", maxHeight = "70v
               onClick={() => setDevice(preset)}
               aria-pressed={active}
               className={cn(
-                "px-3 py-1.5 text-xs font-medium rounded-lg flex items-center gap-1.5 transition-colors",
-                active
-                  ? "bg-white text-gray-900 shadow-sm"
-                  : "text-gray-500 hover:text-gray-900",
+                "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
+                active ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-900",
               )}
             >
               <span aria-hidden>{def.icon}</span>
               {def.label}
               {active && (
-                <span className="text-[10px] text-gray-400 font-mono ml-1">
+                <span className="ml-1 font-mono text-[10px] text-gray-400">
                   {def.width}×{def.height}
                 </span>
               )}
@@ -86,7 +97,7 @@ export function DevicePreview({ url, initialDevice = "desktop", maxHeight = "70v
       {/* Frame */}
       <div
         ref={containerRef}
-        className="bg-gray-50 rounded-2xl p-3 overflow-hidden flex items-start justify-center"
+        className="flex items-start justify-center overflow-hidden rounded-2xl bg-gray-50 p-3"
         style={{ maxHeight, minHeight: 320 }}
       >
         <div

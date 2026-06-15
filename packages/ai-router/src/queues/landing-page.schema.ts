@@ -1,82 +1,137 @@
 import { z } from "zod";
 
+export const imageItemSchema = z.object({
+  url: z.string().max(500),
+  caption: z.string().max(200).optional(),
+});
+
+export const carouselSettingsSchema = z.object({
+  enabled: z.boolean().optional(),
+  mode: z.enum(["auto", "manual"]).optional(),
+  delayMs: z.number().int().min(1000).max(15000).optional(),
+  effect: z.enum(["fade", "slide"]).optional(),
+});
+
+export const landingPageLanguagePreferencesSchema = z.object({
+  locales: z.array(z.string()).min(1).max(8),
+  defaultLocale: z.string().min(2).max(12),
+});
+
 // ─── Per-type extras schemas ───────────────────────────────────────────────────
 // Each section type carries typed, optional `extras` that the layout AI populates.
 // All sub-fields are optional so old compositions (pre-step-23) still parse.
 
-export const heroExtrasSchema = z.object({
-  ctaText: z.string().max(80).optional(),
-  ctaHref: z.string().max(300).optional(),
-  backgroundImageUrl: z.string().max(500).optional(),
-}).optional();
+export const heroExtrasSchema = z
+  .object({
+    ctaText: z.string().max(80).optional(),
+    ctaHref: z.string().max(300).optional(),
+    backgroundImageUrl: z.string().max(500).optional(),
+    images: z.array(imageItemSchema).max(12).optional(),
+    carousel: carouselSettingsSchema.optional(),
+  })
+  .optional();
 
-export const galleryExtrasSchema = z.object({
-  images: z.array(z.object({
-    url: z.string().max(500),
-    caption: z.string().max(200).optional(),
-  })).max(12).optional(),
-}).optional();
+export const galleryExtrasSchema = z
+  .object({
+    images: z.array(imageItemSchema).max(12).optional(),
+    carousel: carouselSettingsSchema.optional(),
+  })
+  .optional();
 
-export const testimonialsExtrasSchema = z.object({
-  items: z.array(z.object({
-    quote: z.string().max(500),
-    author: z.string().max(100),
-    role: z.string().max(100).optional(),
-    avatarUrl: z.string().max(500).optional(),
-    rating: z.number().min(1).max(5).optional(),
-  })).max(6).optional(),
-}).optional();
+export const testimonialsExtrasSchema = z
+  .object({
+    items: z
+      .array(
+        z.object({
+          quote: z.string().max(500),
+          author: z.string().max(100),
+          role: z.string().max(100).optional(),
+          avatarUrl: z.string().max(500).optional(),
+          rating: z.number().min(1).max(5).optional(),
+        }),
+      )
+      .max(6)
+      .optional(),
+  })
+  .optional();
 
-export const faqExtrasSchema = z.object({
-  items: z.array(z.object({
-    question: z.string().max(300),
-    answer: z.string().max(1000),
-  })).max(10).optional(),
-}).optional();
+export const faqExtrasSchema = z
+  .object({
+    items: z
+      .array(
+        z.object({
+          question: z.string().max(300),
+          answer: z.string().max(1000),
+        }),
+      )
+      .max(10)
+      .optional(),
+  })
+  .optional();
 
-export const menuPreviewExtrasSchema = z.object({
-  items: z.array(z.object({
-    name: z.string().max(100),
-    price: z.string().max(20).optional(),
-    description: z.string().max(300).optional(),
+export const menuPreviewExtrasSchema = z
+  .object({
+    items: z
+      .array(
+        z.object({
+          name: z.string().max(100),
+          price: z.string().max(20).optional(),
+          description: z.string().max(300).optional(),
+          imageUrl: z.string().max(500).optional(),
+        }),
+      )
+      .max(12)
+      .optional(),
+  })
+  .optional();
+
+export const offerExtrasSchema = z
+  .object({
+    price: z.string().max(50).optional(),
+    oldPrice: z.string().max(50).optional(),
+    validUntil: z.string().max(100).optional(),
+    ctaText: z.string().max(80).optional(),
+    ctaHref: z.string().max(300).optional(),
+  })
+  .optional();
+
+export const contactExtrasSchema = z
+  .object({
+    email: z.string().max(200).optional(),
+    phone: z.string().max(50).optional(),
+    address: z.string().max(300).optional(),
+    mapEmbedUrl: z.string().max(500).optional(),
+    openingHours: z.string().max(200).optional(),
+  })
+  .optional();
+
+export const aboutExtrasSchema = z
+  .object({
+    /** Main side image for the text-image-split variant. */
     imageUrl: z.string().max(500).optional(),
-  })).max(12).optional(),
-}).optional();
-
-export const offerExtrasSchema = z.object({
-  price: z.string().max(50).optional(),
-  oldPrice: z.string().max(50).optional(),
-  validUntil: z.string().max(100).optional(),
-  ctaText: z.string().max(80).optional(),
-  ctaHref: z.string().max(300).optional(),
-}).optional();
-
-export const contactExtrasSchema = z.object({
-  email: z.string().max(200).optional(),
-  phone: z.string().max(50).optional(),
-  address: z.string().max(300).optional(),
-  mapEmbedUrl: z.string().max(500).optional(),
-  openingHours: z.string().max(200).optional(),
-}).optional();
-
-export const aboutExtrasSchema = z.object({
-  /** Main side image for the text-image-split variant. */
-  imageUrl: z.string().max(500).optional(),
-  teamMembers: z.array(z.object({
-    name: z.string().max(100),
-    role: z.string().max(100).optional(),
-    photoUrl: z.string().max(500).optional(),
-  })).max(8).optional(),
-  values: z.array(z.string().max(150)).max(6).optional(),
-}).optional();
+    teamMembers: z
+      .array(
+        z.object({
+          name: z.string().max(100),
+          role: z.string().max(100).optional(),
+          photoUrl: z.string().max(500).optional(),
+        }),
+      )
+      .max(8)
+      .optional(),
+    values: z.array(z.string().max(150)).max(6).optional(),
+  })
+  .optional();
 
 export const leadFormExtrasSchema = z.object({}).optional();
 
-export const whatsappCtaExtrasSchema = z.object({
-  phoneNumber: z.string().max(20).optional(),
-  prefillText: z.string().max(300).optional(),
-  buttonText: z.string().max(80).optional(),
-}).optional();
+export const whatsappCtaExtrasSchema = z
+  .object({
+    phoneNumber: z.string().max(20).optional(),
+    prefillText: z.string().max(300).optional(),
+    buttonText: z.string().max(80).optional(),
+  })
+  .optional();
 
 // ─── Discriminated union section schema ────────────────────────────────────────
 // Each type carries a well-typed `extras` shape.
@@ -181,6 +236,63 @@ export const landingPageSectionSchema = z.discriminatedUnion("type", [
 
 export type LandingPageSection = z.infer<typeof landingPageSectionSchema>;
 
+export const landingPageNavStyleSchema = z.enum([
+  "classic",
+  "compact-cta",
+  "editorial",
+  "bold-pill",
+]);
+
+export const landingPageSiteLinkSchema = z.object({
+  label: z.string().min(1).max(80),
+  /** Page slug inside the generated website shell. "home" points to the top-level page. */
+  pageSlug: z
+    .string()
+    .min(1)
+    .max(80)
+    .regex(/^[a-z0-9-]+$/)
+    .optional(),
+  /** Optional section anchor on the top-level page. */
+  sectionId: z.string().min(1).max(80).optional(),
+  /** Escape hatch for external links or legacy anchors. Renderers still sanitize by component. */
+  href: z.string().max(300).optional(),
+});
+
+export const landingPageSitePageSchema = z.object({
+  slug: z
+    .string()
+    .min(1)
+    .max(80)
+    .regex(/^[a-z0-9-]+$/),
+  title: z.string().min(1).max(150),
+  description: z.string().max(300).optional(),
+  sections: z.array(landingPageSectionSchema).min(2).max(8),
+});
+
+export const landingPageSiteSchema = z.object({
+  mode: z.enum(["landing", "website"]).default("website"),
+  nav: z
+    .object({
+      style: landingPageNavStyleSchema.optional(),
+      brandLabel: z.string().min(1).max(100).optional(),
+      links: z.array(landingPageSiteLinkSchema).min(1).max(8),
+      cta: landingPageSiteLinkSchema.optional(),
+    })
+    .optional(),
+  pages: z.array(landingPageSitePageSchema).max(6).optional(),
+  footer: z
+    .object({
+      text: z.string().max(200).optional(),
+      links: z.array(landingPageSiteLinkSchema).max(8).optional(),
+    })
+    .optional(),
+});
+
+export type LandingPageNavStyle = z.infer<typeof landingPageNavStyleSchema>;
+export type LandingPageSiteLink = z.infer<typeof landingPageSiteLinkSchema>;
+export type LandingPageSitePage = z.infer<typeof landingPageSitePageSchema>;
+export type LandingPageSite = z.infer<typeof landingPageSiteSchema>;
+
 // Convenience: extras type per section variant
 export type HeroSection = z.infer<typeof heroSectionSchema>;
 export type GallerySection = z.infer<typeof gallerySectionSchema>;
@@ -199,13 +311,15 @@ export const landingPageCompositionSchema = z.object({
   locale: z.string().default("de-CH"),
   /** Generated page title. */
   title: z.string().min(1).max(150),
+  /** Optional multi-page website shell for AI-generated sites. Legacy landing pages omit this. */
+  site: landingPageSiteSchema.optional(),
 });
 
 export type LandingPageComposition = z.infer<typeof landingPageCompositionSchema>;
 
 // ─── Job step enum ────────────────────────────────────────────────────────────
 
-export const landingPageStepEnum = z.enum(["brief", "copy", "layout", "publish"]);
+export const landingPageStepEnum = z.enum(["brief", "copy", "layout", "localize", "publish"]);
 export type LandingPageStep = z.infer<typeof landingPageStepEnum>;
 
 // ─── Job payload schema ───────────────────────────────────────────────────────
@@ -220,6 +334,7 @@ export const landingPageJobSchema = z.object({
   vertical: z.string().min(2).max(100),
   city: z.string().max(100).optional(),
   locale: z.string().default("de-CH"),
+  languagePreferences: landingPageLanguagePreferencesSchema.optional(),
   /** Free-text user brief. Used as seed for the brief step. */
   userPrompt: z.string().min(3).max(1000),
   /** Template key (e.g. "cafe-bold") when the user picked a template. Undefined for from-scratch. */
@@ -230,6 +345,8 @@ export const landingPageJobSchema = z.object({
    * "apply my brand". Read by the brief step (worker) to decide whether to retrieve brand chunks.
    */
   applyBrand: z.boolean().optional(),
+  /** Rebuild localized compositions even when one already exists for the requested locale. */
+  forceLocalization: z.boolean().optional(),
   /** Which step this job handles. Set by FlowProducer per child node. */
   step: landingPageStepEnum,
   /** BullMQ idempotency key per step. Equals `${landingPageId}:${step}`. */

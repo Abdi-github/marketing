@@ -11,12 +11,15 @@ const nextConfig: NextConfig = {
   // root and computing the wrong outputFileTracingRoot.
   outputFileTracingRoot: path.join(__dirname, "../../"),
 
+  // @node-rs/argon2 ships a platform-specific native .node addon that neither
+  // webpack nor Turbopack can bundle. serverExternalPackages covers both bundlers
+  // (Turbopack + webpack) so the package is require()'d at runtime from
+  // node_modules instead of being inlined. The webpack-only config.externals.push
+  // below is kept for older Next.js versions / non-Turbopack CI builds.
+  serverExternalPackages: ["@node-rs/argon2"],
+
   webpack: (config, { isServer }) => {
     if (isServer) {
-      // @node-rs/argon2 ships a platform-specific native .node addon that webpack
-      // cannot bundle. The import originates from a local workspace package
-      // (packages/auth/src/signup.ts), so serverExternalPackages does not catch it —
-      // we must add an explicit webpack external so it is require()'d at runtime.
       config.externals.push("@node-rs/argon2");
     }
     return config;

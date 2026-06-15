@@ -8,7 +8,7 @@
 //  • Smart form: `steps` prop provided — multi-step with conditional logic
 //  • Legacy: `steps` absent — derives fields from JSON `schema`
 import React, { useEffect, useRef, useState } from "react";
-import type { FormField, FormStep, FormSettings } from "@marketing/ai-router";
+import type { FormField, FormStep, FormSettings } from "@marketing/ai-router/form-schema";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -23,18 +23,30 @@ type Props = {
   submitLabel?: string;
 };
 
-type LegacyFieldDef = { name: string; label: string; type: "text" | "email" | "tel"; required: boolean };
+type LegacyFieldDef = {
+  name: string;
+  label: string;
+  type: "text" | "email" | "tel";
+  required: boolean;
+};
 
 // ─── Legacy field derivation ───────────────────────────────────────────────────
 
 function deriveLegacyFields(schema: Record<string, unknown>): LegacyFieldDef[] {
-  const properties = (schema["properties"] ?? {}) as Record<string, { title?: string; type?: string }>;
+  const properties = (schema["properties"] ?? {}) as Record<
+    string,
+    { title?: string; type?: string }
+  >;
   const required = Array.isArray(schema["required"]) ? (schema["required"] as string[]) : [];
 
   const fields = Object.entries(properties).map(([name, def]) => ({
     name,
     label: def.title ?? name,
-    type: (name === "email" ? "email" : name === "phone" || name === "tel" ? "tel" : "text") as LegacyFieldDef["type"],
+    type: (name === "email"
+      ? "email"
+      : name === "phone" || name === "tel"
+        ? "tel"
+        : "text") as LegacyFieldDef["type"],
     required: required.includes(name),
   }));
 
@@ -63,7 +75,7 @@ function isVisible(field: FormField, values: Record<string, string>): boolean {
 
 const inputStyle: React.CSSProperties = {
   padding: "0.5rem 0.75rem",
-  border: "1px solid #d1d5db",
+  border: "1px solid var(--lp-border,#d1d5db)",
   borderRadius: 6,
   fontSize: "0.9rem",
   width: "100%",
@@ -120,7 +132,10 @@ function FieldInput({
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
         {(field.options ?? []).map((opt) => (
-          <label key={opt.value} style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}>
+          <label
+            key={opt.value}
+            style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}
+          >
             <input
               type="radio"
               name={field.name}
@@ -185,7 +200,9 @@ function TurnstileWidget({ siteKey, onToken }: { siteKey: string; onToken: (t: s
     }
 
     const tryRender = () => {
-      const w = (window as unknown as { turnstile?: { render: (el: HTMLElement, opts: unknown) => string } }).turnstile;
+      const w = (
+        window as unknown as { turnstile?: { render: (el: HTMLElement, opts: unknown) => string } }
+      ).turnstile;
       if (w && containerRef.current && !widgetIdRef.current) {
         widgetIdRef.current = w.render(containerRef.current, {
           sitekey: siteKey,
@@ -205,17 +222,25 @@ function TurnstileWidget({ siteKey, onToken }: { siteKey: string; onToken: (t: s
 // ─── Smart form (multi-step) ──────────────────────────────────────────────────
 
 function SmartFormBody({
+  formSlug,
   steps,
   settings,
   submitLabel,
   onSubmit,
+  onStart,
+  onStepView,
+  onStepComplete,
   submitting,
   error,
 }: {
+  formSlug: string;
   steps: FormStep[];
   settings: Partial<FormSettings>;
   submitLabel?: string;
   onSubmit: (payload: Record<string, string>, turnstileToken?: string) => Promise<void>;
+  onStart: (fieldName: string) => void;
+  onStepView: (stepIndex: number, stepTitle?: string) => void;
+  onStepComplete: (stepIndex: number, stepTitle?: string) => void;
   submitting: boolean;
   error: string | null;
 }) {
@@ -223,22 +248,27 @@ function SmartFormBody({
   const [values, setValues] = useState<Record<string, string>>({});
   const [turnstileToken, setTurnstileToken] = useState<string | undefined>(undefined);
 
-  const siteKey = typeof process !== "undefined"
-    ? (process.env["NEXT_PUBLIC_TURNSTILE_SITE_KEY"] ?? "")
-    : "";
+  const siteKey =
+    typeof process !== "undefined" ? (process.env["NEXT_PUBLIC_TURNSTILE_SITE_KEY"] ?? "") : "";
   const showTurnstile = settings.turnstile_enabled === true && siteKey !== "";
 
   const currentStep = steps[stepIndex]!;
   const visibleFields = currentStep.fields.filter((f) => isVisible(f, values));
   const isLastStep = stepIndex === steps.length - 1;
 
+  useEffect(() => {
+    onStepView(stepIndex, currentStep.title);
+  }, [currentStep.title, onStepView, stepIndex]);
+
   function setValue(name: string, val: string) {
+    onStart(name);
     setValues((prev) => ({ ...prev, [name]: val }));
   }
 
   function handleNext(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!isLastStep) {
+      onStepComplete(stepIndex, currentStep.title);
       setStepIndex((i) => i + 1);
     } else {
       void onSubmit(values, showTurnstile ? turnstileToken : undefined);
@@ -246,21 +276,33 @@ function SmartFormBody({
   }
 
   return (
-    <form onSubmit={handleNext} style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+    <form
+      data-form-slug={formSlug}
+      data-form-kind="smart"
+      onSubmit={handleNext}
+      style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}
+    >
       {steps.length > 1 && (
-        <div style={{ fontSize: "0.8rem", color: "#6b7280" }}>
+        <div style={{ fontSize: "0.8rem", color: "var(--lp-muted,#6b7280)" }}>
           Schritt {stepIndex + 1} / {steps.length}
         </div>
       )}
 
       {currentStep.title && (
-        <h4 style={{ margin: "0 0 0.25rem", fontWeight: 600, color: "#111827" }}>{currentStep.title}</h4>
+        <h4 style={{ margin: "0 0 0.25rem", fontWeight: 600, color: "var(--lp-text,#111827)" }}>
+          {currentStep.title}
+        </h4>
       )}
 
       {visibleFields.map((field) => (
-        <label key={field.name} style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+        <label
+          key={field.name}
+          style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}
+        >
           {field.type !== "checkbox" && (
-            <span style={{ fontWeight: 500, fontSize: "0.9rem", color: "#374151" }}>
+            <span
+              style={{ fontWeight: 500, fontSize: "0.9rem", color: "var(--lp-text-soft,#374151)" }}
+            >
               {field.label}
               {field.required && <span style={{ color: "#ef4444" }}> *</span>}
             </span>
@@ -286,9 +328,9 @@ function SmartFormBody({
             onClick={() => setStepIndex((i) => i - 1)}
             style={{
               padding: "0.6rem 1.2rem",
-              background: "#f3f4f6",
-              color: "#374151",
-              border: "1px solid #d1d5db",
+              background: "var(--lp-subtle,#f3f4f6)",
+              color: "var(--lp-text-soft,#374151)",
+              border: "1px solid var(--lp-border,#d1d5db)",
               borderRadius: 6,
               fontSize: "0.9rem",
               cursor: "pointer",
@@ -302,19 +344,15 @@ function SmartFormBody({
           disabled={submitting || (isLastStep && showTurnstile && !turnstileToken)}
           style={{
             padding: "0.6rem 1.5rem",
-            background: submitting ? "#9ca3af" : "#3b82f6",
-            color: "#fff",
+            background: submitting ? "var(--lp-muted,#9ca3af)" : "var(--brand-primary,#3b82f6)",
+            color: "var(--lp-on-primary,#fff)",
             border: "none",
             borderRadius: 6,
             fontSize: "0.9rem",
             cursor: submitting ? "not-allowed" : "pointer",
           }}
         >
-          {submitting
-            ? "Wird gesendet…"
-            : isLastStep
-              ? (submitLabel ?? "Absenden")
-              : "Weiter"}
+          {submitting ? "Wird gesendet…" : isLastStep ? (submitLabel ?? "Absenden") : "Weiter"}
         </button>
       </div>
     </form>
@@ -324,15 +362,19 @@ function SmartFormBody({
 // ─── Legacy single-step form ───────────────────────────────────────────────────
 
 function LegacyFormBody({
+  formSlug,
   schema,
   submitLabel,
   onSubmit,
+  onStart,
   submitting,
   error,
 }: {
+  formSlug: string;
   schema: Record<string, unknown>;
   submitLabel?: string;
   onSubmit: (payload: Record<string, string>) => Promise<void>;
+  onStart: (fieldName: string) => void;
   submitting: boolean;
   error: string | null;
 }) {
@@ -347,10 +389,20 @@ function LegacyFormBody({
   }
 
   return (
-    <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+    <form
+      data-form-slug={formSlug}
+      data-form-kind="legacy"
+      onSubmit={handleSubmit}
+      style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}
+    >
       {fields.map((field) => (
-        <label key={field.name} style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-          <span style={{ fontWeight: 500, fontSize: "0.9rem", color: "#374151" }}>
+        <label
+          key={field.name}
+          style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}
+        >
+          <span
+            style={{ fontWeight: 500, fontSize: "0.9rem", color: "var(--lp-text-soft,#374151)" }}
+          >
             {field.label}
             {field.required && <span style={{ color: "#ef4444" }}> *</span>}
           </span>
@@ -358,7 +410,10 @@ function LegacyFormBody({
             type={field.type}
             name={field.name}
             value={values[field.name] ?? ""}
-            onChange={(e) => setValues((v) => ({ ...v, [field.name]: e.target.value }))}
+            onChange={(e) => {
+              onStart(field.name);
+              setValues((v) => ({ ...v, [field.name]: e.target.value }));
+            }}
             required={field.required}
             style={inputStyle}
           />
@@ -372,8 +427,8 @@ function LegacyFormBody({
         disabled={submitting}
         style={{
           padding: "0.6rem 1.5rem",
-          background: submitting ? "#9ca3af" : "#3b82f6",
-          color: "#fff",
+          background: submitting ? "var(--lp-muted,#9ca3af)" : "var(--brand-primary,#3b82f6)",
+          color: "var(--lp-on-primary,#fff)",
           border: "none",
           borderRadius: 6,
           fontSize: "0.9rem",
@@ -389,16 +444,38 @@ function LegacyFormBody({
 
 // ─── Root component ───────────────────────────────────────────────────────────
 
-export default function LeadForm({ tenantSlug, formSlug, schema = {}, steps, settings, submitLabel }: Props) {
+export default function LeadForm({
+  tenantSlug,
+  formSlug,
+  schema = {},
+  steps,
+  settings,
+  submitLabel,
+}: Props) {
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const startedRef = useRef(false);
 
   const successMessage = settings?.success_message ?? "Vielen Dank! Wir melden uns bald bei dir.";
   const honeypotEnabled = settings?.honeypot !== false;
 
   // Honeypot ref — read at submit time (not tracked in state to stay invisible to React)
   const honeypotRef = useRef<HTMLInputElement>(null);
+
+  function dispatchFormEvent(
+    type: "__form_start" | "__form_step_view" | "__form_step_complete" | "__form_submit",
+    detail: Record<string, unknown>,
+  ) {
+    if (typeof window === "undefined") return;
+    window.dispatchEvent(new CustomEvent(type, { detail: { formSlug, ...detail } }));
+  }
+
+  function handleStart(fieldName: string) {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    dispatchFormEvent("__form_start", { fieldName });
+  }
 
   async function handleSubmit(payload: Record<string, string>, turnstileToken?: string) {
     // Honeypot check (client-side fast-path to avoid network call)
@@ -425,7 +502,7 @@ export default function LeadForm({ tenantSlug, formSlug, schema = {}, steps, set
 
       setSubmitted(true);
       // Notify track.js for A/B experiment conversion counting.
-      window.dispatchEvent(new CustomEvent("__form_submit", { detail: { formSlug } }));
+      dispatchFormEvent("__form_submit", {});
     } catch (err) {
       setError(err instanceof Error ? err.message : "Fehler beim Senden. Bitte erneut versuchen.");
     } finally {
@@ -466,18 +543,28 @@ export default function LeadForm({ tenantSlug, formSlug, schema = {}, steps, set
 
       {steps && steps.length > 0 ? (
         <SmartFormBody
+          formSlug={formSlug}
           steps={steps}
           settings={settings ?? {}}
           submitLabel={submitLabel}
           onSubmit={handleSubmit}
+          onStart={handleStart}
+          onStepView={(stepIndex, stepTitle) =>
+            dispatchFormEvent("__form_step_view", { stepIndex, stepTitle })
+          }
+          onStepComplete={(stepIndex, stepTitle) =>
+            dispatchFormEvent("__form_step_complete", { stepIndex, stepTitle })
+          }
           submitting={submitting}
           error={error}
         />
       ) : (
         <LegacyFormBody
+          formSlug={formSlug}
           schema={schema}
           submitLabel={submitLabel}
           onSubmit={handleSubmit}
+          onStart={handleStart}
           submitting={submitting}
           error={error}
         />

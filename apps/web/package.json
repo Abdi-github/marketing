@@ -8,18 +8,31 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --max-warnings 0",
-    "check:boundaries": "depcruise src --config ../../.dependency-cruiser.cjs"
+    "check:boundaries": "depcruise src --config ../../.dependency-cruiser.cjs",
+    "e2e": "playwright test",
+    "e2e:ui": "playwright test --ui",
+    "e2e:install-browsers": "playwright install --with-deps chromium firefox",
+    "e2e:real-provider": "AI_PROVIDER_FALLBACK= playwright test --grep @real-provider",
+    "screenshots": "tsx scripts/generate-template-screenshots.ts"
   },
   "dependencies": {
+    "@marketing/ai-router": "workspace:*",
     "@marketing/auth": "workspace:*",
+    "@marketing/billing": "workspace:*",
     "@marketing/db": "workspace:*",
+    "@marketing/integrations": "workspace:*",
+    "@marketing/landing-design-system": "workspace:*",
     "@marketing/shared": "workspace:*",
     "@marketing/tenancy": "workspace:*",
+    "@node-rs/argon2": "^2.0.2",
+    "postgres": "^3.4.9",
+    "stripe": "^17.7.0",
     "@tanstack/react-query": "^5.100.14",
     "@trpc/client": "^11.17.0",
     "@trpc/react-query": "^11.17.0",
     "@trpc/server": "^11.17.0",
     "better-auth": "^1.6.11",
+    "bullmq": "^5.77.2",
     "drizzle-orm": "^0.36.4",
     "ioredis": "^5.4.1",
     "next": "^15.1.3",
@@ -29,6 +42,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@playwright/test": "^1.51.1",
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
@@ -36,6 +50,7 @@
     "postcss": "^8.4.49",
     "prettier-plugin-tailwindcss": "^0.6.9",
     "tailwindcss": "^3.4.17",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
   }
 }

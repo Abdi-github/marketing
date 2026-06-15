@@ -1,6 +1,6 @@
 import { db } from "@marketing/db";
-import { integrationConnections, socialPosts, outbox } from "@marketing/db";
-import { eq, and } from "drizzle-orm";
+import { integrationConnections, integrationSyncRuns, socialPosts, outbox } from "@marketing/db";
+import { eq, and, desc } from "drizzle-orm";
 import {
   GastrofixAdapter,
   LightspeedChAdapter,
@@ -10,6 +10,8 @@ import {
 import { env } from "@marketing/shared";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { getSocialCreativePublicUrl } from "../../../lib/social-creative";
+import { getIntegrationSyncQueue } from "../../queues/integration-sync";
 import { router, tenantProcedure, requires } from "../trpc";
 
 // ─── Adapter instances ─────────────────────────────────────────────────────────
@@ -43,7 +45,8 @@ function getMetaAdapter(): MetaAdapter {
   if (!encKey || !appId || !appSecret) {
     throw new TRPCError({
       code: "INTERNAL_SERVER_ERROR",
-      message: "Meta integration is not configured (META_APP_ID, META_APP_SECRET, INTEGRATION_ENCRYPTION_KEY required)",
+      message:
+        "Meta integration is not configured (META_APP_ID, META_APP_SECRET, INTEGRATION_ENCRYPTION_KEY required)",
     });
   }
 
@@ -72,6 +75,40 @@ export const integrationsRouter = router({
 
     return rows;
   }),
+
+  /** Recent sync runs for the current tenant, newest first. */
+  listSyncRuns: tenantProcedure
+    .input(
+      z.object({
+        connectionId: z.string().uuid().optional(),
+        limit: z.number().min(1).max(50).default(20),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const filters = [eq(integrationSyncRuns.tenantId, ctx.tenantCtx.tenantId)];
+      if (input.connectionId) {
+        filters.push(eq(integrationSyncRuns.connectionId, input.connectionId));
+      }
+
+      return db
+        .select({
+          id: integrationSyncRuns.id,
+          connectionId: integrationSyncRuns.connectionId,
+          provider: integrationSyncRuns.provider,
+          externalAccountId: integrationSyncRuns.externalAccountId,
+          status: integrationSyncRuns.status,
+          source: integrationSyncRuns.source,
+          recordsProcessed: integrationSyncRuns.recordsProcessed,
+          errorMessage: integrationSyncRuns.errorMessage,
+          startedAt: integrationSyncRuns.startedAt,
+          completedAt: integrationSyncRuns.completedAt,
+          createdAt: integrationSyncRuns.createdAt,
+        })
+        .from(integrationSyncRuns)
+        .where(and(...filters))
+        .orderBy(desc(integrationSyncRuns.createdAt))
+        .limit(input.limit);
+    }),
 
   /** Connect a provider (API-key path). Admin+ only. */
   connect: requires("admin")
@@ -120,7 +157,7 @@ export const integrationsRouter = router({
       return { ok: true };
     }),
 
-  /** Trigger a manual sync. Admin+ only. */
+  /** Trigger a manual sync. Admin+ only. External provider calls happen in workers. */
   sync: requires("admin")
     .input(z.object({ connectionId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
@@ -133,22 +170,53 @@ export const integrationsRouter = router({
       if (!row) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Connection not found" });
       }
-      const adapter = row.provider === "meta" ? getMetaAdapter() : getAdapter(row.provider);
-      const connection = {
-        id: row.id,
-        tenantId: row.tenantId,
-        provider: row.provider,
-        externalAccountId: row.externalAccountId,
-        oauthTokens: row.oauthTokens,
-        scopes: row.scopes ?? [],
-        status: row.status as "connected" | "disconnected" | "error" | "token_expired",
-        meta: (row.meta ?? {}) as Record<string, unknown>,
-        connectedAt: row.connectedAt,
-        lastSyncAt: row.lastSyncAt ?? null,
-        updatedAt: row.updatedAt,
+      if (row.status !== "connected") {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: `Connection is ${row.status}`,
+        });
+      }
+
+      const [syncRun] = await db
+        .insert(integrationSyncRuns)
+        .values({
+          tenantId: ctx.tenantCtx.tenantId,
+          connectionId: row.id,
+          provider: row.provider,
+          externalAccountId: row.externalAccountId,
+          status: "queued",
+          source: "manual",
+        })
+        .returning();
+
+      if (!syncRun) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Could not create sync run",
+        });
+      }
+
+      await getIntegrationSyncQueue().add(
+        "integration-sync",
+        {
+          tenantId: ctx.tenantCtx.tenantId,
+          connectionId: row.id,
+          syncRunId: syncRun.id,
+          provider: row.provider,
+          source: "manual",
+        },
+        {
+          jobId: `integration-sync:${syncRun.id}`,
+        },
+      );
+
+      return {
+        id: syncRun.id,
+        status: syncRun.status,
+        provider: syncRun.provider,
+        connectionId: syncRun.connectionId,
+        recordsProcessed: syncRun.recordsProcessed,
       };
-      const result = await adapter.sync(ctx.tenantCtx, connection);
-      return result;
     }),
 
   /**
@@ -178,6 +246,10 @@ export const integrationsRouter = router({
           id: socialPosts.id,
           generatedText: socialPosts.generatedText,
           imageUrl: socialPosts.imageUrl,
+          jobId: socialPosts.jobId,
+          creativeImageUrl: socialPosts.creativeImageUrl,
+          creativeStatus: socialPosts.creativeStatus,
+          creativeUpdatedAt: socialPosts.creativeUpdatedAt,
           status: socialPosts.status,
           metaPostId: socialPosts.metaPostId,
         })
@@ -226,7 +298,12 @@ export const integrationsRouter = router({
         updatedAt: conn.updatedAt,
       };
 
-      const result = await adapter.publishPost(connection, post.generatedText, post.imageUrl);
+      const publishImageUrl =
+        post.creativeImageUrl && post.creativeStatus === "completed"
+          ? getSocialCreativePublicUrl(env.APP_URL, post.jobId, post.creativeUpdatedAt ?? "latest")
+          : post.imageUrl;
+
+      const result = await adapter.publishPost(connection, post.generatedText, publishImageUrl);
 
       // Persist publish result
       await db
@@ -243,7 +320,7 @@ export const integrationsRouter = router({
       return {
         fbPostId: result.fbPostId,
         igMediaId: result.igMediaId,
-        igSkipped: connMeta.igConnected && !post.imageUrl,
+        igSkipped: connMeta.igConnected && !publishImageUrl,
       };
     }),
 });

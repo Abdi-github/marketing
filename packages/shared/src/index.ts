@@ -4,3 +4,15 @@ export { logger } from "./logger";
 export { env } from "./env";
 export { initOtel, shutdownOtel } from "./otel";
 export { createTrace, flushLangfuse } from "./langfuse";
+export { recordMetric, hashId } from "./metrics";
+export {
+  TENANT_LIFECYCLE_EVENTS,
+  tenantFirstPostEmittedPayloadSchema,
+  tenantFirstPaidAtPayloadSchema,
+  tenantChurnedPayloadSchema,
+} from "./events/tenant-lifecycle";
+export type {
+  TenantFirstPostEmittedPayload,
+  TenantFirstPaidAtPayload,
+  TenantChurnedPayload,
+} from "./events/tenant-lifecycle";

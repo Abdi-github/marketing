@@ -31,9 +31,7 @@ export const aiUsage = pgTable(
     inputTokens: integer("input_tokens").notNull(),
     outputTokens: integer("output_tokens").notNull(),
     costUsd: numeric("cost_usd", { precision: 10, scale: 6 }).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("ai_usage_tenant_id_idx").on(t.tenantId),
@@ -66,6 +64,14 @@ export const socialPosts = pgTable(
     promptInput: jsonb("prompt_input").notNull(),
     generatedText: text("generated_text"),
     imageUrl: text("image_url"),
+    creativePlan: jsonb("creative_plan"),
+    creativeTemplate: text("creative_template"),
+    creativeAspectRatio: text("creative_aspect_ratio"),
+    creativeImageUrl: text("creative_image_url"),
+    creativeStorageKey: text("creative_storage_key"),
+    creativeStatus: text("creative_status").notNull().default("idle"),
+    creativeError: text("creative_error"),
+    creativeUpdatedAt: timestamp("creative_updated_at", { withTimezone: true }),
     status: socialPostStatusEnum("status").notNull().default("pending"),
     aiUsageId: uuid("ai_usage_id").references(() => aiUsage.id, {
       onDelete: "set null",
@@ -74,12 +80,8 @@ export const socialPosts = pgTable(
     metaPostId: text("meta_post_id"),
     igMediaId: text("ig_media_id"),
     publishedToMetaAt: timestamp("published_to_meta_at", { withTimezone: true }),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("social_posts_tenant_id_idx").on(t.tenantId),

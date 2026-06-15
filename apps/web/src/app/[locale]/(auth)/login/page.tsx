@@ -1,8 +1,11 @@
 "use client";
 
 import React, { useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
 
 export default function LoginPage() {
+  const locale = useLocale();
+  const t = useTranslations("Login");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -25,74 +28,79 @@ export default function LoginPage() {
       });
 
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data?.message ?? "Invalid email or password");
+        throw new Error("invalid");
       }
 
-      // Redirect to dashboard on success.
-      window.location.href = "/";
+      window.location.href = `/${locale}/dashboard`;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      setError(
+        err instanceof Error && err.message === "invalid"
+          ? t("invalidCredentials")
+          : t("genericError"),
+      );
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50">
-      <form
-        onSubmit={handleSubmit}
-        className="bg-white p-8 rounded-lg shadow w-full max-w-md space-y-4"
-      >
-        <h1 className="text-2xl font-bold">Log in</h1>
+    <form onSubmit={handleSubmit} className="w-full space-y-4">
+      <h1 className="text-2xl font-bold">{t("title")}</h1>
 
-        {error && (
-          <p className="text-red-600 text-sm bg-red-50 border border-red-200 rounded p-2">
-            {error}
-          </p>
-        )}
+      {error && (
+        <p className="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-600">{error}</p>
+      )}
 
-        <div>
-          <label className="block text-sm font-medium mb-1" htmlFor="email">
-            Email
+      <div>
+        <label className="mb-1 block text-sm font-medium" htmlFor="email">
+          {t("email")}
+        </label>
+        <input
+          id="email"
+          name="email"
+          type="email"
+          autoComplete="email"
+          required
+          className="w-full rounded border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+
+      <div>
+        <div className="mb-1 flex items-baseline justify-between">
+          <label className="block text-sm font-medium" htmlFor="password">
+            {t("password")}
           </label>
-          <input
-            id="email"
-            name="email"
-            type="email"
-            required
-            className="w-full border rounded px-3 py-2 text-sm"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium mb-1" htmlFor="password">
-            Password
-          </label>
-          <input
-            id="password"
-            name="password"
-            type="password"
-            required
-            className="w-full border rounded px-3 py-2 text-sm"
-          />
-        </div>
-
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full bg-black text-white rounded py-2 text-sm font-medium disabled:opacity-50"
-        >
-          {loading ? "Logging in…" : "Log in"}
-        </button>
-
-        <p className="text-center text-sm text-gray-500">
-          No account?{" "}
-          <a href="/signup" className="underline">
-            Sign up
+          <a
+            href={`/${locale}/forgot-password`}
+            className="text-xs text-gray-500 hover:text-gray-700 hover:underline"
+          >
+            {t("forgotPassword")}
           </a>
-        </p>
-      </form>
-    </div>
+        </div>
+        <input
+          id="password"
+          name="password"
+          type="password"
+          autoComplete="current-password"
+          required
+          className="w-full rounded border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+
+      <button
+        type="submit"
+        disabled={loading}
+        className="w-full rounded bg-black py-2 text-sm font-medium text-white disabled:opacity-50"
+      >
+        {loading ? t("submitting") : t("submit")}
+      </button>
+
+      <p className="text-center text-sm text-gray-500">
+        {t("noAccount")}{" "}
+        <a href={`/${locale}/signup`} className="font-medium text-gray-700 underline">
+          {t("signupLink")}
+        </a>
+      </p>
+    </form>
   );
 }

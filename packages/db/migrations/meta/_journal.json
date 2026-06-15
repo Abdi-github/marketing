@@ -15,6 +15,258 @@
       "when": 1779791916108,
       "tag": "0001_fixed_enchantress",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1748300400000,
+      "tag": "0002_content_ai_usage",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1748386800000,
+      "tag": "0003_billing",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1748473200000,
+      "tag": "0004_landing_leads",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1748559600000,
+      "tag": "0005_integrations",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1748646000000,
+      "tag": "0006_ga_tenants",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1748732400000,
+      "tag": "0007_tenant_metrics",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1748818800000,
+      "tag": "0008_it_ch_locale",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1748905200000,
+      "tag": "0009_social_post_image",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1748991600000,
+      "tag": "0010_crm_contacts",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1748991700000,
+      "tag": "0011_vertical_free_text",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1748991800000,
+      "tag": "0012_add_en_locale",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1748991900000,
+      "tag": "0013_social_post_threads",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1748992000000,
+      "tag": "0014_meta_publish_tracking",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1748992100000,
+      "tag": "0015_contacts_lifecycle",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1748992200000,
+      "tag": "0016_landing_page_templates",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1748992300000,
+      "tag": "0017_brand_assets",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1748992400000,
+      "tag": "0018_landing_pages_seo",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1748992500000,
+      "tag": "0019_forms_smart",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1748992600000,
+      "tag": "0020_behavioral_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1748992700000,
+      "tag": "0021_email_sequences",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1748992800000,
+      "tag": "0022_deals",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1748992900000,
+      "tag": "0023_segments",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1748993000000,
+      "tag": "0024_whatsapp",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1748993100000,
+      "tag": "0025_copilot",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1748993200000,
+      "tag": "0026_experiments",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1749000000000,
+      "tag": "0027_landing_page_templates_v2",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1749086400000,
+      "tag": "0028_custom_domains",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1749172800000,
+      "tag": "0029_social_post_creatives",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1781444000000,
+      "tag": "0030_form_analytics_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1781445000000,
+      "tag": "0031_lead_submission_status",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1781446000000,
+      "tag": "0032_crm_safety_hardening",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1781447000000,
+      "tag": "0033_crm_tasks",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1781532000000,
+      "tag": "0034_email_suppressions",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1781618400000,
+      "tag": "0035_email_preferences_and_sending_domains",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1781704800000,
+      "tag": "0036_integration_sync_runs",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1781791200000,
+      "tag": "0037_media_assets",
+      "breakpoints": true
     }
   ]
 }

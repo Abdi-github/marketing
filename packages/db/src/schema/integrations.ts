@@ -1,5 +1,6 @@
 import {
   index,
+  integer,
   jsonb,
   pgEnum,
   pgTable,
@@ -20,6 +21,15 @@ export const integrationProviderEnum = pgEnum("integration_provider", [
   "meta",
   "google_business",
   "resend",
+]);
+
+export const integrationSyncStatusEnum = pgEnum("integration_sync_status", [
+  "queued",
+  "running",
+  "success",
+  "partial",
+  "noop",
+  "error",
 ]);
 
 export const connectionStatusEnum = pgEnum("connection_status", [
@@ -63,3 +73,41 @@ export const integrationConnections = pgTable(
 
 export type IntegrationConnection = typeof integrationConnections.$inferSelect;
 export type NewIntegrationConnection = typeof integrationConnections.$inferInsert;
+
+export const integrationSyncRuns = pgTable(
+  "integration_sync_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    connectionId: uuid("connection_id")
+      .notNull()
+      .references(() => integrationConnections.id, { onDelete: "cascade" }),
+    provider: integrationProviderEnum("provider").notNull(),
+    externalAccountId: text("external_account_id").notNull().default("default"),
+    status: integrationSyncStatusEnum("status").notNull().default("queued"),
+    source: text("source").notNull().default("manual"),
+    recordsProcessed: integer("records_processed").notNull().default(0),
+    errorMessage: text("error_message"),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    tenantIdx: index("integration_sync_runs_tenant_id_idx").on(t.tenantId),
+    connectionCreatedIdx: index("integration_sync_runs_connection_created_idx").on(
+      t.connectionId,
+      t.createdAt,
+    ),
+    providerCreatedIdx: index("integration_sync_runs_provider_created_idx").on(
+      t.tenantId,
+      t.provider,
+      t.createdAt,
+    ),
+  }),
+);
+
+export type IntegrationSyncRun = typeof integrationSyncRuns.$inferSelect;
+export type NewIntegrationSyncRun = typeof integrationSyncRuns.$inferInsert;

@@ -23,7 +23,9 @@ export function PreviewSyncBridge() {
       node.style.boxShadow = "inset 0 0 0 3px rgba(147,51,234,0.6)";
       window.setTimeout(() => {
         node.style.boxShadow = prev;
-        window.setTimeout(() => { node.style.transition = prevTransition; }, 250);
+        window.setTimeout(() => {
+          node.style.transition = prevTransition;
+        }, 250);
       }, 900);
     }
 
@@ -31,7 +33,13 @@ export function PreviewSyncBridge() {
     function onMessage(e: MessageEvent) {
       if (e.origin !== parentOrigin) return;
       const data = e.data as { source?: string; type?: string; index?: number } | null;
-      if (!data || data.source !== "lp-editor" || data.type !== "scrollTo" || typeof data.index !== "number") return;
+      if (
+        !data ||
+        data.source !== "lp-editor" ||
+        data.type !== "scrollTo" ||
+        typeof data.index !== "number"
+      )
+        return;
       const el = document.getElementById(`lp-section-${data.index}`);
       if (el) {
         el.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -54,11 +62,17 @@ export function PreviewSyncBridge() {
         let best = -1;
         let bestRatio = 0;
         for (const [idx, ratio] of visibility) {
-          if (ratio > bestRatio) { bestRatio = ratio; best = idx; }
+          if (ratio > bestRatio) {
+            bestRatio = ratio;
+            best = idx;
+          }
         }
         if (best !== -1 && best !== lastSent) {
           lastSent = best;
-          window.parent?.postMessage({ source: "lp-preview", type: "active", index: best }, parentOrigin);
+          window.parent?.postMessage(
+            { source: "lp-preview", type: "active", index: best },
+            parentOrigin,
+          );
         }
       },
       { threshold: [0.1, 0.25, 0.5, 0.75] },

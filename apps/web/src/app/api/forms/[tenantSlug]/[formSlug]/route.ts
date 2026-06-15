@@ -3,15 +3,22 @@
 // Rate-limited at the middleware layer (IP-based).
 // See docs/WORKFLOWS.md §Lead capture.
 import { db } from "@marketing/db";
-import { forms, leads, tenants, outbox, contacts } from "@marketing/db";
+import { forms, leads, tenants, outbox, contacts, crmTasks } from "@marketing/db";
 import { logger } from "@marketing/shared";
 import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { validateAndSanitizeFormPayload } from "../../../../../lib/form-validation";
 
 export const dynamic = "force-dynamic";
 
 type Params = Promise<{ tenantSlug: string; formSlug: string }>;
+
+function buildLeadFollowUpDueAt(now = new Date()): Date {
+  const dueAt = new Date(now);
+  dueAt.setHours(dueAt.getHours() + 4);
+  return dueAt;
+}
 
 // ─── Turnstile verification ────────────────────────────────────────────────────
 
@@ -36,29 +43,6 @@ async function verifyTurnstile(token: string): Promise<boolean> {
 
 // ─── Required field validator ──────────────────────────────────────────────────
 
-function getMissingRequired(
-  payload: Record<string, unknown>,
-  form: { schema: unknown; steps: unknown },
-): string[] {
-  // Smart form mode: required fields are declared per-field in steps
-  if (Array.isArray(form.steps)) {
-    const missing: string[] = [];
-    for (const step of form.steps as Array<{ fields: Array<{ name: string; required?: boolean }> }>) {
-      for (const field of step.fields ?? []) {
-        if (field.required && !payload[field.name]) {
-          missing.push(field.name);
-        }
-      }
-    }
-    return missing;
-  }
-
-  // Legacy mode: required comes from schema.required array
-  const schemaObj = form.schema as Record<string, unknown>;
-  const required = Array.isArray(schemaObj["required"]) ? (schemaObj["required"] as string[]) : [];
-  return required.filter((k) => !(k in payload) || payload[k] === undefined || payload[k] === "");
-}
-
 // ─── Handler ───────────────────────────────────────────────────────────────────
 
 export async function POST(
@@ -81,13 +65,7 @@ export async function POST(
   const [form] = await db
     .select()
     .from(forms)
-    .where(
-      and(
-        eq(forms.tenantId, tenant.id),
-        eq(forms.slug, formSlug),
-        eq(forms.isActive, true),
-      ),
-    );
+    .where(and(eq(forms.tenantId, tenant.id), eq(forms.slug, formSlug), eq(forms.isActive, true)));
 
   if (!form) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -128,16 +106,20 @@ export async function POST(
   delete payload["__hp"];
   delete payload["__cf_turnstile"];
 
-  // 7. Validate required fields.
-  const missing = getMissingRequired(payload, form);
-  if (missing.length > 0) {
+  // 7. Validate and sanitize fields before storing or creating CRM contacts.
+  const validation = validateAndSanitizeFormPayload(payload, form);
+  if (!validation.ok) {
     return NextResponse.json(
-      { error: `Missing required fields: ${missing.join(", ")}` },
+      {
+        error: validation.errors.map((err) => err.message).join(", "),
+        fields: validation.errors,
+      },
       { status: 422 },
     );
   }
+  const sanitizedPayload = validation.payload;
 
-  // 8. Insert lead + outbox event in a transaction.
+  // 8. Insert lead + CRM contact + outbox event in one transaction.
   const sourceUrl = req.headers.get("referer") ?? undefined;
 
   try {
@@ -147,24 +129,14 @@ export async function POST(
         .values({
           tenantId: tenant.id,
           formId: form.id,
-          payload,
+          payload: sanitizedPayload,
           sourceUrl,
         })
         .returning({ id: leads.id });
 
-      await tx.insert(outbox).values({
-        tenantId: tenant.id,
-        type: "lead.captured",
-        payload: {
-          leadId: lead!.id,
-          formId: form.id,
-          tenantId: tenant.id,
-          formSlug,
-        },
-      });
-
       // CRM dedup: find-or-create contact by email, then link the lead.
-      const rawEmail = payload["email"];
+      let capturedContactId: string | null = null;
+      const rawEmail = sanitizedPayload["email"];
       if (typeof rawEmail === "string" && rawEmail.trim()) {
         const email = rawEmail.toLowerCase().trim();
 
@@ -178,14 +150,18 @@ export async function POST(
           await tx
             .update(contacts)
             .set({ lastSeenAt: new Date(), updatedAt: new Date() })
-            .where(eq(contacts.id, existing.id));
+            .where(and(eq(contacts.tenantId, tenant.id), eq(contacts.id, existing.id)));
           contactId = existing.id;
         } else {
-          const rawName = typeof payload["name"] === "string" ? payload["name"].trim() : "";
+          const rawName =
+            typeof sanitizedPayload["name"] === "string" ? sanitizedPayload["name"].trim() : "";
           const spaceIdx = rawName.indexOf(" ");
           const firstName = spaceIdx > -1 ? rawName.slice(0, spaceIdx) : rawName || null;
           const lastName = spaceIdx > -1 ? rawName.slice(spaceIdx + 1) || null : null;
-          const phone = typeof payload["phone"] === "string" ? payload["phone"].trim() || null : null;
+          const phone =
+            typeof sanitizedPayload["phone"] === "string"
+              ? sanitizedPayload["phone"].trim() || null
+              : null;
 
           const [newContact] = await tx
             .insert(contacts)
@@ -197,8 +173,33 @@ export async function POST(
         await tx
           .update(leads)
           .set({ contactId })
-          .where(eq(leads.id, lead!.id));
+          .where(and(eq(leads.tenantId, tenant.id), eq(leads.id, lead!.id)));
+
+        capturedContactId = contactId;
+
+        await tx.insert(crmTasks).values({
+          tenantId: tenant.id,
+          contactId,
+          title: `Follow up new ${form.name} lead`,
+          body: sourceUrl
+            ? `New form submission from ${form.name}. Source: ${sourceUrl}`
+            : `New form submission from ${form.name}.`,
+          dueAt: buildLeadFollowUpDueAt(),
+          priority: "high",
+        });
       }
+
+      await tx.insert(outbox).values({
+        tenantId: tenant.id,
+        type: "lead.captured",
+        payload: {
+          leadId: lead!.id,
+          formId: form.id,
+          tenantId: tenant.id,
+          formSlug,
+          contactId: capturedContactId,
+        },
+      });
     });
   } catch (err) {
     logger.error({ err: String(err), tenantSlug, formSlug }, "[form] insert failed");

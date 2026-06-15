@@ -17,7 +17,7 @@ const ROLE_RANK: Record<TenantRole, number> = {
 };
 
 export function hasRole(ctx: TenantContext, minimum: TenantRole): boolean {
-  return ROLE_RANK[ctx.role] >= ROLE_RANK[minimum];
+  return (ROLE_RANK[ctx.role] ?? 0) >= (ROLE_RANK[minimum] ?? 0);
 }
 
 export function assertRole(ctx: TenantContext, minimum: TenantRole): void {

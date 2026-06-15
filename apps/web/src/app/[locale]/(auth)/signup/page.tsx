@@ -1,8 +1,12 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
+import { useLocale, useTranslations } from "next-intl";
 
 export default function SignupPage() {
+  const locale = useLocale();
+  const t = useTranslations("Signup");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
@@ -21,15 +25,15 @@ export default function SignupPage() {
     };
 
     try {
-      // Step 1: atomic signup via tRPC.
+      // Step 1: atomic signup via tRPC (non-batch: plain input body).
       const signupRes = await fetch("/api/trpc/auth.signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ "0": { json: body } }),
+        body: JSON.stringify(body),
       });
       if (!signupRes.ok) {
         const data = await signupRes.json().catch(() => ({}));
-        throw new Error(data?.[0]?.error?.json?.message ?? "Signup failed");
+        throw new Error(data?.error?.message ?? data?.[0]?.error?.json?.message ?? "Signup failed");
       }
 
       // Step 2: sign in via Better-Auth to issue the session cookie.
@@ -53,97 +57,96 @@ export default function SignupPage() {
 
   if (done) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold mb-2">Welcome!</h1>
-          <p className="text-gray-600">Your account is ready. <a href="/" className="underline">Go to dashboard</a></p>
-        </div>
+      <div className="space-y-2 text-center">
+        <h1 className="text-2xl font-bold">{t("welcomeTitle")}</h1>
+        <p className="text-gray-600">
+          {t("welcomeBody")}{" "}
+          <a href={`/${locale}/dashboard`} className="underline">
+            {t("goToDashboard")}
+          </a>
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50">
-      <form
-        onSubmit={handleSubmit}
-        className="bg-white p-8 rounded-lg shadow w-full max-w-md space-y-4"
+    <form onSubmit={handleSubmit} className="w-full space-y-4">
+      <h1 className="text-2xl font-bold">{t("title")}</h1>
+
+      {error && (
+        <p className="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-600">{error}</p>
+      )}
+
+      <div>
+        <label className="mb-1 block text-sm font-medium" htmlFor="name">
+          {t("name")}
+        </label>
+        <input
+          id="name"
+          name="name"
+          type="text"
+          autoComplete="name"
+          required
+          className="w-full rounded border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+
+      <div>
+        <label className="mb-1 block text-sm font-medium" htmlFor="email">
+          {t("email")}
+        </label>
+        <input
+          id="email"
+          name="email"
+          type="email"
+          autoComplete="email"
+          required
+          className="w-full rounded border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+
+      <div>
+        <label className="mb-1 block text-sm font-medium" htmlFor="password">
+          {t("password")}
+        </label>
+        <input
+          id="password"
+          name="password"
+          type="password"
+          autoComplete="new-password"
+          required
+          minLength={8}
+          className="w-full rounded border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+
+      <div>
+        <label className="mb-1 block text-sm font-medium" htmlFor="businessName">
+          {t("businessName")}
+        </label>
+        <input
+          id="businessName"
+          name="businessName"
+          type="text"
+          required
+          className="w-full rounded border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+
+      <button
+        type="submit"
+        disabled={loading}
+        className="w-full rounded bg-black py-2 text-sm font-medium text-white disabled:opacity-50"
       >
-        <h1 className="text-2xl font-bold">Create your account</h1>
+        {loading ? t("submitting") : t("submit")}
+      </button>
 
-        {error && (
-          <p className="text-red-600 text-sm bg-red-50 border border-red-200 rounded p-2">
-            {error}
-          </p>
-        )}
-
-        <div>
-          <label className="block text-sm font-medium mb-1" htmlFor="name">
-            Your name
-          </label>
-          <input
-            id="name"
-            name="name"
-            type="text"
-            required
-            className="w-full border rounded px-3 py-2 text-sm"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium mb-1" htmlFor="email">
-            Email
-          </label>
-          <input
-            id="email"
-            name="email"
-            type="email"
-            required
-            className="w-full border rounded px-3 py-2 text-sm"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium mb-1" htmlFor="password">
-            Password (min. 8 characters)
-          </label>
-          <input
-            id="password"
-            name="password"
-            type="password"
-            required
-            minLength={8}
-            className="w-full border rounded px-3 py-2 text-sm"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium mb-1" htmlFor="businessName">
-            Business name
-          </label>
-          <input
-            id="businessName"
-            name="businessName"
-            type="text"
-            required
-            className="w-full border rounded px-3 py-2 text-sm"
-          />
-        </div>
-
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full bg-black text-white rounded py-2 text-sm font-medium disabled:opacity-50"
-        >
-          {loading ? "Creating account…" : "Create account"}
-        </button>
-
-        <p className="text-center text-sm text-gray-500">
-          Already have an account?{" "}
-          <a href="/login" className="underline">
-            Log in
-          </a>
-        </p>
-      </form>
-    </div>
+      <p className="text-center text-sm text-gray-500">
+        {t("haveAccount")}{" "}
+        <Link href={`/${locale}/login`} className="font-medium text-gray-700 underline">
+          {t("loginLink")}
+        </Link>
+      </p>
+    </form>
   );
 }

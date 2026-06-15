@@ -23,6 +23,7 @@ drizzle/.snapshot/
 .env
 .env.*
 !.env.example
+!.env.*.example
 *.pem
 *.key
 
@@ -56,3 +57,21 @@ plan/
 docs/
 .agents/
 .trae/
+verification/
+.codex*
+.playwright-mcp/
+audit*
+documentation/
+docs/
+*.png
+CLAUDE.md
+CODEX_ONBOARDING.md
+COPILOT_ONBOARDING.md
+FEATURE_GUIDE.md
+nul
+VERIFICATION_REPORT.md
+AGENTS.md
+graphics/
+.github/prompts/
+.github/agents/
+.github/copilot-instructions.md
