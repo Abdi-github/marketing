@@ -20,10 +20,40 @@ const devTrustedOrigins =
       ]
     : [];
 
+function toTrustedOrigin(value: string | undefined): string | null {
+  if (!value) return null;
+
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+
+  try {
+    return new URL(withProtocol).origin;
+  } catch {
+    return null;
+  }
+}
+
+const trustedOrigins = Array.from(
+  new Set(
+    [
+      ...devTrustedOrigins,
+      env.BETTER_AUTH_URL,
+      env.APP_URL,
+      process.env["VERCEL_URL"],
+      process.env["VERCEL_BRANCH_URL"],
+      process.env["VERCEL_PROJECT_PRODUCTION_URL"],
+    ]
+      .map(toTrustedOrigin)
+      .filter((value): value is string => Boolean(value)),
+  ),
+);
+
 export const auth = betterAuth({
   secret: env.BETTER_AUTH_SECRET,
   baseURL: env.BETTER_AUTH_URL,
-  trustedOrigins: devTrustedOrigins,
+  trustedOrigins,
 
   database: drizzleAdapter(db, {
     provider: "pg",
@@ -45,10 +75,16 @@ export const auth = betterAuth({
     },
     // Email sending deferred to step-10 (Resend integration).
     sendResetPassword: async ({ url }: { url: string }) => {
-      logger.info({ event: "auth.password_reset_url", url }, "password-reset URL (dev only — replace with Resend in step-10)");
+      logger.info(
+        { event: "auth.password_reset_url", url },
+        "password-reset URL (dev only — replace with Resend in step-10)",
+      );
     },
     sendEmailVerification: async ({ url }: { url: string }) => {
-      logger.info({ event: "auth.email_verification_url", url }, "email-verification URL (dev only — replace with Resend in step-10)");
+      logger.info(
+        { event: "auth.email_verification_url", url },
+        "email-verification URL (dev only — replace with Resend in step-10)",
+      );
     },
   },
 
