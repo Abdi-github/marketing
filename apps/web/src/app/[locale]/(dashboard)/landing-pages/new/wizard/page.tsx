@@ -239,6 +239,7 @@ export default function LandingPageWizard() {
   const [generating, setGenerating] = useState(false);
   const [generatingId, setGeneratingId] = useState<string | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
+  const [generationFailed, setGenerationFailed] = useState(false);
   const [isSlowGeneration, setIsSlowGeneration] = useState(false);
   const [generationActionPending, setGenerationActionPending] = useState(false);
   const [templates, setTemplates] = useState<TemplateLite[]>([]);
@@ -285,6 +286,15 @@ export default function LandingPageWizard() {
           router.push(`/${routeLocale}/landing-pages/${generatingId}/edit`);
           return;
         }
+        if (page?.generationState === "failed") {
+          setGenerationFailed(true);
+          setIsSlowGeneration(false);
+          setGenerationError(
+            page.generationError ??
+              "Generation failed. Remove the draft or check your plan before trying again.",
+          );
+          return;
+        }
         if (page?.generationState === "paused") {
           setGenerating(false);
           router.push(`/${routeLocale}/landing-pages`);
@@ -307,7 +317,7 @@ export default function LandingPageWizard() {
   }, [generatingId, routeLocale, router]);
 
   useEffect(() => {
-    if (!generating) return;
+    if (!generating || generationFailed) return;
     const timeout = setTimeout(() => {
       setIsSlowGeneration(true);
       setGenerationError(
@@ -317,7 +327,7 @@ export default function LandingPageWizard() {
       );
     }, 90_000);
     return () => clearTimeout(timeout);
-  }, [generating, generatingId]);
+  }, [generating, generationFailed, generatingId]);
 
   // ─── Step navigation ────────────────────────────────────────────────────────
 
@@ -378,6 +388,7 @@ export default function LandingPageWizard() {
     setGenerating(true);
     setGeneratingId(landingPageId);
     setGenerationError(null);
+    setGenerationFailed(false);
     setIsSlowGeneration(false);
     pollErrorCountRef.current = 0;
     try {
@@ -409,17 +420,18 @@ export default function LandingPageWizard() {
     return (
       <GeneratingScreen
         error={generationError}
-        editorHref={generatingId ? `/${routeLocale}/landing-pages/${generatingId}/edit` : undefined}
         pagesHref={`/${routeLocale}/landing-pages`}
         isSlow={isSlowGeneration}
+        isFailed={generationFailed}
         isActionPending={generationActionPending}
         onCancel={() => {
           setGenerating(false);
           setGeneratingId(null);
+          setGenerationFailed(false);
           setIsSlowGeneration(false);
         }}
         onPause={
-          generatingId
+          generatingId && !generationFailed
             ? async () => {
                 setGenerationActionPending(true);
                 try {
@@ -1266,6 +1278,7 @@ function GeneratingScreen({
   editorHref,
   pagesHref,
   isSlow,
+  isFailed,
   isActionPending,
   onCancel,
   onPause,
@@ -1275,6 +1288,7 @@ function GeneratingScreen({
   editorHref?: string;
   pagesHref: string;
   isSlow: boolean;
+  isFailed: boolean;
   isActionPending: boolean;
   onCancel: () => void;
   onPause?: () => Promise<void>;
@@ -1283,21 +1297,38 @@ function GeneratingScreen({
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-purple-50 via-white to-pink-50 p-6">
       <div className="max-w-md text-center">
-        <div className="relative mx-auto mb-8 h-24 w-24">
-          <div className="absolute inset-0 animate-pulse rounded-full border-4 border-purple-200" />
-          <div className="absolute inset-0 animate-spin rounded-full border-4 border-purple-600 border-t-transparent" />
-          <div className="absolute inset-0 flex items-center justify-center text-xl font-semibold">
-            AI
+        {isFailed ? (
+          <div className="mx-auto mb-8 flex h-24 w-24 items-center justify-center rounded-full border-4 border-red-200 bg-red-50 text-4xl text-red-600">
+            !
           </div>
-        </div>
+        ) : (
+          <div className="relative mx-auto mb-8 h-24 w-24">
+            <div className="absolute inset-0 animate-pulse rounded-full border-4 border-purple-200" />
+            <div className="absolute inset-0 animate-spin rounded-full border-4 border-purple-600 border-t-transparent" />
+            <div className="absolute inset-0 flex items-center justify-center text-xl font-semibold">
+              AI
+            </div>
+          </div>
+        )}
         <h1 className="mb-2 text-2xl font-bold text-gray-900">
-          {isSlow ? "Still generating..." : "Crafting your page..."}
+          {isFailed
+            ? "Generation stopped"
+            : isSlow
+              ? "Still generating..."
+              : "Crafting your page..."}
         </h1>
         <p className="mb-1 text-gray-600">
-          {isSlow ? "The job is still running in the background." : "This takes about 30 seconds."}
+          {isFailed
+            ? "We saved the draft, but the AI job did not complete."
+            : isSlow
+              ? "The job is still running in the background."
+              : "This takes about 30 seconds."}
         </p>
         <p className="text-sm text-gray-500">
-          {error ?? "We're writing copy, picking layouts, and assembling your design."}
+          {error ??
+            (isFailed
+              ? "Remove the draft or check your plan before trying again."
+              : "We're writing copy, picking layouts, and assembling your design.")}
         </p>
         <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row sm:flex-wrap">
           <a
@@ -1306,14 +1337,6 @@ function GeneratingScreen({
           >
             View pages
           </a>
-          {editorHref && (
-            <a
-              href={editorHref}
-              className="rounded-lg border border-gray-200 px-6 py-2.5 font-semibold text-gray-700 hover:bg-white"
-            >
-              Open editor
-            </a>
-          )}
           {onPause && (
             <button
               onClick={() => void onPause()}

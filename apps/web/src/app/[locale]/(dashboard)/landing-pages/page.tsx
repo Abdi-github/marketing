@@ -18,6 +18,7 @@ type PageItem = {
   status: PageStatus;
   currentVersionId: string | null;
   generationState: PageGenerationState;
+  generationError?: string | null;
   publishedAt: string | Date | null;
   createdAt: string | Date;
 };
@@ -595,6 +596,11 @@ export default function LandingPagesPage() {
                   {isPaused && (
                     <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
                       Generation is paused. You can remove this draft when you're ready.
+                    </div>
+                  )}
+                  {page.status === "failed" && page.generationError && (
+                    <div className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
+                      {page.generationError}
                     </div>
                   )}
 

@@ -7,8 +7,10 @@ import {
   landingPageCompositionSchema,
   landingPageSectionSchema,
 } from "@marketing/ai-router";
+import { getPlanCaps } from "@marketing/billing";
 import { db } from "@marketing/db";
 import {
+  aiUsage,
   landingPages,
   landingPageVersions,
   landingPageTemplates,
@@ -91,14 +93,21 @@ function normalizedLanguagePreferences(input: {
   );
 }
 
-type LandingGenerationControlState = "running" | "paused" | "cancelled";
+type LandingGenerationControlState = "running" | "paused" | "cancelled" | "failed";
 type LandingGenerationState = "generating" | "paused" | "ready" | "published" | "failed";
 
 function getLandingGenerationControlState(
   stepData: Record<string, unknown> | null | undefined,
 ): LandingGenerationControlState {
   const state = (stepData?.["generationControl"] as { state?: unknown } | undefined)?.state;
-  return state === "paused" || state === "cancelled" ? state : "running";
+  return state === "paused" || state === "cancelled" || state === "failed" ? state : "running";
+}
+
+function getLandingGenerationError(
+  stepData: Record<string, unknown> | null | undefined,
+): string | null {
+  const reason = (stepData?.["generationControl"] as { reason?: unknown } | undefined)?.reason;
+  return typeof reason === "string" && reason.trim().length > 0 ? reason : null;
 }
 
 function getLandingGenerationState(input: {
@@ -106,12 +115,55 @@ function getLandingGenerationState(input: {
   currentVersionId: string | null;
   stepData: Record<string, unknown> | null | undefined;
 }): LandingGenerationState {
+  const controlState = getLandingGenerationControlState(input.stepData);
+  if (controlState === "failed") return "failed";
   if (input.status === "failed") return "failed";
   if (input.status === "published") return "published";
   if (!input.currentVersionId) {
-    return getLandingGenerationControlState(input.stepData) === "paused" ? "paused" : "generating";
+    return controlState === "paused" ? "paused" : "generating";
   }
   return "ready";
+}
+
+async function assertLandingGenerationBudgetAvailable(
+  tenantId: string,
+  estimatedCostCents: number,
+): Promise<void> {
+  const [tenant] = await db
+    .select({ plan: tenants.plan })
+    .from(tenants)
+    .where(eq(tenants.id, tenantId));
+
+  const plan = tenant?.plan ?? "trial";
+  const planCaps = getPlanCaps(plan);
+  const monthStart = new Date();
+  monthStart.setUTCDate(1);
+  monthStart.setUTCHours(0, 0, 0, 0);
+
+  const [row] = await db
+    .select({ total: sql<string>`COALESCE(SUM(cost_usd), 0)` })
+    .from(aiUsage)
+    .where(
+      and(eq(aiUsage.tenantId, tenantId), sql`${aiUsage.createdAt} >= ${monthStart.toISOString()}`),
+    );
+
+  const monthlySpendUsd = Number.parseFloat(row?.total ?? "0");
+  const estimatedCostUsd = estimatedCostCents / 100;
+
+  if (monthlySpendUsd >= planCaps.monthlyAiBudgetUsd) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: `Monthly AI budget exceeded (${plan}: USD ${planCaps.monthlyAiBudgetUsd.toFixed(2)}). Upgrade your plan or wait until next month to generate a new page.`,
+    });
+  }
+
+  if (monthlySpendUsd + estimatedCostUsd > planCaps.monthlyAiBudgetUsd) {
+    const remainingUsd = Math.max(0, planCaps.monthlyAiBudgetUsd - monthlySpendUsd);
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: `Not enough monthly AI budget remaining for this generation. Remaining: USD ${remainingUsd.toFixed(2)} on the ${plan} plan.`,
+    });
+  }
 }
 
 async function getNextVersionNumber(tenantId: string, pageId: string): Promise<number> {
@@ -501,6 +553,8 @@ export const landingPagesRouter = router({
         if (templateBrandHints) initialStepData["templateBrandHints"] = templateBrandHints;
       }
 
+      await assertLandingGenerationBudgetAvailable(tenantId, 50);
+
       await db.insert(landingPages).values({
         id: landingPageId,
         tenantId,
@@ -740,6 +794,7 @@ export const landingPagesRouter = router({
         defaultLocale: input.defaultLocale ?? input.locale,
         fallbackLocale: input.locale,
       });
+      const estimatedCostCents = input.imageStrategy === "ai" ? 80 : 50;
 
       // stepData carries everything the worker needs. Template fields are only seeded
       // when a template was chosen; otherwise the worker free-forms from the wizard payload.
@@ -770,6 +825,8 @@ export const landingPagesRouter = router({
         initialStepData["imageBundleKey"] = template.imageBundleKey;
       }
 
+      await assertLandingGenerationBudgetAvailable(tenantId, estimatedCostCents);
+
       await db.insert(landingPages).values({
         id: landingPageId,
         tenantId,
@@ -791,7 +848,7 @@ export const landingPagesRouter = router({
         languagePreferences,
         userPrompt: input.brief,
         templateKey: input.templateKey,
-        costBudgetCents: input.imageStrategy === "ai" ? 80 : 50,
+        costBudgetCents: estimatedCostCents,
       });
 
       return { landingPageId };
@@ -833,6 +890,9 @@ export const landingPagesRouter = router({
           currentVersionId: page.currentVersionId,
           stepData: (page.stepData as Record<string, unknown> | null) ?? null,
         }),
+        generationError: getLandingGenerationError(
+          (page.stepData as Record<string, unknown> | null) ?? null,
+        ),
       };
     }),
 
@@ -883,6 +943,9 @@ export const landingPagesRouter = router({
           currentVersionId: page.currentVersionId,
           stepData: (page.stepData as Record<string, unknown> | null) ?? null,
         }),
+        generationError: getLandingGenerationError(
+          (page.stepData as Record<string, unknown> | null) ?? null,
+        ),
       })),
       tenantSlug: tenant?.slug ?? "",
       primaryDomain: primaryDomainRow?.hostname ?? null,

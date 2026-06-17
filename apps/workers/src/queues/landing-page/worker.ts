@@ -220,13 +220,13 @@ async function getLandingPage(ctx: TenantContext, pageId: string) {
   return page ?? null;
 }
 
-type LandingGenerationControlState = "running" | "paused" | "cancelled";
+type LandingGenerationControlState = "running" | "paused" | "cancelled" | "failed";
 
 function getGenerationControlState(
   stepData: Record<string, unknown> | null | undefined,
 ): LandingGenerationControlState {
   const state = (stepData?.["generationControl"] as { state?: unknown } | undefined)?.state;
-  return state === "paused" || state === "cancelled" ? state : "running";
+  return state === "paused" || state === "cancelled" || state === "failed" ? state : "running";
 }
 
 async function assertGenerationRunnable(
@@ -241,7 +241,7 @@ async function assertGenerationRunnable(
   const state = getGenerationControlState(
     (page.stepData as Record<string, unknown> | null) ?? null,
   );
-  if (state === "paused" || state === "cancelled") {
+  if (state === "paused" || state === "cancelled" || state === "failed") {
     throw new UnrecoverableError(`Landing page ${pageId} is ${state}; aborting ${step}`);
   }
   return page;
@@ -270,10 +270,26 @@ async function updateStepDataPatch(
     .where(and(eq(landingPages.tenantId, ctx.tenantId), eq(landingPages.id, pageId)));
 }
 
-async function markLandingPageFailed(ctx: TenantContext, pageId: string): Promise<void> {
+async function markLandingPageFailed(
+  ctx: TenantContext,
+  pageId: string,
+  opts?: { reason?: string; step?: LandingPageJob["step"] },
+): Promise<void> {
+  const failurePatch = {
+    generationControl: {
+      state: "failed",
+      failedAt: new Date().toISOString(),
+      ...(opts?.reason ? { reason: opts.reason } : {}),
+      ...(opts?.step ? { failedStep: opts.step } : {}),
+    },
+  };
   await db
     .update(landingPages)
-    .set({ status: "failed", updatedAt: new Date() })
+    .set({
+      status: "failed",
+      stepData: sql`COALESCE(${landingPages.stepData}, '{}'::jsonb) || ${JSON.stringify(failurePatch)}::jsonb`,
+      updatedAt: new Date(),
+    })
     .where(and(eq(landingPages.tenantId, ctx.tenantId), eq(landingPages.id, pageId)));
 }
 
@@ -782,6 +798,7 @@ async function handleBrief(
   });
 
   let aiUsageId: string;
+  const usageJobId = deriveUsageJobId(jobId, "brief");
 
   const result = await getRouter().route(
     {
@@ -792,7 +809,7 @@ async function handleBrief(
     },
     {
       tenantId: ctx.tenantId,
-      jobId,
+      jobId: usageJobId,
       promptId: data.promptId,
       promptVersion: data.promptVersion,
       costBudgetCents: planCaps.perJobBudgetCents,
@@ -945,6 +962,7 @@ async function handleCopy(
   });
 
   let aiUsageId: string;
+  const usageJobId = deriveUsageJobId(jobId, "copy");
 
   const result = await getRouter().routeWithTools(
     {
@@ -956,7 +974,7 @@ async function handleCopy(
     [GENERATE_SECTIONS_TOOL],
     {
       tenantId: ctx.tenantId,
-      jobId,
+      jobId: usageJobId,
       promptId: data.promptId,
       promptVersion: data.promptVersion,
       costBudgetCents: planCaps.perJobBudgetCents,
@@ -1009,6 +1027,7 @@ async function handleLayout(
   });
 
   let aiUsageId: string;
+  const usageJobId = deriveUsageJobId(jobId, "layout");
 
   const result = await getRouter().routeWithTools(
     {
@@ -1020,7 +1039,7 @@ async function handleLayout(
     [COMPOSE_LAYOUT_TOOL],
     {
       tenantId: ctx.tenantId,
-      jobId,
+      jobId: usageJobId,
       promptId: data.promptId,
       promptVersion: data.promptVersion,
       costBudgetCents: planCaps.perJobBudgetCents,
@@ -1482,7 +1501,10 @@ export async function handleLandingPageJob(job: Job<LandingPageJob>): Promise<vo
     .from(tenants)
     .where(eq(tenants.id, tenantId));
   if (tenantRow?.suspended) {
-    await markLandingPageFailed(ctx, landingPageId);
+    await markLandingPageFailed(ctx, landingPageId, {
+      reason: "Generation stopped because this tenant is suspended.",
+      step: data.step,
+    });
     logger.warn({ tenantId }, "[landing-page] tenant suspended — aborting");
     throw new UnrecoverableError(`Tenant ${tenantId} is suspended`);
   }
@@ -1500,7 +1522,10 @@ export async function handleLandingPageJob(job: Job<LandingPageJob>): Promise<vo
           },
         }).catch(() => null);
       } else {
-        await markLandingPageFailed(ctx, landingPageId);
+        await markLandingPageFailed(ctx, landingPageId, {
+          reason: `Monthly AI budget exceeded (${tenantPlan}: USD ${planCaps.monthlyAiBudgetUsd.toFixed(2)}). Upgrade your plan or wait until next month to generate a new page.`,
+          step: data.step,
+        });
       }
       logger.warn(
         {
@@ -1555,7 +1580,10 @@ export async function handleLandingPageJob(job: Job<LandingPageJob>): Promise<vo
       }).catch(() => null);
     } else if (!(err instanceof UnrecoverableError)) {
       // Only mark page failed on non-budget errors (budget errors already marked above).
-      await markLandingPageFailed(ctx, landingPageId).catch(() => null);
+      await markLandingPageFailed(ctx, landingPageId, {
+        reason: err instanceof Error ? err.message : "Landing page generation failed.",
+        step: data.step,
+      }).catch(() => null);
     }
     logger.error(
       { jobId, step: data.step, landingPageId, err: String(err) },
