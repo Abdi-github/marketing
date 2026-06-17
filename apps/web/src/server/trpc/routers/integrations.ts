@@ -11,7 +11,7 @@ import { env } from "@marketing/shared";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getSocialCreativePublicUrl } from "../../../lib/social-creative";
-import { getIntegrationSyncQueue } from "../../queues/integration-sync";
+import { enqueueIntegrationSyncJob } from "../../queues/integration-sync";
 import { router, tenantProcedure, requires } from "../trpc";
 
 // ─── Adapter instances ─────────────────────────────────────────────────────────
@@ -196,7 +196,7 @@ export const integrationsRouter = router({
         });
       }
 
-      await getIntegrationSyncQueue().add(
+      await enqueueIntegrationSyncJob(
         "integration-sync",
         {
           tenantId: ctx.tenantCtx.tenantId,

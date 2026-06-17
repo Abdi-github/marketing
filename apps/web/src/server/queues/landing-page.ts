@@ -2,39 +2,21 @@
 // The FlowProducer creates the 4-step BullMQ tree atomically in Redis.
 // Consumer side: apps/workers/src/queues/landing-page/worker.ts
 // Design: ADR-0012 (FlowProducer, linear chain, bottom-up execution).
+//
+// Serverless note: module-level IORedis singletons keep the TCP socket open after
+// the function body returns, preventing the Node.js event loop from draining.
+// On Vercel this causes the function to hang until the platform kills it (504).
+// Fix: create a fresh connection per operation and close it in a finally block.
 import { LANDING_PAGE_QUEUE_NAME, type LandingPageJob } from "@marketing/ai-router";
 import { env } from "@marketing/shared";
 import { FlowProducer, Queue } from "bullmq";
 import IORedis from "ioredis";
 
-let _connection: IORedis | null = null;
-let _flow: FlowProducer | null = null;
-let _queue: Queue<LandingPageJob> | null = null;
-
-function getConnection(): IORedis {
-  if (!_connection) {
-    _connection = new IORedis(env.REDIS_URL, {
-      maxRetriesPerRequest: null,
-      enableReadyCheck: false,
-    });
-  }
-  return _connection;
-}
-
-export function getLandingPageFlow(): FlowProducer {
-  if (!_flow) {
-    _flow = new FlowProducer({ connection: getConnection() });
-  }
-  return _flow;
-}
-
-export function getLandingPageQueue(): Queue<LandingPageJob> {
-  if (!_queue) {
-    _queue = new Queue<LandingPageJob>(LANDING_PAGE_QUEUE_NAME, {
-      connection: getConnection(),
-    });
-  }
-  return _queue;
+function createConnection(): IORedis {
+  return new IORedis(env.REDIS_URL, {
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false,
+  });
 }
 
 type BaseJobData = Omit<LandingPageJob, "step" | "idempotencyKey" | "promptId" | "promptVersion">;
@@ -75,13 +57,18 @@ export function landingPageFlowJobIds(landingPageId: string): string[] {
 }
 
 export async function removeLandingPageFlowJobs(landingPageId: string): Promise<void> {
-  const queue = getLandingPageQueue();
-  for (const jobId of landingPageFlowJobIds(landingPageId)) {
-    const job = await queue.getJob(jobId);
-    if (!job) continue;
-    const state = await job.getState();
-    if (state === "active" || state === "completed" || state === "failed") continue;
-    await job.remove().catch(() => null);
+  const connection = createConnection();
+  const queue = new Queue<LandingPageJob>(LANDING_PAGE_QUEUE_NAME, { connection });
+  try {
+    for (const jobId of landingPageFlowJobIds(landingPageId)) {
+      const job = await queue.getJob(jobId);
+      if (!job) continue;
+      const state = await job.getState();
+      if (state === "active" || state === "completed" || state === "failed") continue;
+      await job.remove().catch(() => null);
+    }
+  } finally {
+    await queue.close();
   }
 }
 
@@ -110,36 +97,42 @@ export async function enqueueLandingPageFlow(base: BaseJobData): Promise<void> {
     ? (TEMPLATE_FILL_PROMPT[locale] ?? "landing-page-template-fill-v1")
     : (COPY_PROMPT[locale] ?? "landing-page-copy-v1");
 
-  await getLandingPageFlow().add({
-    name: "compose:publish",
-    queueName: q,
-    data: make("publish", layoutPrompt),
-    opts: { ...jobOpts, jobId: landingPageFlowJobId(base.landingPageId, "publish") },
-    children: [
-      {
-        name: "compose:layout",
-        queueName: q,
-        data: make("layout", layoutPrompt),
-        opts: { ...jobOpts, jobId: landingPageFlowJobId(base.landingPageId, "layout") },
-        children: [
-          {
-            name: "compose:copy",
-            queueName: q,
-            data: make("copy", copyPrompt),
-            opts: { ...jobOpts, jobId: landingPageFlowJobId(base.landingPageId, "copy") },
-            children: [
-              {
-                name: "compose:brief",
-                queueName: q,
-                data: make("brief", briefPrompt),
-                opts: { ...jobOpts, jobId: landingPageFlowJobId(base.landingPageId, "brief") },
-              },
-            ],
-          },
-        ],
-      },
-    ],
-  });
+  const connection = createConnection();
+  const flow = new FlowProducer({ connection });
+  try {
+    await flow.add({
+      name: "compose:publish",
+      queueName: q,
+      data: make("publish", layoutPrompt),
+      opts: { ...jobOpts, jobId: landingPageFlowJobId(base.landingPageId, "publish") },
+      children: [
+        {
+          name: "compose:layout",
+          queueName: q,
+          data: make("layout", layoutPrompt),
+          opts: { ...jobOpts, jobId: landingPageFlowJobId(base.landingPageId, "layout") },
+          children: [
+            {
+              name: "compose:copy",
+              queueName: q,
+              data: make("copy", copyPrompt),
+              opts: { ...jobOpts, jobId: landingPageFlowJobId(base.landingPageId, "copy") },
+              children: [
+                {
+                  name: "compose:brief",
+                  queueName: q,
+                  data: make("brief", briefPrompt),
+                  opts: { ...jobOpts, jobId: landingPageFlowJobId(base.landingPageId, "brief") },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+  } finally {
+    await flow.close();
+  }
 }
 
 export async function enqueueLandingPageLocalization(base: BaseJobData): Promise<void> {
@@ -153,11 +146,17 @@ export async function enqueueLandingPageLocalization(base: BaseJobData): Promise
     forceLocalization: true,
   };
 
-  await getLandingPageQueue().add("compose:localize", job, {
-    jobId: localizationJobId,
-    attempts: 3,
-    backoff: { type: "exponential", delay: 3000 },
-    removeOnComplete: { count: 200 },
-    removeOnFail: { count: 100 },
-  });
+  const connection = createConnection();
+  const queue = new Queue<LandingPageJob>(LANDING_PAGE_QUEUE_NAME, { connection });
+  try {
+    await queue.add("compose:localize", job, {
+      jobId: localizationJobId,
+      attempts: 3,
+      backoff: { type: "exponential", delay: 3000 },
+      removeOnComplete: { count: 200 },
+      removeOnFail: { count: 100 },
+    });
+  } finally {
+    await queue.close();
+  }
 }

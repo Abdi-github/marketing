@@ -16,9 +16,9 @@ import {
   type SocialCreativeAspectRatio,
   type SocialCreativeTemplate,
 } from "../../../lib/social-creative";
-import { getSocialCreativeQueue } from "../../queues/social-creative";
-import { getSocialImageQueue } from "../../queues/social-image";
-import { getSocialPostQueue } from "../../queues/social-post";
+import { enqueueSocialCreativeJob } from "../../queues/social-creative";
+import { enqueueSocialImageJob } from "../../queues/social-image";
+import { enqueueSocialPostJob } from "../../queues/social-post";
 import { tenantProcedure, router } from "../trpc";
 
 const SOCIAL_POST_PROMPT: Record<string, string> = {
@@ -114,7 +114,7 @@ async function enqueueSocialCreative(input: {
     variantNonce: idempotencyKey.slice(0, 8),
   });
 
-  await getSocialCreativeQueue().add("generate", payload, { jobId: idempotencyKey });
+  await enqueueSocialCreativeJob("generate", payload, { jobId: idempotencyKey });
   return idempotencyKey;
 }
 
@@ -142,7 +142,7 @@ async function enqueueSocialImage(input: {
     costBudgetCents: 20,
   });
 
-  await getSocialImageQueue().add(input.action, payload, { jobId: idempotencyKey });
+  await enqueueSocialImageJob(input.action, payload, { jobId: idempotencyKey });
   return idempotencyKey;
 }
 
@@ -189,7 +189,7 @@ export const contentRouter = router({
         // threadId is set by the worker to jobId (the thread root)
       });
 
-      await getSocialPostQueue().add("generate", payload, { jobId });
+      await enqueueSocialPostJob("generate", payload, { jobId });
       return { jobId };
     }),
 
@@ -250,7 +250,7 @@ export const contentRouter = router({
         parentJobId: input.parentJobId,
       });
 
-      await getSocialPostQueue().add("generate", payload, { jobId });
+      await enqueueSocialPostJob("generate", payload, { jobId });
       return { jobId };
     }),
 

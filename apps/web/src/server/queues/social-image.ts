@@ -1,28 +1,32 @@
+// Serverless note: per-call connections avoid the Vercel 504 caused by persistent sockets.
 import { SOCIAL_IMAGE_QUEUE_NAME } from "@marketing/ai-router";
 import { env } from "@marketing/shared";
-import { Queue } from "bullmq";
+import { type JobsOptions, Queue } from "bullmq";
 import IORedis from "ioredis";
 
-let connection: IORedis | null = null;
-let queue: Queue | null = null;
+const DEFAULT_JOB_OPTIONS = {
+  attempts: 3,
+  backoff: { type: "exponential" as const, delay: 2000 },
+  removeOnComplete: { count: 500 },
+  removeOnFail: { count: 100 },
+};
 
-function getConnection(): IORedis {
-  connection ??= new IORedis(env.REDIS_URL, {
+export async function enqueueSocialImageJob(
+  name: string,
+  data: unknown,
+  opts: JobsOptions,
+): Promise<void> {
+  const connection = new IORedis(env.REDIS_URL, {
     maxRetriesPerRequest: null,
     enableReadyCheck: false,
   });
-  return connection;
-}
-
-export function getSocialImageQueue(): Queue {
-  queue ??= new Queue(SOCIAL_IMAGE_QUEUE_NAME, {
-    connection: getConnection(),
-    defaultJobOptions: {
-      attempts: 3,
-      backoff: { type: "exponential", delay: 2000 },
-      removeOnComplete: { count: 500 },
-      removeOnFail: { count: 100 },
-    },
+  const queue = new Queue(SOCIAL_IMAGE_QUEUE_NAME, {
+    connection,
+    defaultJobOptions: DEFAULT_JOB_OPTIONS,
   });
-  return queue;
+  try {
+    await queue.add(name, data, opts);
+  } finally {
+    await queue.close();
+  }
 }

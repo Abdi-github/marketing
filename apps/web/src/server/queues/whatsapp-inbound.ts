@@ -15,30 +15,28 @@ export type WhatsappInboundJob = {
   timestamp: number;
 };
 
-let _connection: IORedis | null = null;
-let _queue: Queue<WhatsappInboundJob> | null = null;
-
-function getConnection(): IORedis {
-  if (!_connection) {
-    _connection = new IORedis(env.REDIS_URL, {
-      maxRetriesPerRequest: null,
-      enableReadyCheck: false,
+// Serverless note: per-call connections avoid the Vercel 504 caused by persistent sockets.
+export async function enqueueWhatsappInboundJob(
+  data: WhatsappInboundJob,
+): Promise<void> {
+  const connection = new IORedis(env.REDIS_URL, {
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false,
+  });
+  const queue = new Queue<WhatsappInboundJob>(WHATSAPP_INBOUND_QUEUE_NAME, {
+    connection,
+    defaultJobOptions: {
+      attempts: 3,
+      backoff: { type: "exponential", delay: 2000 },
+      removeOnComplete: { count: 500 },
+      removeOnFail: { count: 100 },
+    },
+  });
+  try {
+    await queue.add("inbound", data, {
+      jobId: `wa-${data.messageId}`, // deduplicate by Meta message ID
     });
+  } finally {
+    await queue.close();
   }
-  return _connection;
-}
-
-export function getWhatsappInboundQueue(): Queue<WhatsappInboundJob> {
-  if (!_queue) {
-    _queue = new Queue<WhatsappInboundJob>(WHATSAPP_INBOUND_QUEUE_NAME, {
-      connection: getConnection(),
-      defaultJobOptions: {
-        attempts: 3,
-        backoff: { type: "exponential", delay: 2000 },
-        removeOnComplete: { count: 500 },
-        removeOnFail: { count: 100 },
-      },
-    });
-  }
-  return _queue;
 }

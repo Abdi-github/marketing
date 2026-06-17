@@ -9,7 +9,7 @@ import { verifyWhatsAppWebhook, parseWhatsAppWebhook } from "@marketing/integrat
 import { env, logger } from "@marketing/shared";
 import { and, eq, sql } from "drizzle-orm";
 import type { NextRequest } from "next/server";
-import { getWhatsappInboundQueue } from "../../../../server/queues/whatsapp-inbound";
+import { enqueueWhatsappInboundJob } from "../../../../server/queues/whatsapp-inbound";
 
 // ─── GET — Meta webhook subscription verification ────────────────────────────
 
@@ -72,18 +72,14 @@ export async function POST(req: NextRequest): Promise<Response> {
     for (const msg of inboundMessages) {
       if (!msg.text) continue; // skip non-text (image, audio) for now
 
-      await getWhatsappInboundQueue().add(
-        "inbound",
-        {
-          tenantId,
-          phoneNumberId,
-          messageId: msg.messageId,
-          from: msg.from,
-          text: msg.text,
-          timestamp: msg.timestamp,
-        },
-        { jobId: `wa-${msg.messageId}` }, // deduplicate by Meta message ID
-      );
+      await enqueueWhatsappInboundJob({
+        tenantId,
+        phoneNumberId,
+        messageId: msg.messageId,
+        from: msg.from,
+        text: msg.text,
+        timestamp: msg.timestamp,
+      });
 
       logger.debug({ tenantId, from: msg.from }, "[wa-webhook] job enqueued");
     }
