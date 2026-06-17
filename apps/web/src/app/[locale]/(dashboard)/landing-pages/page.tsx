@@ -8,7 +8,8 @@ import { trpc } from "../../../../lib/trpc";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type PageStatus = "draft" | "published" | "unpublished" | "failed";
-type PageFilter = "all" | "generating" | "draft" | "published" | "failed";
+type PageGenerationState = "generating" | "paused" | "ready" | "published" | "failed";
+type PageFilter = "all" | "generating" | "paused" | "draft" | "published" | "failed";
 
 type PageItem = {
   id: string;
@@ -16,6 +17,7 @@ type PageItem = {
   title: string;
   status: PageStatus;
   currentVersionId: string | null;
+  generationState: PageGenerationState;
   publishedAt: string | Date | null;
   createdAt: string | Date;
 };
@@ -74,13 +76,20 @@ function SpinnerIcon({ className }: { className?: string }) {
 
 function StatusBadge({ page }: { page: PageItem }) {
   const t = useTranslations("LandingPages");
-  const isGenerating = page.status === "draft" && !page.currentVersionId;
 
-  if (isGenerating) {
+  if (page.generationState === "generating") {
     return (
       <span className="inline-flex items-center gap-1 rounded-full border border-yellow-200 bg-yellow-50 px-2 py-0.5 text-xs text-yellow-700">
         <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-yellow-500" />
         {t("statusGenerating")}
+      </span>
+    );
+  }
+  if (page.generationState === "paused") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-700">
+        <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
+        Paused
       </span>
     );
   }
@@ -212,7 +221,8 @@ function formatDate(date: string | Date): string {
 }
 
 function pageFilterFor(page: PageItem): PageFilter {
-  if (page.status === "draft" && !page.currentVersionId) return "generating";
+  if (page.generationState === "generating") return "generating";
+  if (page.generationState === "paused") return "paused";
   if (page.status === "published") return "published";
   if (page.status === "failed") return "failed";
   return "draft";
@@ -221,6 +231,7 @@ function pageFilterFor(page: PageItem): PageFilter {
 const FILTERS: Array<{ key: PageFilter; label: string }> = [
   { key: "all", label: "All" },
   { key: "generating", label: "Generating" },
+  { key: "paused", label: "Paused" },
   { key: "draft", label: "Drafts" },
   { key: "published", label: "Published" },
   { key: "failed", label: "Failed" },
@@ -248,6 +259,7 @@ export default function LandingPagesPage() {
   // Publish state
   const [publishingId, setPublishingId] = useState<string | null>(null);
   const [publishError, setPublishError] = useState<string | null>(null);
+  const [pausingId, setPausingId] = useState<string | null>(null);
 
   // Delete modal
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -284,7 +296,11 @@ export default function LandingPagesPage() {
       try {
         const page = await trpc.landingPages.getPage.query({ pageId: pollingId });
         if (!page) return;
-        if (page.currentVersionId || page.status === "failed") {
+        if (
+          page.currentVersionId ||
+          page.status === "failed" ||
+          page.generationState === "paused"
+        ) {
           setPollingId(null);
           await loadPages();
         }
@@ -326,6 +342,20 @@ export default function LandingPagesPage() {
     }
   }
 
+  async function handlePause(pageId: string) {
+    setPausingId(pageId);
+    setDeleteError(null);
+    try {
+      await trpc.landingPages.pauseGeneration.mutate({ pageId });
+      if (pollingId === pageId) setPollingId(null);
+      await loadPages();
+    } catch {
+      setDeleteError("Failed to pause generation.");
+    } finally {
+      setPausingId(null);
+    }
+  }
+
   async function handlePreview(pageId: string) {
     setPreviewComposition(null);
     setPreviewOpen(true);
@@ -346,6 +376,7 @@ export default function LandingPagesPage() {
     const counts: Record<PageFilter, number> = {
       all: pages.length,
       generating: 0,
+      paused: 0,
       draft: 0,
       published: 0,
       failed: 0,
@@ -512,11 +543,13 @@ export default function LandingPagesPage() {
       {!isLoading && visiblePages.length > 0 && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {visiblePages.map((page) => {
-            const isGenerating = page.status === "draft" && !page.currentVersionId;
+            const isGenerating = page.generationState === "generating";
+            const isPaused = page.generationState === "paused";
             const isReadyToPublish = page.status === "draft" && !!page.currentVersionId;
             const isPublished = page.status === "published";
             const isDeleting = deletingId === page.id;
             const isPublishing = publishingId === page.id;
+            const isPausing = pausingId === page.id;
 
             return (
               <div
@@ -526,7 +559,7 @@ export default function LandingPagesPage() {
                 {/* Delete button (visible on hover) */}
                 <button
                   onClick={() => setConfirmDeleteId(page.id)}
-                  disabled={deletingId !== null || isGenerating}
+                  disabled={deletingId !== null || isPausing}
                   title={t("delete")}
                   className={`absolute right-3 top-3 z-10 rounded-full border border-gray-200 bg-white/90 p-1.5 text-gray-400 shadow-sm backdrop-blur-sm transition-all hover:border-red-300 hover:text-red-500 ${
                     isDeleting ? "text-red-500 opacity-100" : "opacity-0 group-hover:opacity-100"
@@ -559,6 +592,11 @@ export default function LandingPagesPage() {
                       <span>{t("generatingHint")}</span>
                     </div>
                   )}
+                  {isPaused && (
+                    <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                      Generation is paused. You can remove this draft when you're ready.
+                    </div>
+                  )}
 
                   {/* Action buttons */}
                   <div className="mt-auto flex flex-wrap items-center gap-2 pt-1">
@@ -572,6 +610,25 @@ export default function LandingPagesPage() {
                       </a>
                     )}
                     {/* Analytics — A/B testing, available for published pages */}
+                    {isGenerating && (
+                      <button
+                        onClick={() => void handlePause(page.id)}
+                        disabled={isPausing}
+                        className="flex items-center gap-1.5 rounded-lg border border-yellow-300 bg-yellow-50 px-3 py-1.5 text-xs text-yellow-800 transition-colors hover:bg-yellow-100 disabled:opacity-50"
+                      >
+                        {isPausing && <SpinnerIcon className="h-3 w-3" />}
+                        Pause
+                      </button>
+                    )}
+                    {(isGenerating || isPaused) && (
+                      <button
+                        onClick={() => setConfirmDeleteId(page.id)}
+                        disabled={isDeleting || isPausing}
+                        className="rounded-lg border border-red-200 px-3 py-1.5 text-xs text-red-700 transition-colors hover:bg-red-50 disabled:opacity-50"
+                      >
+                        Remove draft
+                      </button>
+                    )}
                     {isPublished && (
                       <a
                         href={`/${locale}/landing-pages/${page.id}/analytics`}

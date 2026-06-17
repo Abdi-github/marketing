@@ -22,7 +22,11 @@ import { and, eq, desc, asc, sql } from "drizzle-orm";
 import type { LandingPageComposition, LandingPageSection, SectionType } from "@marketing/ai-router";
 import { z } from "zod";
 import { tenantProcedure, router } from "../trpc";
-import { enqueueLandingPageFlow, enqueueLandingPageLocalization } from "../../queues/landing-page";
+import {
+  enqueueLandingPageFlow,
+  enqueueLandingPageLocalization,
+  removeLandingPageFlowJobs,
+} from "../../queues/landing-page";
 import {
   LANDING_PAGE_LOCALE_KEYS,
   normalizeLandingLanguagePreferences,
@@ -85,6 +89,29 @@ function normalizedLanguagePreferences(input: {
     },
     input.fallbackLocale,
   );
+}
+
+type LandingGenerationControlState = "running" | "paused" | "cancelled";
+type LandingGenerationState = "generating" | "paused" | "ready" | "published" | "failed";
+
+function getLandingGenerationControlState(
+  stepData: Record<string, unknown> | null | undefined,
+): LandingGenerationControlState {
+  const state = (stepData?.["generationControl"] as { state?: unknown } | undefined)?.state;
+  return state === "paused" || state === "cancelled" ? state : "running";
+}
+
+function getLandingGenerationState(input: {
+  status: "draft" | "published" | "unpublished" | "failed";
+  currentVersionId: string | null;
+  stepData: Record<string, unknown> | null | undefined;
+}): LandingGenerationState {
+  if (input.status === "failed") return "failed";
+  if (input.status === "published") return "published";
+  if (!input.currentVersionId) {
+    return getLandingGenerationControlState(input.stepData) === "paused" ? "paused" : "generating";
+  }
+  return "ready";
 }
 
 async function getNextVersionNumber(tenantId: string, pageId: string): Promise<number> {
@@ -625,6 +652,7 @@ export const landingPagesRouter = router({
   generateFromWizard: tenantProcedure
     .input(
       z.object({
+        landingPageId: z.string().uuid().optional(),
         locale: landingPageLocaleEnum,
         locales: z
           .array(landingPageLocaleEnum)
@@ -704,7 +732,7 @@ export const landingPagesRouter = router({
         template = row;
       }
 
-      const landingPageId = crypto.randomUUID();
+      const landingPageId = input.landingPageId ?? crypto.randomUUID();
       const baseSlug = slugify(profile.businessName);
       const primaryGoal = input.goals[0]!;
       const languagePreferences = normalizedLanguagePreferences({
@@ -716,6 +744,10 @@ export const landingPagesRouter = router({
       // stepData carries everything the worker needs. Template fields are only seeded
       // when a template was chosen; otherwise the worker free-forms from the wizard payload.
       const initialStepData: Record<string, unknown> = {
+        generationControl: {
+          state: "running",
+          requestedAt: new Date().toISOString(),
+        },
         languagePreferences,
         wizardPayload: {
           paletteKey: input.paletteKey,
@@ -792,7 +824,16 @@ export const landingPagesRouter = router({
         .from(landingPages)
         .where(and(eq(landingPages.tenantId, tenantId), eq(landingPages.id, input.pageId)));
 
-      return page ?? null;
+      if (!page) return null;
+
+      return {
+        ...page,
+        generationState: getLandingGenerationState({
+          status: page.status,
+          currentVersionId: page.currentVersionId,
+          stepData: (page.stepData as Record<string, unknown> | null) ?? null,
+        }),
+      };
     }),
 
   // List all pages for the tenant (newest first, limit 50). Includes tenantSlug for building public URLs.
@@ -825,6 +866,7 @@ export const landingPagesRouter = router({
         title: landingPages.title,
         status: landingPages.status,
         currentVersionId: landingPages.currentVersionId,
+        stepData: landingPages.stepData,
         publishedAt: landingPages.publishedAt,
         createdAt: landingPages.createdAt,
       })
@@ -834,11 +876,61 @@ export const landingPagesRouter = router({
       .limit(50);
 
     return {
-      pages,
+      pages: pages.map((page) => ({
+        ...page,
+        generationState: getLandingGenerationState({
+          status: page.status,
+          currentVersionId: page.currentVersionId,
+          stepData: (page.stepData as Record<string, unknown> | null) ?? null,
+        }),
+      })),
       tenantSlug: tenant?.slug ?? "",
       primaryDomain: primaryDomainRow?.hostname ?? null,
     };
   }),
+
+  pauseGeneration: tenantProcedure
+    .input(z.object({ pageId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const { tenantId } = ctx.tenantCtx;
+
+      const [page] = await db
+        .select({
+          id: landingPages.id,
+          status: landingPages.status,
+          currentVersionId: landingPages.currentVersionId,
+          stepData: landingPages.stepData,
+        })
+        .from(landingPages)
+        .where(and(eq(landingPages.tenantId, tenantId), eq(landingPages.id, input.pageId)));
+
+      if (!page) throw new TRPCError({ code: "NOT_FOUND", message: "Landing page not found." });
+      if (page.currentVersionId || page.status !== "draft") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Only in-progress drafts can be paused.",
+        });
+      }
+
+      const stepData = { ...((page.stepData as Record<string, unknown> | null) ?? {}) };
+      await db
+        .update(landingPages)
+        .set({
+          stepData: {
+            ...stepData,
+            generationControl: {
+              state: "paused",
+              pausedAt: new Date().toISOString(),
+            },
+          },
+          updatedAt: new Date(),
+        })
+        .where(and(eq(landingPages.tenantId, tenantId), eq(landingPages.id, input.pageId)));
+
+      await removeLandingPageFlowJobs(input.pageId).catch(() => null);
+
+      return { paused: true };
+    }),
 
   // Return the composition JSON for a page's current version (used for preview).
   getComposition: tenantProcedure
@@ -1054,11 +1146,36 @@ export const landingPagesRouter = router({
       const { tenantId } = ctx.tenantCtx;
 
       const [page] = await db
-        .select({ id: landingPages.id })
+        .select({
+          id: landingPages.id,
+          status: landingPages.status,
+          currentVersionId: landingPages.currentVersionId,
+          stepData: landingPages.stepData,
+        })
         .from(landingPages)
         .where(and(eq(landingPages.tenantId, tenantId), eq(landingPages.id, input.pageId)));
 
       if (!page) throw new TRPCError({ code: "NOT_FOUND", message: "Landing page not found." });
+
+      const isGeneratingDraft = page.status === "draft" && !page.currentVersionId;
+      if (isGeneratingDraft) {
+        const stepData = { ...((page.stepData as Record<string, unknown> | null) ?? {}) };
+        await db
+          .update(landingPages)
+          .set({
+            stepData: {
+              ...stepData,
+              generationControl: {
+                state: "cancelled",
+                cancelledAt: new Date().toISOString(),
+              },
+            },
+            updatedAt: new Date(),
+          })
+          .where(and(eq(landingPages.tenantId, tenantId), eq(landingPages.id, input.pageId)));
+
+        await removeLandingPageFlowJobs(input.pageId).catch(() => null);
+      }
 
       await db
         .delete(landingPages)

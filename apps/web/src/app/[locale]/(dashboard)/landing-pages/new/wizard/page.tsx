@@ -239,6 +239,8 @@ export default function LandingPageWizard() {
   const [generating, setGenerating] = useState(false);
   const [generatingId, setGeneratingId] = useState<string | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
+  const [isSlowGeneration, setIsSlowGeneration] = useState(false);
+  const [generationActionPending, setGenerationActionPending] = useState(false);
   const [templates, setTemplates] = useState<TemplateLite[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(false);
   const pollErrorCountRef = useRef(0);
@@ -281,6 +283,11 @@ export default function LandingPageWizard() {
         pollErrorCountRef.current = 0;
         if (page?.currentVersionId) {
           router.push(`/${routeLocale}/landing-pages/${generatingId}/edit`);
+          return;
+        }
+        if (page?.generationState === "paused") {
+          setGenerating(false);
+          router.push(`/${routeLocale}/landing-pages`);
         }
       } catch {
         pollErrorCountRef.current += 1;
@@ -302,10 +309,11 @@ export default function LandingPageWizard() {
   useEffect(() => {
     if (!generating) return;
     const timeout = setTimeout(() => {
+      setIsSlowGeneration(true);
       setGenerationError(
         generatingId
-          ? "Generation is taking longer than expected. The page may already be ready, so you can open the editor now."
-          : "The generation request is taking longer than expected. Check your landing pages list, then try again if no draft appears.",
+          ? "Generation is still running in the background. You can open the landing pages list, pause it, or remove the draft."
+          : "We are still starting the generation request. Your draft ID is reserved, so keep this page open or check the landing pages list in a moment.",
       );
     }, 90_000);
     return () => clearTimeout(timeout);
@@ -366,11 +374,15 @@ export default function LandingPageWizard() {
       setGenerationError("Please complete all steps.");
       return;
     }
+    const landingPageId = crypto.randomUUID();
     setGenerating(true);
+    setGeneratingId(landingPageId);
     setGenerationError(null);
+    setIsSlowGeneration(false);
     pollErrorCountRef.current = 0;
     try {
-      const result = await trpc.landingPages.generateFromWizard.mutate({
+      await trpc.landingPages.generateFromWizard.mutate({
+        landingPageId,
         locale: state.locale,
         defaultLocale: state.locale,
         locales: state.locales,
@@ -384,11 +396,11 @@ export default function LandingPageWizard() {
         brief: state.brief.trim(),
         imageStrategy: state.imageStrategy,
       });
-      setGeneratingId(result.landingPageId);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Generation failed. Please try again.";
       setGenerationError(message);
       setGenerating(false);
+      setGeneratingId(null);
     }
   }, [state]);
 
@@ -399,10 +411,42 @@ export default function LandingPageWizard() {
         error={generationError}
         editorHref={generatingId ? `/${routeLocale}/landing-pages/${generatingId}/edit` : undefined}
         pagesHref={`/${routeLocale}/landing-pages`}
+        isSlow={isSlowGeneration}
+        isActionPending={generationActionPending}
         onCancel={() => {
           setGenerating(false);
           setGeneratingId(null);
+          setIsSlowGeneration(false);
         }}
+        onPause={
+          generatingId
+            ? async () => {
+                setGenerationActionPending(true);
+                try {
+                  await trpc.landingPages.pauseGeneration.mutate({ pageId: generatingId });
+                  setGenerating(false);
+                  router.push(`/${routeLocale}/landing-pages`);
+                } finally {
+                  setGenerationActionPending(false);
+                }
+              }
+            : undefined
+        }
+        onRemove={
+          generatingId
+            ? async () => {
+                setGenerationActionPending(true);
+                try {
+                  await trpc.landingPages.deletePage.mutate({ pageId: generatingId });
+                  setGenerating(false);
+                  setGeneratingId(null);
+                  router.push(`/${routeLocale}/landing-pages`);
+                } finally {
+                  setGenerationActionPending(false);
+                }
+              }
+            : undefined
+        }
       />
     );
   }
@@ -1221,61 +1265,126 @@ function GeneratingScreen({
   error,
   editorHref,
   pagesHref,
+  isSlow,
+  isActionPending,
   onCancel,
+  onPause,
+  onRemove,
 }: {
   error: string | null;
   editorHref?: string;
   pagesHref: string;
+  isSlow: boolean;
+  isActionPending: boolean;
   onCancel: () => void;
+  onPause?: () => Promise<void>;
+  onRemove?: () => Promise<void>;
 }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-purple-50 via-white to-pink-50 p-6">
       <div className="max-w-md text-center">
-        {error ? (
-          <>
-            <div className="mb-6 text-6xl">{editorHref ? "⏳" : "😕"}</div>
-            <h1 className="mb-2 text-2xl font-bold text-gray-900">
-              {editorHref ? "Still working\u2026" : "Something went wrong"}
-            </h1>
-            <p className="mb-6 text-gray-600">{error}</p>
-            <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
-              {editorHref ? (
-                <a
-                  href={editorHref}
-                  className="rounded-lg bg-purple-600 px-6 py-2.5 font-semibold text-white hover:bg-purple-700"
+        <div className="relative mx-auto mb-8 h-24 w-24">
+          <div className="absolute inset-0 animate-pulse rounded-full border-4 border-purple-200" />
+          <div className="absolute inset-0 animate-spin rounded-full border-4 border-purple-600 border-t-transparent" />
+          <div className="absolute inset-0 flex items-center justify-center text-xl font-semibold">
+            AI
+          </div>
+        </div>
+        <h1 className="mb-2 text-2xl font-bold text-gray-900">
+          {isSlow ? "Still generating..." : "Crafting your page..."}
+        </h1>
+        <p className="mb-1 text-gray-600">
+          {isSlow ? "The job is still running in the background." : "This takes about 30 seconds."}
+        </p>
+        <p className="text-sm text-gray-500">
+          {error ?? "We're writing copy, picking layouts, and assembling your design."}
+        </p>
+        <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row sm:flex-wrap">
+          <a
+            href={pagesHref}
+            className="rounded-lg bg-purple-600 px-6 py-2.5 font-semibold text-white hover:bg-purple-700"
+          >
+            View pages
+          </a>
+          {editorHref && (
+            <a
+              href={editorHref}
+              className="rounded-lg border border-gray-200 px-6 py-2.5 font-semibold text-gray-700 hover:bg-white"
+            >
+              Open editor
+            </a>
+          )}
+          {onPause && (
+            <button
+              onClick={() => void onPause()}
+              disabled={isActionPending}
+              className="rounded-lg border border-yellow-300 bg-yellow-50 px-6 py-2.5 font-semibold text-yellow-800 hover:bg-yellow-100 disabled:opacity-50"
+            >
+              Pause generation
+            </button>
+          )}
+          {onRemove && (
+            <button
+              onClick={() => void onRemove()}
+              disabled={isActionPending}
+              className="rounded-lg border border-red-200 px-6 py-2.5 font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
+            >
+              Remove draft
+            </button>
+          )}
+          <button
+            onClick={onCancel}
+            className="rounded-lg border border-gray-200 px-6 py-2.5 font-semibold text-gray-700 hover:bg-white"
+          >
+            Go back
+          </button>
+        </div>
+        {error === "__legacy__" &&
+          (error ? (
+            <>
+              <div className="mb-6 text-6xl">{editorHref ? "⏳" : "😕"}</div>
+              <h1 className="mb-2 text-2xl font-bold text-gray-900">
+                {editorHref ? "Still working\u2026" : "Something went wrong"}
+              </h1>
+              <p className="mb-6 text-gray-600">{error}</p>
+              <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
+                {editorHref ? (
+                  <a
+                    href={editorHref}
+                    className="rounded-lg bg-purple-600 px-6 py-2.5 font-semibold text-white hover:bg-purple-700"
+                  >
+                    Open editor
+                  </a>
+                ) : (
+                  <a
+                    href={pagesHref}
+                    className="rounded-lg bg-purple-600 px-6 py-2.5 font-semibold text-white hover:bg-purple-700"
+                  >
+                    View pages
+                  </a>
+                )}
+                <button
+                  onClick={onCancel}
+                  className="rounded-lg border border-gray-200 px-6 py-2.5 font-semibold text-gray-700 hover:bg-white"
                 >
-                  Open editor
-                </a>
-              ) : (
-                <a
-                  href={pagesHref}
-                  className="rounded-lg bg-purple-600 px-6 py-2.5 font-semibold text-white hover:bg-purple-700"
-                >
-                  View pages
-                </a>
-              )}
-              <button
-                onClick={onCancel}
-                className="rounded-lg border border-gray-200 px-6 py-2.5 font-semibold text-gray-700 hover:bg-white"
-              >
-                Go back
-              </button>
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="relative mx-auto mb-8 h-24 w-24">
-              <div className="absolute inset-0 animate-pulse rounded-full border-4 border-purple-200" />
-              <div className="absolute inset-0 animate-spin rounded-full border-4 border-purple-600 border-t-transparent" />
-              <div className="absolute inset-0 flex items-center justify-center text-3xl">✨</div>
-            </div>
-            <h1 className="mb-2 text-2xl font-bold text-gray-900">Crafting your page…</h1>
-            <p className="mb-1 text-gray-600">This takes about 30 seconds.</p>
-            <p className="text-sm text-gray-500">
-              We&apos;re writing copy, picking layouts, and assembling your design.
-            </p>
-          </>
-        )}
+                  Go back
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="relative mx-auto mb-8 h-24 w-24">
+                <div className="absolute inset-0 animate-pulse rounded-full border-4 border-purple-200" />
+                <div className="absolute inset-0 animate-spin rounded-full border-4 border-purple-600 border-t-transparent" />
+                <div className="absolute inset-0 flex items-center justify-center text-3xl">✨</div>
+              </div>
+              <h1 className="mb-2 text-2xl font-bold text-gray-900">Crafting your page…</h1>
+              <p className="mb-1 text-gray-600">This takes about 30 seconds.</p>
+              <p className="text-sm text-gray-500">
+                We&apos;re writing copy, picking layouts, and assembling your design.
+              </p>
+            </>
+          ))}
       </div>
     </div>
   );

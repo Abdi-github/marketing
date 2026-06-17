@@ -220,6 +220,33 @@ async function getLandingPage(ctx: TenantContext, pageId: string) {
   return page ?? null;
 }
 
+type LandingGenerationControlState = "running" | "paused" | "cancelled";
+
+function getGenerationControlState(
+  stepData: Record<string, unknown> | null | undefined,
+): LandingGenerationControlState {
+  const state = (stepData?.["generationControl"] as { state?: unknown } | undefined)?.state;
+  return state === "paused" || state === "cancelled" ? state : "running";
+}
+
+async function assertGenerationRunnable(
+  ctx: TenantContext,
+  pageId: string,
+  step: LandingPageJob["step"],
+) {
+  const page = await getLandingPage(ctx, pageId);
+  if (!page) {
+    throw new UnrecoverableError(`Landing page ${pageId} was removed during ${step}`);
+  }
+  const state = getGenerationControlState(
+    (page.stepData as Record<string, unknown> | null) ?? null,
+  );
+  if (state === "paused" || state === "cancelled") {
+    throw new UnrecoverableError(`Landing page ${pageId} is ${state}; aborting ${step}`);
+  }
+  return page;
+}
+
 async function updateStepData(
   ctx: TenantContext,
   pageId: string,
@@ -723,8 +750,7 @@ async function handleBrief(
   planCaps: ReturnType<typeof getPlanCaps>,
   jobId: string,
 ): Promise<void> {
-  const page = await getLandingPage(ctx, data.landingPageId);
-  if (!page) throw new Error(`Landing page ${data.landingPageId} not found`);
+  const page = await assertGenerationRunnable(ctx, data.landingPageId, "brief");
 
   const stepData = (page.stepData ?? {}) as Record<string, unknown>;
   if (stepData["brief"]) {
@@ -780,6 +806,7 @@ async function handleBrief(
     },
   );
 
+  await assertGenerationRunnable(ctx, data.landingPageId, "brief");
   await updateStepData(ctx, data.landingPageId, "brief", {
     text: result.text,
     aiUsageId: aiUsageId!,
@@ -793,8 +820,7 @@ async function handleCopy(
   planCaps: ReturnType<typeof getPlanCaps>,
   jobId: string,
 ): Promise<void> {
-  const page = await getLandingPage(ctx, data.landingPageId);
-  if (!page) throw new Error(`Landing page ${data.landingPageId} not found`);
+  const page = await assertGenerationRunnable(ctx, data.landingPageId, "copy");
 
   const stepData = (page.stepData ?? {}) as Record<string, unknown>;
   if (stepData["copy"]) {
@@ -947,6 +973,7 @@ async function handleCopy(
   // Fall back to text response if tool use was not triggered (echo provider etc.)
   const sections = (result.toolResult as { sections?: unknown[] } | null)?.sections ?? [];
 
+  await assertGenerationRunnable(ctx, data.landingPageId, "copy");
   await updateStepData(ctx, data.landingPageId, "copy", {
     sections,
     aiUsageId: aiUsageId!,
@@ -960,8 +987,7 @@ async function handleLayout(
   planCaps: ReturnType<typeof getPlanCaps>,
   jobId: string,
 ): Promise<void> {
-  const page = await getLandingPage(ctx, data.landingPageId);
-  if (!page) throw new Error(`Landing page ${data.landingPageId} not found`);
+  const page = await assertGenerationRunnable(ctx, data.landingPageId, "layout");
 
   const stepData = (page.stepData ?? {}) as Record<string, unknown>;
   if (stepData["layout"]) {
@@ -1067,6 +1093,8 @@ async function handleLayout(
       templateKey: data.templateKey ?? null,
     });
   const recipeSeed = designPlanSeed(designPlan);
+
+  await assertGenerationRunnable(ctx, data.landingPageId, "layout");
 
   // ADR-0029: apply a cohesive design recipe so AI pages aren't all the default layout.
   // Assign a variant to every section based on vibe + goals + a per-page seed, and give
@@ -1229,6 +1257,7 @@ async function handleLayout(
     jobId,
   });
 
+  await assertGenerationRunnable(ctx, data.landingPageId, "layout");
   await updateStepDataPatch(ctx, data.landingPageId, {
     designPlan,
     uniquenessFingerprint: designPlan.uniquenessFingerprint,
@@ -1323,8 +1352,7 @@ async function handlePublish(
   data: LandingPageJob,
   jobId: string,
 ): Promise<void> {
-  const page = await getLandingPage(ctx, data.landingPageId);
-  if (!page) throw new Error(`Landing page ${data.landingPageId} not found`);
+  const page = await assertGenerationRunnable(ctx, data.landingPageId, "publish");
 
   if (page.status === "published" && page.currentVersionId) {
     logger.info({ jobId, step: "publish" }, "[landing-page] already published — skipping");
@@ -1336,6 +1364,8 @@ async function handlePublish(
     | { composition: LandingPageComposition; aiUsageId: string }
     | undefined;
   if (!layout) throw new Error("Layout step output missing — cannot publish");
+
+  await assertGenerationRunnable(ctx, data.landingPageId, "publish");
 
   const [version] = await db
     .insert(landingPageVersions)
@@ -1380,8 +1410,7 @@ async function handleLocalize(
   planCaps: ReturnType<typeof getPlanCaps>,
   jobId: string,
 ): Promise<void> {
-  const page = await getLandingPage(ctx, data.landingPageId);
-  if (!page) throw new Error(`Landing page ${data.landingPageId} not found`);
+  const page = await assertGenerationRunnable(ctx, data.landingPageId, "localize");
   if (!page.currentVersionId) {
     throw new Error("Current version missing — cannot localize landing page");
   }
@@ -1421,6 +1450,7 @@ async function handleLocalize(
     jobId,
   });
 
+  await assertGenerationRunnable(ctx, data.landingPageId, "localize");
   await updateStepDataPatch(ctx, data.landingPageId, {
     localizedCompositions,
     localizedAiUsageIds,
@@ -1443,6 +1473,8 @@ export async function handleLandingPageJob(job: Job<LandingPageJob>): Promise<vo
 
   const tenantPlan = await getTenantPlan(ctx);
   const planCaps = getPlanCaps(tenantPlan);
+
+  await assertGenerationRunnable(ctx, landingPageId, data.step);
 
   // ─── Suspension pre-check ────────────────────────────────────────────────
   const [tenantRow] = await db
