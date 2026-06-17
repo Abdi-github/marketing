@@ -153,8 +153,17 @@ export async function POST(
             .where(and(eq(contacts.tenantId, tenant.id), eq(contacts.id, existing.id)));
           contactId = existing.id;
         } else {
+          // Accept common name field keys: name, fullName, full_name, firstName (+ lastName)
           const rawName =
-            typeof sanitizedPayload["name"] === "string" ? sanitizedPayload["name"].trim() : "";
+            typeof sanitizedPayload["name"] === "string" && sanitizedPayload["name"].trim()
+              ? sanitizedPayload["name"].trim()
+              : typeof sanitizedPayload["fullName"] === "string" &&
+                  sanitizedPayload["fullName"].trim()
+                ? sanitizedPayload["fullName"].trim()
+                : typeof sanitizedPayload["full_name"] === "string" &&
+                    sanitizedPayload["full_name"].trim()
+                  ? sanitizedPayload["full_name"].trim()
+                  : "";
           const spaceIdx = rawName.indexOf(" ");
           const firstName = spaceIdx > -1 ? rawName.slice(0, spaceIdx) : rawName || null;
           const lastName = spaceIdx > -1 ? rawName.slice(spaceIdx + 1) || null : null;

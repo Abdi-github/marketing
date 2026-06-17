@@ -77,8 +77,8 @@ export function ConsentBanner({
       }}
     >
       <span style={{ flex: 1, minWidth: 200 }}>
-        Diese Seite verwendet anonyme Nutzungsstatistiken, um das Angebot zu verbessern. Es werden
-        keine persönlichen Daten ohne Ihre Zustimmung gespeichert.
+        This page uses anonymous usage statistics to improve the experience. No personal data is
+        stored without your consent.
       </span>
       <div style={{ display: "flex", gap: "0.5rem", flexShrink: 0 }}>
         <button
@@ -93,7 +93,7 @@ export function ConsentBanner({
             fontSize: "0.85rem",
           }}
         >
-          Ablehnen
+          Decline
         </button>
         <button
           onClick={accept}
@@ -108,7 +108,7 @@ export function ConsentBanner({
             fontWeight: 500,
           }}
         >
-          Akzeptieren
+          Accept
         </button>
       </div>
     </div>

@@ -1233,8 +1233,10 @@ function GeneratingScreen({
       <div className="max-w-md text-center">
         {error ? (
           <>
-            <div className="mb-6 text-6xl">😕</div>
-            <h1 className="mb-2 text-2xl font-bold text-gray-900">Something went wrong</h1>
+            <div className="mb-6 text-6xl">{editorHref ? "⏳" : "😕"}</div>
+            <h1 className="mb-2 text-2xl font-bold text-gray-900">
+              {editorHref ? "Still working\u2026" : "Something went wrong"}
+            </h1>
             <p className="mb-6 text-gray-600">{error}</p>
             <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
               {editorHref ? (

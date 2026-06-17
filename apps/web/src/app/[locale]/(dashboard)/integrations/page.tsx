@@ -21,19 +21,19 @@ const PROVIDER_META: Record<
   },
   gastrofix: {
     label: "Gastrofix",
-    description: "Kassensystem für Restaurants — Reservierungen & Menü-Sync.",
+    description: "POS system for restaurants — reservations & menu sync.",
     vertical: "Restaurant / Café",
     hasWebhook: true,
   },
   lightspeed_ch: {
     label: "Lightspeed CH",
-    description: "iKentoo-basiertes POS für die Schweiz — Artikel-Katalog-Import.",
+    description: "iKentoo-based POS for Switzerland — product catalogue import.",
     vertical: "Restaurant / Café",
     hasWebhook: false,
   },
   eversports: {
     label: "Eversports",
-    description: "Buchungssystem für Fitnessstudios — Kursplan-Sync.",
+    description: "Booking system for fitness studios — class schedule sync.",
     vertical: "Fitness / Yoga",
     hasWebhook: true,
   },

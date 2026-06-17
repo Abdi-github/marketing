@@ -24,6 +24,13 @@ function isPlatformHost(host: string): boolean {
 
 export default async function middleware(req: NextRequest) {
   const host = req.headers.get("host") ?? "";
+  const { pathname } = req.nextUrl;
+
+  // Bypass i18n for embed routes — these are iframe-embeddable pages used by
+  // external sites and must never receive a locale prefix redirect.
+  if (pathname.startsWith("/embed/")) {
+    return NextResponse.next();
+  }
 
   // Platform host → run next-intl middleware normally.
   if (isPlatformHost(host)) {

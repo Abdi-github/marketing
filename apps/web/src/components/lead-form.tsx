@@ -284,7 +284,7 @@ function SmartFormBody({
     >
       {steps.length > 1 && (
         <div style={{ fontSize: "0.8rem", color: "var(--lp-muted,#6b7280)" }}>
-          Schritt {stepIndex + 1} / {steps.length}
+          Step {stepIndex + 1} / {steps.length}
         </div>
       )}
 
@@ -336,7 +336,7 @@ function SmartFormBody({
               cursor: "pointer",
             }}
           >
-            Zurück
+            Back
           </button>
         )}
         <button
@@ -352,7 +352,7 @@ function SmartFormBody({
             cursor: submitting ? "not-allowed" : "pointer",
           }}
         >
-          {submitting ? "Wird gesendet…" : isLastStep ? (submitLabel ?? "Absenden") : "Weiter"}
+          {submitting ? "Sending…" : isLastStep ? (submitLabel ?? "Submit") : "Next"}
         </button>
       </div>
     </form>
@@ -436,7 +436,7 @@ function LegacyFormBody({
           alignSelf: "flex-start",
         }}
       >
-        {submitting ? "Wird gesendet…" : (submitLabel ?? "Absenden")}
+        {submitting ? "Sending…" : (submitLabel ?? "Submit")}
       </button>
     </form>
   );
@@ -457,7 +457,7 @@ export default function LeadForm({
   const [error, setError] = useState<string | null>(null);
   const startedRef = useRef(false);
 
-  const successMessage = settings?.success_message ?? "Vielen Dank! Wir melden uns bald bei dir.";
+  const successMessage = settings?.success_message ?? "Thank you! We'll be in touch soon.";
   const honeypotEnabled = settings?.honeypot !== false;
 
   // Honeypot ref — read at submit time (not tracked in state to stay invisible to React)
@@ -504,7 +504,7 @@ export default function LeadForm({
       // Notify track.js for A/B experiment conversion counting.
       dispatchFormEvent("__form_submit", {});
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Fehler beim Senden. Bitte erneut versuchen.");
+      setError(err instanceof Error ? err.message : "Error sending. Please try again.");
     } finally {
       setSubmitting(false);
     }
