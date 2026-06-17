@@ -837,19 +837,30 @@ export const landingPagesRouter = router({
         stepData: initialStepData,
       });
 
-      await enqueueLandingPageFlow({
-        tenantId,
-        landingPageId,
-        userId,
-        businessName: profile.businessName,
-        vertical: input.vertical,
-        city: profile.addressCity ?? undefined,
-        locale: languagePreferences.defaultLocale,
-        languagePreferences,
-        userPrompt: input.brief,
-        templateKey: input.templateKey,
-        costBudgetCents: estimatedCostCents,
-      });
+      try {
+        await enqueueLandingPageFlow({
+          tenantId,
+          landingPageId,
+          userId,
+          businessName: profile.businessName,
+          vertical: input.vertical,
+          city: profile.addressCity ?? undefined,
+          locale: languagePreferences.defaultLocale,
+          languagePreferences,
+          userPrompt: input.brief,
+          templateKey: input.templateKey,
+          costBudgetCents: estimatedCostCents,
+        });
+      } catch (err) {
+        // Clean up the DB record so the tenant can retry.
+        await db.delete(landingPages).where(eq(landingPages.id, landingPageId)).catch(() => null);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message:
+            "Could not queue the generation job (Redis unreachable). Please check your REDIS_URL environment variable in Vercel and try again.",
+          cause: err,
+        });
+      }
 
       return { landingPageId };
     }),

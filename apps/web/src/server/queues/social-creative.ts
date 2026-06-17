@@ -17,8 +17,10 @@ export async function enqueueSocialCreativeJob(
   opts: JobsOptions,
 ): Promise<void> {
   const connection = new IORedis(env.REDIS_URL, {
-    maxRetriesPerRequest: null,
+    maxRetriesPerRequest: 2,
     enableReadyCheck: false,
+    connectTimeout: 5000,
+    commandTimeout: 8000,
   });
   const queue = new Queue(SOCIAL_CREATIVE_QUEUE_NAME, {
     connection,

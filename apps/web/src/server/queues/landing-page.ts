@@ -14,8 +14,13 @@ import IORedis from "ioredis";
 
 function createConnection(): IORedis {
   return new IORedis(env.REDIS_URL, {
-    maxRetriesPerRequest: null,
+    // maxRetriesPerRequest: null is required for BullMQ workers but NOT for Queue/FlowProducer
+    // producers. Using a finite value here ensures Redis failures surface as fast errors (< 10s)
+    // instead of causing Vercel serverless functions to hang forever (504).
+    maxRetriesPerRequest: 2,
     enableReadyCheck: false,
+    connectTimeout: 5000,   // fail if Redis unreachable within 5s
+    commandTimeout: 8000,  // fail commands that don't respond within 8s
   });
 }
 

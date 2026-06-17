@@ -6,8 +6,10 @@ import IORedis from "ioredis";
 
 export async function enqueueDomainCertJob(job: DomainCertJob): Promise<void> {
   const connection = new IORedis(env.REDIS_URL, {
-    maxRetriesPerRequest: null,
+    maxRetriesPerRequest: 2,
     enableReadyCheck: false,
+    connectTimeout: 5000,
+    commandTimeout: 8000,
   });
   const queue = new Queue<DomainCertJob>(DOMAIN_CERT_QUEUE_NAME, {
     connection,
