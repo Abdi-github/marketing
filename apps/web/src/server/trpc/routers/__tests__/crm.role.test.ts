@@ -22,6 +22,7 @@ function makeCtx(role: "owner" | "admin" | "editor" | "viewer"): Context {
       userId: "u-test-crm",
       role,
     },
+    requestOrigin: "http://localhost:3000",
   };
 }
 

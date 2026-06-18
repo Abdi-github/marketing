@@ -12,7 +12,8 @@ import { TRPCError } from "@trpc/server";
 import { and, eq, asc, desc, isNull, isNotNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
-  getSocialCreativePublicUrl,
+  getSocialCreativePath,
+  normalizeSocialCreativeUrl,
   type SocialCreativeAspectRatio,
   type SocialCreativeTemplate,
 } from "../../../lib/social-creative";
@@ -61,12 +62,16 @@ function withCreativeUrl<
     creativeUpdatedAt?: Date | string | null;
   },
 >(row: T): T & { creativeUrl: string | null } {
+  const creativeUrl =
+    (row.creativeImageUrl || row.creativePlan) && row.creativeStatus !== "pending"
+      ? row.creativeImageUrl
+        ? normalizeSocialCreativeUrl(row.creativeImageUrl)
+        : getSocialCreativePath(row.jobId, row.creativeUpdatedAt ?? "latest")
+      : null;
+
   return {
     ...row,
-    creativeUrl:
-      (row.creativeImageUrl || row.creativePlan) && row.creativeStatus !== "pending"
-        ? getSocialCreativePublicUrl(env.APP_URL, row.jobId, row.creativeUpdatedAt ?? "latest")
-        : null,
+    creativeUrl,
   };
 }
 
@@ -98,6 +103,7 @@ async function enqueueSocialCreative(input: {
   aspectRatio: SocialCreativeAspectRatio;
   template: SocialCreativeTemplate;
   creativeDirection?: string | null;
+  renderAppUrl?: string;
 }): Promise<string> {
   const idempotencyKey = crypto.randomUUID();
   const payload = socialCreativeJobSchema.parse({
@@ -112,6 +118,7 @@ async function enqueueSocialCreative(input: {
     costBudgetCents: 20,
     creativeDirection: input.creativeDirection?.trim() || undefined,
     variantNonce: idempotencyKey.slice(0, 8),
+    renderAppUrl: input.renderAppUrl,
   });
 
   await enqueueSocialCreativeJob("generate", payload, { jobId: idempotencyKey });
@@ -532,6 +539,7 @@ export const contentRouter = router({
           postJobId: input.jobId,
           aspectRatio: normalizeCreativeAspectRatio(post.creativeAspectRatio),
           template: normalizeCreativeTemplate(post.creativeTemplate),
+          renderAppUrl: ctx.requestOrigin,
         });
       }
 
@@ -594,6 +602,7 @@ export const contentRouter = router({
         aspectRatio: input.aspectRatio,
         template: input.template,
         creativeDirection: input.creativeDirection,
+        renderAppUrl: ctx.requestOrigin,
       });
 
       return {

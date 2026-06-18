@@ -60,6 +60,7 @@ export const socialCreativeJobSchema = z.object({
   costBudgetCents: z.number().int().positive().default(20),
   creativeDirection: z.string().max(600).optional(),
   variantNonce: z.string().max(80).optional(),
+  renderAppUrl: z.string().url().optional(),
   deadline: z.string().datetime().optional(),
 });
 
@@ -91,19 +92,26 @@ export function getSocialCreativeDimensions(aspectRatio: SocialCreativeAspectRat
   return { width: 1080, height: 1080 };
 }
 
-export function getSocialCreativePublicUrl(
-  appUrl: string,
+export function getSocialCreativePath(
   jobId: string,
   version?: string | number | Date | null,
 ): string {
-  const base = appUrl.replace(/\/$/, "");
   const suffix =
     version instanceof Date
       ? version.getTime()
       : version !== undefined && version !== null
         ? String(version)
         : "latest";
-  return `${base}/api/social-creatives/${jobId}/image?v=${encodeURIComponent(suffix)}`;
+  return `/api/social-creatives/${jobId}/image?v=${encodeURIComponent(suffix)}`;
+}
+
+export function getSocialCreativePublicUrl(
+  appUrl: string,
+  jobId: string,
+  version?: string | number | Date | null,
+): string {
+  const base = appUrl.replace(/\/$/, "");
+  return `${base}${getSocialCreativePath(jobId, version)}`;
 }
 
 export function parsePromptInput(input: unknown): { topic: string; highlights: string } {

@@ -236,7 +236,11 @@ export async function handleSocialCreativeJob(job: Job<SocialCreativeJob>): Prom
       })
       .where(and(eq(socialPosts.tenantId, data.tenantId), eq(socialPosts.jobId, data.postJobId)));
 
-    const renderUrl = getSocialCreativePublicUrl(env.APP_URL, data.postJobId, now);
+    const renderUrl = getSocialCreativePublicUrl(
+      data.renderAppUrl ?? env.APP_URL,
+      data.postJobId,
+      now,
+    );
     const response = await fetch(renderUrl);
     if (!response.ok) {
       const body = await response.text().catch(() => "");
@@ -250,7 +254,7 @@ export async function handleSocialCreativeJob(job: Job<SocialCreativeJob>): Prom
       version: now,
       png,
     });
-    await registerStoredMediaAsset({
+    const asset = await registerStoredMediaAsset({
       tenantId: data.tenantId,
       scope: "social-creative",
       storageKey: stored.storageKey,
@@ -265,7 +269,7 @@ export async function handleSocialCreativeJob(job: Job<SocialCreativeJob>): Prom
         creativePlan: renderPlan,
         creativeTemplate: renderPlan.template,
         creativeAspectRatio: renderPlan.aspectRatio,
-        creativeImageUrl: getSocialCreativePublicUrl(env.APP_URL, data.postJobId, now),
+        creativeImageUrl: asset.publicUrl,
         creativeStorageKey: stored.storageKey,
         creativeStatus: "completed",
         creativeError: null,

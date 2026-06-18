@@ -46,6 +46,7 @@ export {
   buildSocialCreativePlan,
   extractSocialCreativePlanFromText,
   getSocialCreativeDimensions,
+  getSocialCreativePath,
   getSocialCreativePublicUrl,
   parsePromptInput,
   parseSocialCreativePlan,

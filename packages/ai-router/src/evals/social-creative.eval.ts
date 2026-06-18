@@ -3,6 +3,8 @@ import { getPrompt } from "../prompts/registry";
 import {
   buildSocialCreativePlan,
   extractSocialCreativePlanFromText,
+  getSocialCreativePath,
+  getSocialCreativePublicUrl,
   socialCreativeJobSchema,
   socialCreativePlanSchema,
 } from "../queues/social-creative.schema";
@@ -91,11 +93,19 @@ describe("social-creative-plan-v1", () => {
       userId: "00000000-0000-0000-0000-000000000002",
       postJobId: "00000000-0000-0000-0000-000000000003",
       idempotencyKey: "00000000-0000-0000-0000-000000000004",
+      renderAppUrl: "https://example.com",
     });
 
     expect(parsed.success).toBe(true);
     expect(parsed.data?.aspectRatio).toBe("4:5");
     expect(parsed.data?.template).toBe("auto");
+  });
+
+  it("builds stable relative and absolute creative URLs", () => {
+    expect(getSocialCreativePath("job-123", 42)).toBe("/api/social-creatives/job-123/image?v=42");
+    expect(getSocialCreativePublicUrl("https://example.com/", "job-123", 42)).toBe(
+      "https://example.com/api/social-creatives/job-123/image?v=42",
+    );
   });
 
   it("validates the queued standalone social image payload", () => {

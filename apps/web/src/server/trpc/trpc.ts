@@ -10,20 +10,22 @@ import type { FetchCreateContextFnOptions } from "@trpc/server/adapters/fetch";
 export type Context = {
   session: Awaited<ReturnType<typeof auth.api.getSession>> | null;
   tenantCtx: TenantContext | null;
+  requestOrigin: string;
 };
 
 export async function createContext(opts: FetchCreateContextFnOptions): Promise<Context> {
+  const requestOrigin = new URL(opts.req.url).origin;
   const session = await auth.api.getSession({ headers: opts.req.headers });
 
   if (!session) {
-    return { session: null, tenantCtx: null };
+    return { session: null, tenantCtx: null, requestOrigin };
   }
 
   // Use the token already extracted by Better-Auth rather than re-parsing the cookie.
   const token = (session.session as { token: string }).token;
   const tenantCtx = await buildTenantContext(token);
 
-  return { session, tenantCtx };
+  return { session, tenantCtx, requestOrigin };
 }
 
 // ─── tRPC init ────────────────────────────────────────────────────────────────

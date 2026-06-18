@@ -10,7 +10,10 @@ import {
 import { env } from "@marketing/shared";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { getSocialCreativePublicUrl } from "../../../lib/social-creative";
+import {
+  absolutizeSocialCreativeUrl,
+  getSocialCreativePublicUrl,
+} from "../../../lib/social-creative";
 import { enqueueIntegrationSyncJob } from "../../queues/integration-sync";
 import { router, tenantProcedure, requires } from "../trpc";
 
@@ -300,8 +303,14 @@ export const integrationsRouter = router({
 
       const publishImageUrl =
         post.creativeImageUrl && post.creativeStatus === "completed"
-          ? getSocialCreativePublicUrl(env.APP_URL, post.jobId, post.creativeUpdatedAt ?? "latest")
-          : post.imageUrl;
+          ? absolutizeSocialCreativeUrl(ctx.requestOrigin, post.creativeImageUrl)
+          : post.creativeStatus === "completed"
+            ? getSocialCreativePublicUrl(
+                ctx.requestOrigin,
+                post.jobId,
+                post.creativeUpdatedAt ?? "latest",
+              )
+            : post.imageUrl;
 
       const result = await adapter.publishPost(connection, post.generatedText, publishImageUrl);
 

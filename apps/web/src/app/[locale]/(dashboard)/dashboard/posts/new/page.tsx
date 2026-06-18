@@ -44,17 +44,7 @@ type ActiveJob = {
 };
 
 function getDisplayCreativeUrl(post: ThreadPost | null | undefined): string | null {
-  if (!post?.creativeUrl) return null;
-  if (!post.creativeUrl.includes("scw.cloud")) return post.creativeUrl;
-
-  const version =
-    post.creativeUpdatedAt instanceof Date
-      ? post.creativeUpdatedAt.getTime()
-      : post.creativeUpdatedAt
-        ? Date.parse(String(post.creativeUpdatedAt)) || String(post.creativeUpdatedAt)
-        : "latest";
-
-  return `/api/social-creatives/${post.jobId}/image?v=${encodeURIComponent(String(version))}`;
+  return post?.creativeUrl ?? null;
 }
 
 const ACTIVE_JOB_POLL_MS = 2000;

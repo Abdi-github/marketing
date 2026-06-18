@@ -24,7 +24,11 @@ import { computeConversionRate, addDays } from "../ops";
 
 const createCaller = createCallerFactory(appRouter);
 
-const unauthCtx: Context = { session: null, tenantCtx: null };
+const unauthCtx: Context = {
+  session: null,
+  tenantCtx: null,
+  requestOrigin: "http://localhost:3000",
+};
 
 function makeCtx(platformRole: string | null): Context {
   return {
@@ -33,6 +37,7 @@ function makeCtx(platformRole: string | null): Context {
       session: { id: "s-test-metrics" },
     } as Context["session"],
     tenantCtx: null,
+    requestOrigin: "http://localhost:3000",
   };
 }
 
@@ -51,9 +56,7 @@ describe("ops.getRetentionMetrics — auth gate", () => {
 
   it("does NOT reject super_admin with FORBIDDEN (reaches procedure body)", async () => {
     const caller = createCaller(makeCtx("super_admin"));
-    const err = await caller.ops
-      .getRetentionMetrics()
-      .catch((e: unknown) => e as TRPCError);
+    const err = await caller.ops.getRetentionMetrics().catch((e: unknown) => e as TRPCError);
     expect((err as TRPCError).code).not.toBe("FORBIDDEN");
     expect((err as TRPCError).code).not.toBe("UNAUTHORIZED");
   });
@@ -71,9 +74,7 @@ describe("ops.backfillMetrics — auth gate", () => {
 
   it("does NOT reject super_admin with FORBIDDEN", async () => {
     const caller = createCaller(makeCtx("super_admin"));
-    const err = await caller.ops
-      .backfillMetrics()
-      .catch((e: unknown) => e as TRPCError);
+    const err = await caller.ops.backfillMetrics().catch((e: unknown) => e as TRPCError);
     expect((err as TRPCError).code).not.toBe("FORBIDDEN");
     expect((err as TRPCError).code).not.toBe("UNAUTHORIZED");
   });
@@ -143,7 +144,7 @@ describe("computeConversionRate", () => {
     const result = computeConversionRate(
       [
         { trialStartAt: EIGHT_DAYS_AGO, firstPaidAt: EIGHT_DAYS_AGO }, // eligible + converted
-        { trialStartAt: THREE_DAYS_AGO, firstPaidAt: new Date() },     // too new — excluded
+        { trialStartAt: THREE_DAYS_AGO, firstPaidAt: new Date() }, // too new — excluded
       ],
       NOW,
     );

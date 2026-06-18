@@ -31,10 +31,15 @@ function makeCtx(role: "owner" | "admin" | "editor" | "viewer"): Context {
       userId: "u-test-1",
       role,
     },
+    requestOrigin: "http://localhost:3000",
   };
 }
 
-const unauthCtx: Context = { session: null, tenantCtx: null };
+const unauthCtx: Context = {
+  session: null,
+  tenantCtx: null,
+  requestOrigin: "http://localhost:3000",
+};
 
 // ─── connect ─────────────────────────────────────────────────────────────────
 
@@ -77,16 +82,16 @@ describe("integrations.disconnect — role boundary", () => {
 
   it("rejects viewer with FORBIDDEN", async () => {
     const caller = createCaller(makeCtx("viewer"));
-    await expect(
-      caller.integrations.disconnect({ connectionId }),
-    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.integrations.disconnect({ connectionId })).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
   });
 
   it("rejects editor with FORBIDDEN", async () => {
     const caller = createCaller(makeCtx("editor"));
-    await expect(
-      caller.integrations.disconnect({ connectionId }),
-    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.integrations.disconnect({ connectionId })).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
   });
 
   it("does not reject admin with FORBIDDEN", async () => {
@@ -105,16 +110,16 @@ describe("integrations.sync — role boundary", () => {
 
   it("rejects viewer with FORBIDDEN", async () => {
     const caller = createCaller(makeCtx("viewer"));
-    await expect(
-      caller.integrations.sync({ connectionId }),
-    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.integrations.sync({ connectionId })).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
   });
 
   it("rejects editor with FORBIDDEN", async () => {
     const caller = createCaller(makeCtx("editor"));
-    await expect(
-      caller.integrations.sync({ connectionId }),
-    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.integrations.sync({ connectionId })).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
   });
 
   it("does not reject admin with FORBIDDEN", async () => {

@@ -27,10 +27,15 @@ function makeCtx(platformRole: string | null): Context {
       session: { id: "s-test-op" },
     } as Context["session"],
     tenantCtx: null,
+    requestOrigin: "http://localhost:3000",
   };
 }
 
-const unauthCtx: Context = { session: null, tenantCtx: null };
+const unauthCtx: Context = {
+  session: null,
+  tenantCtx: null,
+  requestOrigin: "http://localhost:3000",
+};
 
 // ─── listTenants ──────────────────────────────────────────────────────────────
 
@@ -79,9 +84,7 @@ describe("ops.suspendTenant — platform role boundary", () => {
 
   it("does NOT reject super_admin with FORBIDDEN", async () => {
     const caller = createCaller(makeCtx("super_admin"));
-    const err = await caller.ops
-      .suspendTenant({ tenantId })
-      .catch((e: unknown) => e as TRPCError);
+    const err = await caller.ops.suspendTenant({ tenantId }).catch((e: unknown) => e as TRPCError);
     expect((err as TRPCError).code).not.toBe("FORBIDDEN");
     expect((err as TRPCError).code).not.toBe("UNAUTHORIZED");
   });
@@ -123,9 +126,7 @@ describe("ops.getTenantUsage — platform role boundary", () => {
 
   it("does NOT reject super_admin with FORBIDDEN", async () => {
     const caller = createCaller(makeCtx("super_admin"));
-    const err = await caller.ops
-      .getTenantUsage({ tenantId })
-      .catch((e: unknown) => e as TRPCError);
+    const err = await caller.ops.getTenantUsage({ tenantId }).catch((e: unknown) => e as TRPCError);
     expect((err as TRPCError).code).not.toBe("FORBIDDEN");
     expect((err as TRPCError).code).not.toBe("UNAUTHORIZED");
   });
