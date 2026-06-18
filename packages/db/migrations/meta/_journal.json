@@ -274,6 +274,13 @@
       "when": 1781792200000,
       "tag": "0038_brand_asset_media_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1781838000000,
+      "tag": "0039_platform_admin_control_panel",
+      "breakpoints": true
     }
   ]
 }

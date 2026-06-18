@@ -11,6 +11,7 @@ import { formsRouter } from "./forms";
 import { landingPagesRouter } from "./landing-pages";
 import { integrationsRouter } from "./integrations";
 import { opsRouter } from "./ops";
+import { platformRouter } from "./platform";
 import { dealsRouter } from "./deals";
 import { inboxRouter } from "./inbox";
 import { segmentsRouter } from "./segments";
@@ -33,6 +34,7 @@ export const appRouter = router({
   landingPages: landingPagesRouter,
   integrations: integrationsRouter,
   ops: opsRouter,
+  platform: platformRouter,
   segments: segmentsRouter,
   sequences: sequencesRouter,
   tenancy: tenancyRouter,

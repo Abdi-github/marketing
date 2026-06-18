@@ -1,11 +1,13 @@
-import {
-  boolean,
-  pgTable,
-  text,
-  timestamp,
-  uuid,
-} from "drizzle-orm/pg-core";
+import { boolean, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { tenants } from "./tenants";
+
+export const PLATFORM_ROLES = [
+  "super_admin",
+  "support_admin",
+  "operations_admin",
+  "finance_admin",
+] as const;
+export type PlatformRole = (typeof PLATFORM_ROLES)[number];
 
 // ─── Users ────────────────────────────────────────────────────────────────────
 // Not tenant-scoped: a user can belong to multiple tenants via tenant_users.
@@ -16,16 +18,12 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   emailVerified: boolean("email_verified").notNull().default(false),
   image: text("image"),
-  // Platform-wide role — null for regular users, 'super_admin' for operators.
+  // Platform-wide role — null for regular users, or one of PLATFORM_ROLES for operators.
   platformRole: text("platform_role"),
   // DE-CH locale default matches product strategy beachhead (ADR-0004).
   locale: text("locale").notNull().default("de-CH"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
 });
 
@@ -46,12 +44,8 @@ export const sessions = pgTable("sessions", {
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   ipAddress: text("ip_address"),
   userAgent: text("user_agent"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 // ─── Accounts ─────────────────────────────────────────────────────────────────
@@ -75,12 +69,8 @@ export const accounts = pgTable("accounts", {
   }),
   scope: text("scope"),
   password: text("password"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 // ─── Verifications ────────────────────────────────────────────────────────────

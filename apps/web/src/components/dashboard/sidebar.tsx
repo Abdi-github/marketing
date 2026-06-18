@@ -80,6 +80,7 @@ type SidebarProps = {
   logoutLabel: string;
   brandName: string;
   groups: NavGroup[];
+  homeHref?: string;
 };
 
 // ─── Sidebar nav item ─────────────────────────────────────────────────────────
@@ -115,9 +116,10 @@ function SidebarItem({ item, collapsed }: { item: NavItem; collapsed: boolean })
 
 // ─── Main sidebar ─────────────────────────────────────────────────────────────
 
-export function Sidebar({ locale, logoutLabel, brandName, groups }: SidebarProps) {
+export function Sidebar({ locale, logoutLabel, brandName, groups, homeHref }: SidebarProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const resolvedHomeHref = homeHref ?? `/${locale}/dashboard`;
 
   const sidebarContent = (
     <div
@@ -126,7 +128,7 @@ export function Sidebar({ locale, logoutLabel, brandName, groups }: SidebarProps
       {/* Brand header */}
       <div className="flex h-14 flex-shrink-0 items-center justify-between border-b border-gray-100 px-4">
         {!collapsed && (
-          <Link href={`/${locale}/dashboard`} className="flex items-center gap-2">
+          <Link href={resolvedHomeHref} className="flex items-center gap-2">
             <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-purple-700 text-xs font-bold text-white">
               M
             </span>
@@ -136,7 +138,7 @@ export function Sidebar({ locale, logoutLabel, brandName, groups }: SidebarProps
           </Link>
         )}
         {collapsed && (
-          <Link href={`/${locale}/dashboard`} className="mx-auto">
+          <Link href={resolvedHomeHref} className="mx-auto">
             <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-purple-700 text-xs font-bold text-white">
               M
             </span>

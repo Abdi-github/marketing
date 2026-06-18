@@ -30,3 +30,4 @@ export * from "./copilot";
 export * from "./metrics";
 export * from "./domains";
 export * from "./media";
+export * from "./platform-admin";
