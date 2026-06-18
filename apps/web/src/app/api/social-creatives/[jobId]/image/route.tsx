@@ -18,10 +18,11 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ jobId: string }> },
 ): Promise<Response> {
   const { jobId } = await params;
+  const requestOrigin = new URL(req.url).origin;
 
   const [post] = await db
     .select({
@@ -47,6 +48,7 @@ export async function GET(
   const storedResponse = await readStoredCreativePng({
     storageKey: post.creativeStorageKey,
     legacyImageUrl: post.creativeImageUrl,
+    requestOrigin,
   });
   if (storedResponse) {
     return storedResponse;
@@ -105,25 +107,30 @@ export async function GET(
     });
 
   const { width, height } = getSocialCreativeDimensions(plan.aspectRatio);
-  const imageUrl = await resolveOgImageSrc(plan.backgroundImageUrl ?? post.imageUrl);
+  const imageUrl = await resolveOgImageSrc(plan.backgroundImageUrl ?? post.imageUrl, requestOrigin);
+  const logoUrl = await resolveOgImageSrc(brand?.logoUrl ?? null, requestOrigin);
 
   return new ImageResponse(
     renderSocialCreative({
       plan,
       imageUrl,
       businessName: profile?.businessName ?? "My Business",
-      brand,
+      brand: brand ? { ...brand, logoUrl } : brand,
     }),
     { width, height },
   );
 }
 
-async function resolveOgImageSrc(imageUrl: string | null): Promise<string | null> {
+async function resolveOgImageSrc(
+  imageUrl: string | null,
+  requestOrigin: string,
+): Promise<string | null> {
   if (!imageUrl) return null;
   if (imageUrl.startsWith("data:")) return imageUrl;
 
   try {
-    const response = await fetch(imageUrl, {
+    const absoluteUrl = toAbsoluteAssetUrl(imageUrl, requestOrigin);
+    const response = await fetch(absoluteUrl, {
       headers: { accept: "image/png,image/jpeg,image/svg+xml,image/*;q=0.8" },
     });
     if (!response.ok) return null;
@@ -150,15 +157,20 @@ function isSupportedOgImageType(contentType: string): boolean {
 async function readStoredCreativePng(input: {
   storageKey: string | null;
   legacyImageUrl: string | null;
+  requestOrigin: string;
 }): Promise<Response | null> {
   const storageKey = input.storageKey ?? getStorageKeyFromScalewayUrl(input.legacyImageUrl);
-  if (!storageKey) return null;
+  if (!storageKey) {
+    return fetchLegacyPublicAsset(input.legacyImageUrl, input.requestOrigin);
+  }
 
   if (storageKey.startsWith("local:")) {
     return readLocalGeneratedAsset(storageKey.slice("local:".length));
   }
 
-  if (!hasScalewayStorageConfig()) return null;
+  if (!hasScalewayStorageConfig()) {
+    return fetchLegacyPublicAsset(input.legacyImageUrl, input.requestOrigin);
+  }
   return fetchScalewayObject(storageKey);
 }
 
@@ -226,6 +238,33 @@ async function fetchScalewayObject(key: string): Promise<Response | null> {
     return pngResponse(new Uint8Array(await response.arrayBuffer()));
   } catch {
     return null;
+  }
+}
+
+async function fetchLegacyPublicAsset(
+  legacyImageUrl: string | null,
+  requestOrigin: string,
+): Promise<Response | null> {
+  if (!legacyImageUrl) return null;
+
+  try {
+    const url = toAbsoluteAssetUrl(legacyImageUrl, requestOrigin);
+    const response = await fetch(url, {
+      headers: { accept: "image/png,image/jpeg,image/svg+xml,image/*;q=0.8" },
+    });
+    if (!response.ok) return null;
+
+    return pngResponse(new Uint8Array(await response.arrayBuffer()));
+  } catch {
+    return null;
+  }
+}
+
+function toAbsoluteAssetUrl(value: string, requestOrigin: string): string {
+  try {
+    return new URL(value).toString();
+  } catch {
+    return new URL(value, `${requestOrigin.replace(/\/$/, "")}/`).toString();
   }
 }
 
