@@ -61,6 +61,7 @@ verification/
 .codex*
 .playwright-mcp/
 audit*
+!apps/web/src/server/platform/audit.ts
 documentation/
 docs/
 *.png
