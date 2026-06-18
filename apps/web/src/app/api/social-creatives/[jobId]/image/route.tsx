@@ -49,6 +49,7 @@ export async function GET(
     storageKey: post.creativeStorageKey,
     legacyImageUrl: post.creativeImageUrl,
     requestOrigin,
+    currentRequestUrl: req.url,
   });
   if (storedResponse) {
     return storedResponse;
@@ -158,10 +159,15 @@ async function readStoredCreativePng(input: {
   storageKey: string | null;
   legacyImageUrl: string | null;
   requestOrigin: string;
+  currentRequestUrl: string;
 }): Promise<Response | null> {
   const storageKey = input.storageKey ?? getStorageKeyFromScalewayUrl(input.legacyImageUrl);
   if (!storageKey) {
-    return fetchLegacyPublicAsset(input.legacyImageUrl, input.requestOrigin);
+    return fetchLegacyPublicAsset(
+      input.legacyImageUrl,
+      input.requestOrigin,
+      input.currentRequestUrl,
+    );
   }
 
   if (storageKey.startsWith("local:")) {
@@ -169,7 +175,11 @@ async function readStoredCreativePng(input: {
   }
 
   if (!hasScalewayStorageConfig()) {
-    return fetchLegacyPublicAsset(input.legacyImageUrl, input.requestOrigin);
+    return fetchLegacyPublicAsset(
+      input.legacyImageUrl,
+      input.requestOrigin,
+      input.currentRequestUrl,
+    );
   }
   return fetchScalewayObject(storageKey);
 }
@@ -244,11 +254,15 @@ async function fetchScalewayObject(key: string): Promise<Response | null> {
 async function fetchLegacyPublicAsset(
   legacyImageUrl: string | null,
   requestOrigin: string,
+  currentRequestUrl: string,
 ): Promise<Response | null> {
   if (!legacyImageUrl) return null;
 
   try {
     const url = toAbsoluteAssetUrl(legacyImageUrl, requestOrigin);
+    if (isSameSocialCreativeRenderUrl(url, currentRequestUrl)) {
+      return null;
+    }
     const response = await fetch(url, {
       headers: { accept: "image/png,image/jpeg,image/svg+xml,image/*;q=0.8" },
     });
@@ -265,6 +279,16 @@ function toAbsoluteAssetUrl(value: string, requestOrigin: string): string {
     return new URL(value).toString();
   } catch {
     return new URL(value, `${requestOrigin.replace(/\/$/, "")}/`).toString();
+  }
+}
+
+function isSameSocialCreativeRenderUrl(candidateUrl: string, currentRequestUrl: string): boolean {
+  try {
+    const candidate = new URL(candidateUrl);
+    const current = new URL(currentRequestUrl);
+    return candidate.origin === current.origin && candidate.pathname === current.pathname;
+  } catch {
+    return false;
   }
 }
 
