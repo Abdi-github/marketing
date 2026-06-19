@@ -1,0 +1,59 @@
+import { describe, expect, it } from "vitest";
+import {
+  buildAutoLandingFormDefinition,
+  compositionHasLeadCapture,
+} from "./landing-page-form-definition";
+
+describe("landing-page-form-definition", () => {
+  it("detects lead capture from lead form sections", () => {
+    expect(
+      compositionHasLeadCapture({
+        title: "Test",
+        locale: "en",
+        sections: [{ type: "lead_form", order: 0, heading: "Contact us" }],
+      }),
+    ).toBe(true);
+  });
+
+  it("detects lead capture from form-first hero variants", () => {
+    expect(
+      compositionHasLeadCapture({
+        title: "Test",
+        locale: "en",
+        sections: [{ type: "hero", variant: "split-form-right", order: 0, heading: "Book now" }],
+      }),
+    ).toBe(true);
+  });
+
+  it("does not flag non-conversion compositions", () => {
+    expect(
+      compositionHasLeadCapture({
+        title: "Test",
+        locale: "en",
+        sections: [{ type: "hero", order: 0, heading: "Welcome" }],
+      }),
+    ).toBe(false);
+  });
+
+  it("builds booking-oriented forms for hospitality-style verticals", () => {
+    const definition = buildAutoLandingFormDefinition({
+      locale: "en",
+      vertical: "restaurant",
+    });
+
+    expect(definition.kind).toBe("booking");
+    expect(definition.submitLabel).toBe("Request booking");
+    expect(definition.steps[1]?.fields.some((field) => field.name === "date")).toBe(true);
+  });
+
+  it("builds localized quote forms for service pages", () => {
+    const definition = buildAutoLandingFormDefinition({
+      locale: "fr-CH",
+      vertical: "consulting",
+    });
+
+    expect(definition.kind).toBe("quote");
+    expect(definition.submitLabel).toBe("Demander une offre");
+    expect(definition.settings.success_message).toContain("Merci");
+  });
+});

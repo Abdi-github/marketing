@@ -260,6 +260,10 @@ export function HeroSplitFormRight({
   brandPrimary: string;
 }) {
   const { heading, body, extras } = section;
+  const primaryHref =
+    extras?.ctaHref && extras.ctaHref.trim() && extras.ctaHref !== "#contact"
+      ? extras.ctaHref
+      : "#lp-lead-form";
   return (
     <>
       <style>{`
@@ -273,8 +277,11 @@ export function HeroSplitFormRight({
         .lp-hsf__card { background:var(--lp-card,#fff); border-radius:24px; padding:2.5rem 2rem; width:100%; max-width:400px; box-shadow:0 24px 80px rgba(0,0,0,0.32); }
         .lp-hsf__card-title { font-family:var(--font-heading,system-ui); font-size:1.45rem; font-weight:800; color:var(--lp-text,#111827); margin:0 0 0.4rem; }
         .lp-hsf__card-sub { font-size:0.88rem; color:var(--lp-muted,#9ca3af); margin:0 0 1.5rem; line-height:1.5; }
-        .lp-hsf__field { display:block; width:100%; padding:0.85rem 1rem; border:1.5px solid var(--lp-border,#e5e7eb); border-radius:10px; font-size:0.95rem; color:var(--lp-text,#111827); background:var(--lp-surface,#f9fafb); margin-bottom:0.75rem; box-sizing:border-box; font-family:var(--font-body,system-ui); }
+        .lp-hsf__points { display:flex; flex-direction:column; gap:0.7rem; margin-bottom:1.2rem; }
+        .lp-hsf__point { display:flex; align-items:flex-start; gap:0.7rem; color:var(--lp-text-soft,#374151); font-size:0.92rem; line-height:1.55; }
+        .lp-hsf__point-icon { width:1.4rem; height:1.4rem; border-radius:999px; background:${brandPrimary}14; color:${brandPrimary}; display:inline-flex; align-items:center; justify-content:center; flex:0 0 1.4rem; margin-top:0.1rem; }
         .lp-hsf__submit { display:block; width:100%; padding:1rem; border-radius:10px; background:${brandPrimary}; color:var(--lp-on-primary,#fff); font-weight:700; font-size:1rem; text-align:center; text-decoration:none; margin-top:0.75rem; box-sizing:border-box; }
+        .lp-hsf__subcta { display:inline-flex; align-items:center; justify-content:center; width:100%; margin-top:0.8rem; color:var(--lp-text-soft,#4b5563); text-decoration:none; font-size:0.9rem; font-weight:600; }
       `}</style>
       <section className="lp-hsf">
         <div className="lp-hsf__content">
@@ -299,11 +306,28 @@ export function HeroSplitFormRight({
         <div className="lp-hsf__panel">
           <div className="lp-hsf__card">
             <p className="lp-hsf__card-title">{extras?.ctaText ?? "Get in touch"}</p>
-            <p className="lp-hsf__card-sub">Free and non-binding.</p>
-            <input type="text" placeholder="Your name" readOnly className="lp-hsf__field" />
-            <input type="email" placeholder="Email address" readOnly className="lp-hsf__field" />
-            <a href="#contact" className="lp-hsf__submit">
+            <p className="lp-hsf__card-sub">
+              Use the live request form below to send your inquiry. Free and non-binding.
+            </p>
+            <div className="lp-hsf__points">
+              <div className="lp-hsf__point">
+                <span className="lp-hsf__point-icon">1</span>
+                <span>Tell us what you need in a few clicks.</span>
+              </div>
+              <div className="lp-hsf__point">
+                <span className="lp-hsf__point-icon">2</span>
+                <span>Your request is saved straight into the business CRM.</span>
+              </div>
+              <div className="lp-hsf__point">
+                <span className="lp-hsf__point-icon">3</span>
+                <span>The team can follow up without losing the lead.</span>
+              </div>
+            </div>
+            <a href={primaryHref} className="lp-hsf__submit">
               {extras?.ctaText ?? "Send request"}
+            </a>
+            <a href="#lp-contact" className="lp-hsf__subcta">
+              Prefer phone or email? See contact details
             </a>
           </div>
         </div>

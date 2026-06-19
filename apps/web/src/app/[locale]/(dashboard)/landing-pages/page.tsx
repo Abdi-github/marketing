@@ -295,7 +295,7 @@ export default function LandingPagesPage() {
     if (!pollingId) return;
     const interval = setInterval(async () => {
       try {
-        const page = await trpc.landingPages.getPage.query({ pageId: pollingId });
+        const page = await trpc.landingPages.getPageStatus.query({ pageId: pollingId });
         if (!page) return;
         if (
           page.currentVersionId ||

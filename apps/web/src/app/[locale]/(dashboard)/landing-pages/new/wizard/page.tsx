@@ -279,7 +279,7 @@ export default function LandingPageWizard() {
     let cancelled = false;
     const tick = async () => {
       try {
-        const page = await trpc.landingPages.getPage.query({ pageId: generatingId });
+        const page = await trpc.landingPages.getPageStatus.query({ pageId: generatingId });
         if (cancelled) return;
         pollErrorCountRef.current = 0;
         if (page?.currentVersionId) {

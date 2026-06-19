@@ -11,7 +11,6 @@ import {
   landingPageExperiments,
   experimentVariants,
   tenants,
-  forms,
   brandAssets,
 } from "@marketing/db";
 import { and, eq, desc } from "drizzle-orm";
@@ -33,10 +32,23 @@ import {
   normalizeLandingLanguagePreferences,
 } from "../../../../lib/landing-language";
 import { selectLocalizedComposition } from "../../../../lib/landing-localization";
+import {
+  compositionHasLeadCapture,
+  ensureLandingPageLeadForm,
+  getLandingPageLeadForm,
+} from "../../../../lib/landing-page-forms";
 import { LANDING_THEME_GLOBAL_CSS, resolveLandingTheme } from "../../../../lib/landing-theme";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+function anchorIdForSection(
+  type: LandingPageComposition["sections"][number]["type"],
+): string | null {
+  if (type === "lead_form") return "lp-lead-form";
+  if (type === "contact") return "lp-contact";
+  return null;
+}
 
 type Props = {
   params: Promise<{ tenantSlug: string; pageSlug: string }>;
@@ -206,24 +218,24 @@ export default async function PublicLandingPage({ params, searchParams }: Props)
     renderComposition.sections.slice().sort((a, b) => a.order - b.order);
   const basePath = `/p/${tenantSlug}/${pageSlug}`;
 
-  const [form] = await db
-    .select({
-      id: forms.id,
-      slug: forms.slug,
-      schema: forms.schema,
-      steps: forms.steps,
-      settings: forms.settings,
-      submitLabel: forms.submitLabel,
-      name: forms.name,
-    })
-    .from(forms)
-    .where(
-      and(
-        eq(forms.tenantId, tenant.id),
-        eq(forms.landingPageId, page.id),
-        eq(forms.isActive, true),
-      ),
-    );
+  const vertical =
+    ((stepData?.["wizardPayload"] as { vertical?: unknown } | undefined)?.vertical as
+      | string
+      | undefined) ?? undefined;
+  let form = compositionHasLeadCapture(renderComposition)
+    ? await getLandingPageLeadForm(tenant.id, page.id)
+    : null;
+  if (!form && compositionHasLeadCapture(renderComposition)) {
+    form = await ensureLandingPageLeadForm({
+      tenantId: tenant.id,
+      landingPageId: page.id,
+      pageTitle: page.title,
+      pageSlug,
+      locale: activeLocale,
+      vertical,
+      composition: renderComposition,
+    });
+  }
 
   const [brand] = await db.select().from(brandAssets).where(eq(brandAssets.tenantId, tenant.id));
 
@@ -265,6 +277,9 @@ export default async function PublicLandingPage({ params, searchParams }: Props)
 
         {sections.map((section, i) => (
           <div key={i} id={`lp-section-${i}`} data-lp-section={i}>
+            {anchorIdForSection(section.type) && (
+              <div id={anchorIdForSection(section.type)!} style={{ scrollMarginTop: "110px" }} />
+            )}
             <Reveal>
               <SectionBlock
                 section={section}

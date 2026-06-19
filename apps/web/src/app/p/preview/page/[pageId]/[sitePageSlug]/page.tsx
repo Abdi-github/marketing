@@ -2,7 +2,7 @@
 // URL: /p/preview/page/<pageId>/<sitePageSlug>
 
 import { db } from "@marketing/db";
-import { landingPages, landingPageVersions, forms } from "@marketing/db";
+import { landingPages, landingPageVersions } from "@marketing/db";
 import { and, eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import type { FormSettings, FormStep, LandingPageComposition } from "@marketing/ai-router";
@@ -20,10 +20,23 @@ import {
   normalizeLandingLanguagePreferences,
 } from "../../../../../../lib/landing-language";
 import { selectLocalizedComposition } from "../../../../../../lib/landing-localization";
+import {
+  compositionHasLeadCapture,
+  ensureLandingPageLeadForm,
+  getLandingPageLeadForm,
+} from "../../../../../../lib/landing-page-forms";
 import { LANDING_THEME_GLOBAL_CSS, resolveLandingTheme } from "../../../../../../lib/landing-theme";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+function anchorIdForSection(
+  type: LandingPageComposition["sections"][number]["type"],
+): string | null {
+  if (type === "lead_form") return "lp-lead-form";
+  if (type === "contact") return "lp-contact";
+  return null;
+}
 
 type Props = {
   params: Promise<{ pageId: string; sitePageSlug: string }>;
@@ -87,31 +100,26 @@ export default async function DraftPreviewSitePage({ params, searchParams }: Pro
     themeKey: page.themeKey,
     stepData,
   });
-
-  const leadFormSection = sections.find((section) => section.type === "lead_form");
-  let form: {
-    slug: string;
-    schema: unknown;
-    steps: unknown;
-    settings: unknown;
-    submitLabel: string | null;
-  } | null = null;
-  if (leadFormSection) {
-    const [f] = await db
-      .select({
-        slug: forms.slug,
-        schema: forms.schema,
-        steps: forms.steps,
-        settings: forms.settings,
-        submitLabel: forms.submitLabel,
-      })
-      .from(forms)
-      .where(and(eq(forms.tenantId, page.tenantId), eq(forms.isActive, true)))
-      .limit(1);
-    if (f) form = f;
-  }
-
   const basePath = `/p/preview/page/${pageId}`;
+
+  const vertical =
+    ((stepData?.["wizardPayload"] as { vertical?: unknown } | undefined)?.vertical as
+      | string
+      | undefined) ?? undefined;
+  let form = compositionHasLeadCapture(renderComposition)
+    ? await getLandingPageLeadForm(page.tenantId, page.id)
+    : null;
+  if (!form && compositionHasLeadCapture(renderComposition)) {
+    form = await ensureLandingPageLeadForm({
+      tenantId: page.tenantId,
+      landingPageId: page.id,
+      pageTitle: page.title,
+      pageSlug: basePath.split("/").at(-1) ?? page.id,
+      locale: activeLocale,
+      vertical,
+      composition: renderComposition,
+    });
+  }
 
   return (
     <>
@@ -155,6 +163,9 @@ export default async function DraftPreviewSitePage({ params, searchParams }: Pro
               data-lp-section={i}
               style={{ scrollMarginTop: "1.85rem" }}
             >
+              {anchorIdForSection(section.type) && (
+                <div id={anchorIdForSection(section.type)!} style={{ scrollMarginTop: "110px" }} />
+              )}
               <Reveal>
                 <SectionBlock
                   section={section}

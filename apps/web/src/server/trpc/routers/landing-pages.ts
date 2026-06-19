@@ -16,6 +16,7 @@ import {
   landingPageTemplates,
   businessProfiles,
   customDomains,
+  forms,
   outbox,
   tenants,
 } from "@marketing/db";
@@ -35,6 +36,7 @@ import {
   type LandingLanguagePreferences,
   type LandingPageLocale,
 } from "../../../lib/landing-language";
+import { ensureLandingPageLeadForm } from "../../../lib/landing-page-forms";
 
 function slugify(text: string): string {
   return text
@@ -568,19 +570,45 @@ export const landingPagesRouter = router({
         stepData: initialStepData,
       });
 
-      await enqueueLandingPageFlow({
+      await ensureLandingPageLeadForm({
         tenantId,
         landingPageId,
-        userId,
-        businessName: profile.businessName,
-        vertical: profile.vertical,
-        city: profile.addressCity ?? undefined,
+        pageTitle: input.title ?? profile.businessName ?? effectivePrompt.slice(0, 80),
+        pageSlug: `${baseSlug}-${landingPageId.slice(0, 8)}`,
         locale: profile.locale,
-        userPrompt: effectivePrompt,
-        templateKey: input.templateKey,
-        applyBrand: input.applyBrand,
-        costBudgetCents: 50,
+        vertical: profile.vertical,
       });
+
+      try {
+        await enqueueLandingPageFlow({
+          tenantId,
+          landingPageId,
+          userId,
+          businessName: profile.businessName,
+          vertical: profile.vertical,
+          city: profile.addressCity ?? undefined,
+          locale: profile.locale,
+          userPrompt: effectivePrompt,
+          templateKey: input.templateKey,
+          applyBrand: input.applyBrand,
+          costBudgetCents: 50,
+        });
+      } catch (err) {
+        await db
+          .delete(forms)
+          .where(and(eq(forms.tenantId, tenantId), eq(forms.landingPageId, landingPageId)))
+          .catch(() => null);
+        await db
+          .delete(landingPages)
+          .where(eq(landingPages.id, landingPageId))
+          .catch(() => null);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message:
+            "Could not queue the generation job (Redis unreachable). Please check your REDIS_URL environment variable in Vercel and try again.",
+          cause: err,
+        });
+      }
 
       return { landingPageId };
     }),
@@ -671,6 +699,16 @@ export const landingPagesRouter = router({
         locale: locale ?? profile.locale,
         status: "draft",
         stepData: { templateKey: input.templateKey, usedAsIs: true },
+      });
+
+      await ensureLandingPageLeadForm({
+        tenantId,
+        landingPageId,
+        pageTitle: profile.businessName,
+        pageSlug: `${baseSlug}-${landingPageId.slice(0, 8)}`,
+        locale: locale ?? profile.locale,
+        vertical: profile.vertical,
+        composition: parsed.data,
       });
 
       const [version] = await db
@@ -837,6 +875,15 @@ export const landingPagesRouter = router({
         stepData: initialStepData,
       });
 
+      await ensureLandingPageLeadForm({
+        tenantId,
+        landingPageId,
+        pageTitle: `${profile.businessName} - ${primaryGoal.replace("_", " ")}`,
+        pageSlug: `${baseSlug}-${landingPageId.slice(0, 8)}`,
+        locale: languagePreferences.defaultLocale,
+        vertical: input.vertical,
+      });
+
       try {
         await enqueueLandingPageFlow({
           tenantId,
@@ -853,7 +900,14 @@ export const landingPagesRouter = router({
         });
       } catch (err) {
         // Clean up the DB record so the tenant can retry.
-        await db.delete(landingPages).where(eq(landingPages.id, landingPageId)).catch(() => null);
+        await db
+          .delete(forms)
+          .where(and(eq(forms.tenantId, tenantId), eq(forms.landingPageId, landingPageId)))
+          .catch(() => null);
+        await db
+          .delete(landingPages)
+          .where(eq(landingPages.id, landingPageId))
+          .catch(() => null);
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message:
@@ -896,6 +950,46 @@ export const landingPagesRouter = router({
 
       return {
         ...page,
+        generationState: getLandingGenerationState({
+          status: page.status,
+          currentVersionId: page.currentVersionId,
+          stepData: (page.stepData as Record<string, unknown> | null) ?? null,
+        }),
+        generationError: getLandingGenerationError(
+          (page.stepData as Record<string, unknown> | null) ?? null,
+        ),
+      };
+    }),
+
+  getPageStatus: tenantProcedure
+    .input(z.object({ pageId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const { tenantId } = ctx.tenantCtx;
+
+      const [page] = await db
+        .select({
+          id: landingPages.id,
+          slug: landingPages.slug,
+          title: landingPages.title,
+          status: landingPages.status,
+          currentVersionId: landingPages.currentVersionId,
+          publishedVersionId: landingPages.publishedVersionId,
+          stepData: landingPages.stepData,
+          updatedAt: landingPages.updatedAt,
+        })
+        .from(landingPages)
+        .where(and(eq(landingPages.tenantId, tenantId), eq(landingPages.id, input.pageId)));
+
+      if (!page) return null;
+
+      return {
+        id: page.id,
+        slug: page.slug,
+        title: page.title,
+        status: page.status,
+        currentVersionId: page.currentVersionId,
+        publishedVersionId: page.publishedVersionId,
+        updatedAt: page.updatedAt,
         generationState: getLandingGenerationState({
           status: page.status,
           currentVersionId: page.currentVersionId,
@@ -1321,6 +1415,22 @@ export const landingPagesRouter = router({
           version: newVersion.version,
           tenantId,
         },
+      });
+
+      const vertical =
+        (
+          (page.stepData as Record<string, unknown> | null | undefined)?.["wizardPayload"] as
+            | { vertical?: string }
+            | undefined
+        )?.vertical ?? null;
+      await ensureLandingPageLeadForm({
+        tenantId,
+        landingPageId: input.pageId,
+        pageTitle: page.title,
+        pageSlug: page.slug,
+        locale: page.locale,
+        vertical,
+        composition: currentVersion.composition as LandingPageComposition,
       });
 
       return { versionId: newVersion.id, version: newVersion.version };

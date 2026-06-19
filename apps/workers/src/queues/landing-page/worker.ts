@@ -99,9 +99,13 @@ function deriveUsageJobId(jobId: string, ...parts: string[]): string {
 function defaultSectionsForVertical(vertical: string): string {
   const v = vertical.toLowerCase();
   if (/café|cafe|kaffee|coffee|barista|bakery|boulangerie|pâtisserie|brunch/.test(v))
-    return "hero, menu_preview, about, gallery, testimonials, contact";
-  if (/restaurant|gastro|bistro|trattoria|pizza|brasserie|dining|food|cuisine|ristorante/.test(v))
-    return "hero, menu_preview, gallery, testimonials, about, contact";
+    return "hero, menu_preview, about, gallery, testimonials, contact, lead_form";
+  if (
+    /restaurant|gastro|bistro|trattoria|pizza|brasserie|dining|food|cuisine|ristorante|hotel|hospitality/.test(
+      v,
+    )
+  )
+    return "hero, menu_preview, gallery, testimonials, about, contact, lead_form";
   if (/gym|fitness|sport|crossfit|training|workout|yoga|pilates|wellness|spa/.test(v))
     return "hero, offer, about, gallery, testimonials, faq, contact, lead_form";
   if (/clinic|médecin|arzt|doctor|health|praxis|physio|osteo|chiro|dental/.test(v))
