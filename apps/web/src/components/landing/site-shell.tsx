@@ -11,6 +11,7 @@ import {
   normalizeLandingLanguagePreferences,
   type LandingLanguagePreferences,
 } from "../../lib/landing-language";
+import { buildTrackedCtaProps } from "./tracking";
 
 function trimTrailingSlash(path: string): string {
   return path.length > 1 ? path.replace(/\/+$/, "") : path;
@@ -197,6 +198,11 @@ export function LandingSiteNav({
               hrefForLink(nav.cta, basePath),
               shouldPersistLocale ? selectedLocale : null,
             )}
+            {...buildTrackedCtaProps({
+              label: nav.cta.label,
+              href: hrefForLink(nav.cta, basePath),
+              section: "site_nav",
+            })}
             style={{
               color: isBold ? "var(--lp-text,#111827)" : "var(--lp-on-primary,#fff)",
               background: isBold ? "var(--lp-card,#ffffff)" : brandPrimary,

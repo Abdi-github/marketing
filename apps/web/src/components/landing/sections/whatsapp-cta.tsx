@@ -1,5 +1,6 @@
 import type { WhatsappCtaSection } from "@marketing/ai-router";
 import { renderRich } from "../rich-text";
+import { buildTrackedCtaProps } from "../tracking";
 
 type Props = { section: WhatsappCtaSection; brandPrimary: string };
 
@@ -73,6 +74,11 @@ export function WhatsAppCtaCenteredButton({ section }: Props) {
           href={waHref(section)}
           target="_blank"
           rel="noopener noreferrer"
+          {...buildTrackedCtaProps({
+            label: buttonText,
+            href: waHref(section),
+            section: "whatsapp_cta",
+          })}
           style={{
             display: "inline-flex",
             alignItems: "center",
@@ -150,6 +156,11 @@ export function WhatsAppCtaBannerStrip({ section }: Props) {
           href={waHref(section)}
           target="_blank"
           rel="noopener noreferrer"
+          {...buildTrackedCtaProps({
+            label: buttonText,
+            href: waHref(section),
+            section: "whatsapp_cta",
+          })}
           style={{
             display: "inline-flex",
             alignItems: "center",

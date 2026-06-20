@@ -1,5 +1,6 @@
 import type { ContactSection } from "@marketing/ai-router";
 import { renderRich } from "../rich-text";
+import { buildTrackedCtaProps } from "../tracking";
 
 type Props = { section: ContactSection; brandPrimary: string };
 
@@ -68,13 +69,29 @@ export function ContactSplitMap({ section, brandPrimary }: Props) {
               </div>
             )}
             {extras?.phone && (
-              <a href={`tel:${extras.phone}`} className="lp-csm__contact-item">
+              <a
+                href={`tel:${extras.phone}`}
+                className="lp-csm__contact-item"
+                {...buildTrackedCtaProps({
+                  label: extras.phone,
+                  href: `tel:${extras.phone}`,
+                  section: "contact",
+                })}
+              >
                 <span className="lp-csm__icon">📞</span>
                 <span>{extras.phone}</span>
               </a>
             )}
             {extras?.email && (
-              <a href={`mailto:${extras.email}`} className="lp-csm__contact-item">
+              <a
+                href={`mailto:${extras.email}`}
+                className="lp-csm__contact-item"
+                {...buildTrackedCtaProps({
+                  label: extras.email,
+                  href: `mailto:${extras.email}`,
+                  section: "contact",
+                })}
+              >
                 <span className="lp-csm__icon">✉️</span>
                 <span>{extras.email}</span>
               </a>
@@ -181,6 +198,11 @@ export function ContactCardsRow({
                   key={i}
                   href={c.href}
                   className="lp-ccr__card"
+                  {...buildTrackedCtaProps({
+                    label: c.label,
+                    href: c.href,
+                    section: "contact",
+                  })}
                   style={{ textDecoration: "none" }}
                 >
                   <p className="lp-ccr__icon">{c.icon}</p>
@@ -283,13 +305,29 @@ export function ContactFullMapOverlay({ section, brandPrimary }: Props) {
               </div>
             )}
             {extras?.phone && (
-              <a href={`tel:${extras.phone}`} className="lp-cfmo__row">
+              <a
+                href={`tel:${extras.phone}`}
+                className="lp-cfmo__row"
+                {...buildTrackedCtaProps({
+                  label: extras.phone,
+                  href: `tel:${extras.phone}`,
+                  section: "contact",
+                })}
+              >
                 <span>📞</span>
                 <span>{extras.phone}</span>
               </a>
             )}
             {extras?.email && (
-              <a href={`mailto:${extras.email}`} className="lp-cfmo__row">
+              <a
+                href={`mailto:${extras.email}`}
+                className="lp-cfmo__row"
+                {...buildTrackedCtaProps({
+                  label: extras.email,
+                  href: `mailto:${extras.email}`,
+                  section: "contact",
+                })}
+              >
                 <span>✉️</span>
                 <span>{extras.email}</span>
               </a>

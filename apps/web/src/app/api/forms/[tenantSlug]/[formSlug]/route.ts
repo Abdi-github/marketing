@@ -3,9 +3,9 @@
 // Rate-limited at the middleware layer (IP-based).
 // See docs/WORKFLOWS.md §Lead capture.
 import { db } from "@marketing/db";
-import { forms, leads, tenants, outbox, contacts, crmTasks } from "@marketing/db";
+import { forms, leads, tenants, outbox, contacts, crmTasks, events } from "@marketing/db";
 import { logger } from "@marketing/shared";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { validateAndSanitizeFormPayload } from "../../../../../lib/form-validation";
@@ -121,6 +121,7 @@ export async function POST(
 
   // 8. Insert lead + CRM contact + outbox event in one transaction.
   const sourceUrl = req.headers.get("referer") ?? undefined;
+  const anonymousId = req.cookies.get("__tid")?.value ?? null;
 
   try {
     await db.transaction(async (tx) => {
@@ -137,22 +138,37 @@ export async function POST(
       // CRM dedup: find-or-create contact by email, then link the lead.
       let capturedContactId: string | null = null;
       const rawEmail = sanitizedPayload["email"];
-      if (typeof rawEmail === "string" && rawEmail.trim()) {
-        const email = rawEmail.toLowerCase().trim();
+      const rawPhone =
+        typeof sanitizedPayload["phone"] === "string"
+          ? sanitizedPayload["phone"].trim() || null
+          : null;
+      const email =
+        typeof rawEmail === "string" && rawEmail.trim() ? rawEmail.toLowerCase().trim() : null;
 
-        const [existing] = await tx
-          .select({ id: contacts.id })
-          .from(contacts)
-          .where(and(eq(contacts.tenantId, tenant.id), eq(contacts.email, email)));
+      if (email || rawPhone) {
+        const [existingByEmail] = email
+          ? await tx
+              .select({ id: contacts.id })
+              .from(contacts)
+              .where(and(eq(contacts.tenantId, tenant.id), eq(contacts.email, email)))
+          : [];
 
-        let contactId: string;
-        if (existing) {
+        const [existingByPhone] =
+          !existingByEmail && rawPhone
+            ? await tx
+                .select({ id: contacts.id })
+                .from(contacts)
+                .where(and(eq(contacts.tenantId, tenant.id), eq(contacts.phone, rawPhone)))
+                .limit(1)
+            : [];
+
+        let contactId: string | null = existingByEmail?.id ?? existingByPhone?.id ?? null;
+        if (contactId) {
           await tx
             .update(contacts)
             .set({ lastSeenAt: new Date(), updatedAt: new Date() })
-            .where(and(eq(contacts.tenantId, tenant.id), eq(contacts.id, existing.id)));
-          contactId = existing.id;
-        } else {
+            .where(and(eq(contacts.tenantId, tenant.id), eq(contacts.id, contactId)));
+        } else if (email) {
           // Accept common name field keys: name, fullName, full_name, firstName (+ lastName)
           const rawName =
             typeof sanitizedPayload["name"] === "string" && sanitizedPayload["name"].trim()
@@ -167,35 +183,53 @@ export async function POST(
           const spaceIdx = rawName.indexOf(" ");
           const firstName = spaceIdx > -1 ? rawName.slice(0, spaceIdx) : rawName || null;
           const lastName = spaceIdx > -1 ? rawName.slice(spaceIdx + 1) || null : null;
-          const phone =
-            typeof sanitizedPayload["phone"] === "string"
-              ? sanitizedPayload["phone"].trim() || null
-              : null;
 
           const [newContact] = await tx
             .insert(contacts)
-            .values({ tenantId: tenant.id, email, firstName, lastName, phone, source: "form" })
+            .values({
+              tenantId: tenant.id,
+              email,
+              firstName,
+              lastName,
+              phone: rawPhone,
+              source: rawPhone && !email ? "phone" : "form",
+            })
             .returning({ id: contacts.id });
-          contactId = newContact!.id;
+          contactId = newContact?.id ?? null;
         }
 
-        await tx
-          .update(leads)
-          .set({ contactId })
-          .where(and(eq(leads.tenantId, tenant.id), eq(leads.id, lead!.id)));
+        if (contactId) {
+          await tx
+            .update(leads)
+            .set({ contactId })
+            .where(and(eq(leads.tenantId, tenant.id), eq(leads.id, lead!.id)));
 
-        capturedContactId = contactId;
+          capturedContactId = contactId;
 
-        await tx.insert(crmTasks).values({
-          tenantId: tenant.id,
-          contactId,
-          title: `Follow up new ${form.name} lead`,
-          body: sourceUrl
-            ? `New form submission from ${form.name}. Source: ${sourceUrl}`
-            : `New form submission from ${form.name}.`,
-          dueAt: buildLeadFollowUpDueAt(),
-          priority: "high",
-        });
+          await tx.insert(crmTasks).values({
+            tenantId: tenant.id,
+            contactId,
+            title: `Follow up new ${form.name} lead`,
+            body: sourceUrl
+              ? `New form submission from ${form.name}. Source: ${sourceUrl}`
+              : `New form submission from ${form.name}.`,
+            dueAt: buildLeadFollowUpDueAt(),
+            priority: "high",
+          });
+
+          if (anonymousId) {
+            await tx
+              .update(events)
+              .set({ contactId })
+              .where(
+                and(
+                  eq(events.tenantId, tenant.id),
+                  eq(events.anonymousId, anonymousId),
+                  isNull(events.contactId),
+                ),
+              );
+          }
+        }
       }
 
       await tx.insert(outbox).values({
@@ -207,6 +241,7 @@ export async function POST(
           tenantId: tenant.id,
           formSlug,
           contactId: capturedContactId,
+          phone: rawPhone,
         },
       });
     });

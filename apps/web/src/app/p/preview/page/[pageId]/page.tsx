@@ -141,6 +141,9 @@ export default async function DraftPreview({ params, searchParams }: Props) {
     ((stepData?.["wizardPayload"] as { vertical?: unknown } | undefined)?.vertical as
       | string
       | undefined) ?? undefined;
+  const goal =
+    ((stepData?.["wizardPayload"] as { goal?: unknown } | undefined)?.goal as string | undefined) ??
+    undefined;
   let form = compositionHasLeadCapture(renderComposition)
     ? await getLandingPageLeadForm(page.tenantId, page.id)
     : null;
@@ -152,6 +155,7 @@ export default async function DraftPreview({ params, searchParams }: Props) {
       pageSlug: basePath.split("/").at(-1) ?? page.id,
       locale: activeLocale,
       vertical,
+      goal,
       composition: renderComposition,
     });
   }

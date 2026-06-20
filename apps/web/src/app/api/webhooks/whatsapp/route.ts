@@ -5,7 +5,11 @@
 // ADR-0024: webhook verification uses WHATSAPP_VERIFY_TOKEN env var.
 import { db } from "@marketing/db";
 import { integrationConnections } from "@marketing/db";
-import { verifyWhatsAppWebhook, parseWhatsAppWebhook } from "@marketing/integrations";
+import {
+  verifyWhatsAppWebhook,
+  verifyWhatsAppWebhookSignature,
+  parseWhatsAppWebhook,
+} from "@marketing/integrations";
 import { env, logger } from "@marketing/shared";
 import { and, eq, sql } from "drizzle-orm";
 import type { NextRequest } from "next/server";
@@ -30,9 +34,21 @@ export async function GET(req: NextRequest): Promise<Response> {
 // ─── POST — Inbound message events ───────────────────────────────────────────
 
 export async function POST(req: NextRequest): Promise<Response> {
+  const rawBody = await req.text();
+  const signatureHeader = req.headers.get("x-hub-signature-256");
+  if (env.META_APP_SECRET) {
+    if (
+      !signatureHeader ||
+      !verifyWhatsAppWebhookSignature(rawBody, signatureHeader, env.META_APP_SECRET)
+    ) {
+      logger.warn("[wa-webhook] signature verification failed");
+      return new Response("Unauthorized", { status: 401 });
+    }
+  }
+
   let body: unknown;
   try {
-    body = await req.json();
+    body = JSON.parse(rawBody) as unknown;
   } catch {
     return new Response("Bad Request", { status: 400 });
   }

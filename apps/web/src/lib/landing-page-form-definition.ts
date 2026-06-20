@@ -2,7 +2,7 @@ import type { LandingPageComposition, LandingPageSection } from "@marketing/ai-r
 import type { FormField, FormSettings, FormStep } from "@marketing/ai-router/form-schema";
 
 type SupportedLocale = "de-CH" | "fr-CH" | "it-CH" | "en";
-type LandingFormKind = "quote" | "booking";
+type LandingFormKind = "quote" | "booking" | "callback";
 
 type CopySet = {
   quote: {
@@ -13,6 +13,17 @@ type CopySet = {
     stepTwoTitle: string;
     serviceLabel: string;
     servicePlaceholder: string;
+    messageLabel: string;
+    messagePlaceholder: string;
+  };
+  callback: {
+    name: string;
+    submitLabel: string;
+    successMessage: string;
+    stepOneTitle: string;
+    stepTwoTitle: string;
+    preferredTimeLabel: string;
+    preferredTimePlaceholder: string;
     messageLabel: string;
     messagePlaceholder: string;
   };
@@ -48,6 +59,17 @@ const COPY_BY_LOCALE: Record<SupportedLocale, CopySet> = {
       messageLabel: "Nachricht",
       messagePlaceholder: "Ein paar Details helfen uns, passend zu antworten.",
     },
+    callback: {
+      name: "Rueckrufanfrage",
+      submitLabel: "Rueckruf anfragen",
+      successMessage: "Danke. Wir melden uns telefonisch so bald wie moeglich.",
+      stepOneTitle: "Ihre Kontaktdaten",
+      stepTwoTitle: "Rueckrufwunsch",
+      preferredTimeLabel: "Bevorzugte Zeit",
+      preferredTimePlaceholder: "Zum Beispiel heute Nachmittag",
+      messageLabel: "Worum geht es?",
+      messagePlaceholder: "Ein kurzer Hinweis hilft dem Team beim Rueckruf.",
+    },
     booking: {
       name: "Buchungsanfrage",
       submitLabel: "Buchung anfragen",
@@ -77,6 +99,17 @@ const COPY_BY_LOCALE: Record<SupportedLocale, CopySet> = {
       servicePlaceholder: "Decrivez brievement votre besoin",
       messageLabel: "Message",
       messagePlaceholder: "Quelques details nous aident a vous repondre utilement.",
+    },
+    callback: {
+      name: "Demande de rappel",
+      submitLabel: "Demander un rappel",
+      successMessage: "Merci. Nous vous rappellerons tres bientot.",
+      stepOneTitle: "Vos coordonnees",
+      stepTwoTitle: "Votre rappel",
+      preferredTimeLabel: "Moment prefere",
+      preferredTimePlaceholder: "Par exemple cet apres-midi",
+      messageLabel: "Sujet",
+      messagePlaceholder: "Quelques mots pour aider l'equipe a vous rappeler.",
     },
     booking: {
       name: "Demande de reservation",
@@ -108,6 +141,17 @@ const COPY_BY_LOCALE: Record<SupportedLocale, CopySet> = {
       messageLabel: "Messaggio",
       messagePlaceholder: "Qualche dettaglio ci aiuta a risponderti meglio.",
     },
+    callback: {
+      name: "Richiesta di richiamata",
+      submitLabel: "Richiedi richiamata",
+      successMessage: "Grazie. Ti richiameremo al piu presto.",
+      stepOneTitle: "I tuoi contatti",
+      stepTwoTitle: "Dettagli della chiamata",
+      preferredTimeLabel: "Orario preferito",
+      preferredTimePlaceholder: "Per esempio oggi pomeriggio",
+      messageLabel: "Motivo",
+      messagePlaceholder: "Una breve nota aiuta il team a richiamarti meglio.",
+    },
     booking: {
       name: "Richiesta di prenotazione",
       submitLabel: "Richiedi prenotazione",
@@ -137,6 +181,17 @@ const COPY_BY_LOCALE: Record<SupportedLocale, CopySet> = {
       servicePlaceholder: "Tell us briefly what you are looking for",
       messageLabel: "Message",
       messagePlaceholder: "A few details help us send a useful reply.",
+    },
+    callback: {
+      name: "Callback request",
+      submitLabel: "Request a callback",
+      successMessage: "Thanks. We'll call you back shortly.",
+      stepOneTitle: "Your contact details",
+      stepTwoTitle: "Callback request",
+      preferredTimeLabel: "Best time to reach you",
+      preferredTimePlaceholder: "For example, this afternoon",
+      messageLabel: "What can we help with?",
+      messagePlaceholder: "A short note helps the team call you prepared.",
     },
     booking: {
       name: "Booking request",
@@ -179,6 +234,43 @@ function looksLikeBookingVertical(vertical?: string | null): boolean {
   return /hotel|restaurant|cafe|clinic|fitness|studio|spa|wellness|salon|beauty|dental|physio|praxis|booking|reservation/i.test(
     vertical,
   );
+}
+
+function looksLikeCallbackIntent(text?: string | null): boolean {
+  if (!text) return false;
+  return /callback|call\s?(back|me)?|phone|telephone|telefon|appel|richiam|whatsapp/i.test(text);
+}
+
+function inferLeadFormKind(input: {
+  vertical?: string | null;
+  goal?: string | null;
+  composition?: LandingPageComposition | null;
+}): LandingFormKind {
+  if (input.goal === "appointment_booking" || looksLikeBookingVertical(input.vertical)) {
+    return "booking";
+  }
+
+  const sections = [
+    ...(input.composition?.sections ?? []),
+    ...(input.composition?.site?.pages?.flatMap((page) => page.sections) ?? []),
+  ];
+  const copySignals = sections
+    .flatMap((section) => {
+      const extras = (section.extras as Record<string, unknown> | undefined) ?? {};
+      return [
+        section.heading,
+        section.body,
+        typeof extras["ctaText"] === "string" ? (extras["ctaText"] as string) : null,
+      ];
+    })
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .join(" ");
+
+  if (input.goal === "lead_capture" && looksLikeCallbackIntent(copySignals)) {
+    return "callback";
+  }
+
+  return "quote";
 }
 
 function fieldSchema(field: FormField): Record<string, unknown> {
@@ -227,13 +319,20 @@ export function compositionHasLeadCapture(composition?: LandingPageComposition |
 export function buildAutoLandingFormDefinition(input: {
   locale?: string | null;
   vertical?: string | null;
+  goal?: string | null;
+  composition?: LandingPageComposition | null;
 }): AutoLandingFormDefinition {
   const locale = normalizeLocale(input.locale);
   const copy = COPY_BY_LOCALE[locale];
-  const kind: LandingFormKind = looksLikeBookingVertical(input.vertical) ? "booking" : "quote";
+  const kind = inferLeadFormKind(input);
 
   const baseContactStep: FormStep = {
-    title: kind === "booking" ? copy.booking.stepOneTitle : copy.quote.stepOneTitle,
+    title:
+      kind === "booking"
+        ? copy.booking.stepOneTitle
+        : kind === "callback"
+          ? copy.callback.stepOneTitle
+          : copy.quote.stepOneTitle,
     fields: [
       {
         name: "name",
@@ -245,13 +344,13 @@ export function buildAutoLandingFormDefinition(input: {
         name: "email",
         label: copy.common.emailLabel,
         type: "email",
-        required: true,
+        required: kind !== "callback",
       },
       {
         name: "phone",
         label: copy.common.phoneLabel,
         type: "tel",
-        required: kind === "booking",
+        required: kind === "booking" || kind === "callback",
       },
     ],
   };
@@ -293,39 +392,77 @@ export function buildAutoLandingFormDefinition(input: {
             ],
           },
         ]
-      : [
-          baseContactStep,
-          {
-            title: copy.quote.stepTwoTitle,
-            fields: [
-              {
-                name: "service",
-                label: copy.quote.serviceLabel,
-                type: "text",
-                required: false,
-                placeholder: copy.quote.servicePlaceholder,
-              },
-              {
-                name: "message",
-                label: copy.quote.messageLabel,
-                type: "textarea",
-                required: false,
-                placeholder: copy.quote.messagePlaceholder,
-              },
-            ],
-          },
-        ];
+      : kind === "callback"
+        ? [
+            baseContactStep,
+            {
+              title: copy.callback.stepTwoTitle,
+              fields: [
+                {
+                  name: "preferred_time",
+                  label: copy.callback.preferredTimeLabel,
+                  type: "text",
+                  required: false,
+                  placeholder: copy.callback.preferredTimePlaceholder,
+                },
+                {
+                  name: "message",
+                  label: copy.callback.messageLabel,
+                  type: "textarea",
+                  required: false,
+                  placeholder: copy.callback.messagePlaceholder,
+                },
+              ],
+            },
+          ]
+        : [
+            baseContactStep,
+            {
+              title: copy.quote.stepTwoTitle,
+              fields: [
+                {
+                  name: "service",
+                  label: copy.quote.serviceLabel,
+                  type: "text",
+                  required: false,
+                  placeholder: copy.quote.servicePlaceholder,
+                },
+                {
+                  name: "message",
+                  label: copy.quote.messageLabel,
+                  type: "textarea",
+                  required: false,
+                  placeholder: copy.quote.messagePlaceholder,
+                },
+              ],
+            },
+          ];
 
   const settings: FormSettings = {
     honeypot: true,
     turnstile_enabled: false,
-    success_message: kind === "booking" ? copy.booking.successMessage : copy.quote.successMessage,
+    success_message:
+      kind === "booking"
+        ? copy.booking.successMessage
+        : kind === "callback"
+          ? copy.callback.successMessage
+          : copy.quote.successMessage,
   };
 
   return {
     kind,
-    name: kind === "booking" ? copy.booking.name : copy.quote.name,
-    submitLabel: kind === "booking" ? copy.booking.submitLabel : copy.quote.submitLabel,
+    name:
+      kind === "booking"
+        ? copy.booking.name
+        : kind === "callback"
+          ? copy.callback.name
+          : copy.quote.name,
+    submitLabel:
+      kind === "booking"
+        ? copy.booking.submitLabel
+        : kind === "callback"
+          ? copy.callback.submitLabel
+          : copy.quote.submitLabel,
     settings,
     steps,
     schema: schemaFromSteps(steps),

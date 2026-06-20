@@ -230,6 +230,9 @@ export default async function PublicLandingSitePage({ params, searchParams }: Pr
     ((stepData?.["wizardPayload"] as { vertical?: unknown } | undefined)?.vertical as
       | string
       | undefined) ?? undefined;
+  const goal =
+    ((stepData?.["wizardPayload"] as { goal?: unknown } | undefined)?.goal as string | undefined) ??
+    undefined;
   let form = compositionHasLeadCapture(renderComposition)
     ? await getLandingPageLeadForm(tenant.id, page.id)
     : null;
@@ -241,6 +244,7 @@ export default async function PublicLandingSitePage({ params, searchParams }: Pr
       pageSlug,
       locale: activeLocale,
       vertical,
+      goal,
       composition: renderComposition,
     });
   }

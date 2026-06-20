@@ -1,5 +1,6 @@
 // WhatsApp Business Cloud API client (Meta Graph API v17.0).
 // ADR-0024: Meta direct for cost; template messages only for outbound to new contacts.
+import { createHmac, timingSafeEqual } from "node:crypto";
 
 const GRAPH_BASE = "https://graph.facebook.com/v17.0";
 
@@ -117,6 +118,27 @@ export function verifyWhatsAppWebhook(
     return challenge;
   }
   return null;
+}
+
+/** Verify the Meta POST webhook signature (X-Hub-Signature-256). */
+export function verifyWhatsAppWebhookSignature(
+  rawBody: string,
+  signatureHeader: string,
+  appSecret: string,
+): boolean {
+  const [algo, signatureHex] = signatureHeader.split("=", 2);
+  if (algo !== "sha256" || !signatureHex) return false;
+
+  let received: Buffer;
+  try {
+    received = Buffer.from(signatureHex, "hex");
+  } catch {
+    return false;
+  }
+
+  const expected = createHmac("sha256", appSecret).update(rawBody).digest();
+  if (received.length !== expected.length) return false;
+  return timingSafeEqual(received, expected);
 }
 
 /**

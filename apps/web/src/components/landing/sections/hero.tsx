@@ -1,5 +1,6 @@
 import type { HeroSection } from "@marketing/ai-router";
 import { renderRich } from "../rich-text";
+import { buildTrackedCtaProps } from "../tracking";
 import { HeroCarouselMedia } from "./hero-carousel-media";
 import { getHeroCarouselImages } from "./hero-carousel-utils";
 
@@ -68,7 +69,15 @@ export function HeroCentered({
           <h1 className="lp-hc__h1">{renderRich(heading)}</h1>
           {body && <p className="lp-hc__lead">{renderRich(body)}</p>}
           {extras?.ctaText && (
-            <a href={extras.ctaHref ?? "#contact"} className="lp-hc__cta">
+            <a
+              href={extras.ctaHref ?? "#contact"}
+              className="lp-hc__cta"
+              {...buildTrackedCtaProps({
+                label: extras.ctaText,
+                href: extras.ctaHref ?? "#contact",
+                section: "hero",
+              })}
+            >
               {extras.ctaText}
               <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
                 <path
@@ -162,7 +171,15 @@ export function HeroImageBgOverlay({
           <h1 className="lp-hio__h1">{renderRich(heading)}</h1>
           {body && <p className="lp-hio__lead">{renderRich(body)}</p>}
           {extras?.ctaText && (
-            <a href={extras.ctaHref ?? "#contact"} className="lp-hio__cta">
+            <a
+              href={extras.ctaHref ?? "#contact"}
+              className="lp-hio__cta"
+              {...buildTrackedCtaProps({
+                label: extras.ctaText,
+                href: extras.ctaHref ?? "#contact",
+                section: "hero",
+              })}
+            >
               {extras.ctaText}
               <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
                 <path
@@ -209,7 +226,15 @@ export function HeroSplitImageRight({
           <h1 className="lp-hsi__h1">{renderRich(heading)}</h1>
           {body && <p className="lp-hsi__lead">{renderRich(body)}</p>}
           {extras?.ctaText && (
-            <a href={extras.ctaHref ?? "#contact"} className="lp-hsi__cta">
+            <a
+              href={extras.ctaHref ?? "#contact"}
+              className="lp-hsi__cta"
+              {...buildTrackedCtaProps({
+                label: extras.ctaText,
+                href: extras.ctaHref ?? "#contact",
+                section: "hero",
+              })}
+            >
               {extras.ctaText}
               <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
                 <path
@@ -323,10 +348,26 @@ export function HeroSplitFormRight({
                 <span>The team can follow up without losing the lead.</span>
               </div>
             </div>
-            <a href={primaryHref} className="lp-hsf__submit">
+            <a
+              href={primaryHref}
+              className="lp-hsf__submit"
+              {...buildTrackedCtaProps({
+                label: extras?.ctaText ?? "Send request",
+                href: primaryHref,
+                section: "hero",
+              })}
+            >
               {extras?.ctaText ?? "Send request"}
             </a>
-            <a href="#lp-contact" className="lp-hsf__subcta">
+            <a
+              href="#lp-contact"
+              className="lp-hsf__subcta"
+              {...buildTrackedCtaProps({
+                label: "Prefer phone or email? See contact details",
+                href: "#lp-contact",
+                section: "hero",
+              })}
+            >
               Prefer phone or email? See contact details
             </a>
           </div>
@@ -367,7 +408,15 @@ export function HeroEditorialBold({
           <div className="lp-heb__row">
             {body && <p className="lp-heb__lead">{renderRich(body)}</p>}
             {extras?.ctaText && (
-              <a href={extras.ctaHref ?? "#contact"} className="lp-heb__cta">
+              <a
+                href={extras.ctaHref ?? "#contact"}
+                className="lp-heb__cta"
+                {...buildTrackedCtaProps({
+                  label: extras.ctaText,
+                  href: extras.ctaHref ?? "#contact",
+                  section: "hero",
+                })}
+              >
                 {extras.ctaText}
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
                   <path
@@ -431,7 +480,15 @@ export function HeroGradientSpotlight({
           <h1 className="lp-hgs__h1">{renderRich(heading)}</h1>
           {body && <p className="lp-hgs__lead">{renderRich(body)}</p>}
           {extras?.ctaText && (
-            <a href={extras.ctaHref ?? "#contact"} className="lp-hgs__cta">
+            <a
+              href={extras.ctaHref ?? "#contact"}
+              className="lp-hgs__cta"
+              {...buildTrackedCtaProps({
+                label: extras.ctaText,
+                href: extras.ctaHref ?? "#contact",
+                section: "hero",
+              })}
+            >
               {extras.ctaText}
               <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
                 <path

@@ -133,10 +133,27 @@
 
   function onBodyClick(e) {
     var el = e.target;
-    // Walk up to find a link or button with data-track="cta"
+    // Walk up to find a tracked CTA or a high-intent public contact link.
     while (el && el !== document.body) {
-      if (el.dataset && el.dataset.track === "cta") {
-        push("cta_click", { label: el.innerText ? el.innerText.slice(0, 80) : undefined });
+      var href = typeof el.getAttribute === "function" ? el.getAttribute("href") : null;
+      var isTrackedCta = el.dataset && el.dataset.track === "cta";
+      var isPublicLeadLink =
+        typeof href === "string" &&
+        (href.indexOf("tel:") === 0 ||
+          href.indexOf("mailto:") === 0 ||
+          href.indexOf("https://wa.me/") === 0 ||
+          href.indexOf("http://wa.me/") === 0);
+
+      if (isTrackedCta || isPublicLeadLink) {
+        push("cta_click", {
+          label:
+            (el.dataset && el.dataset.trackLabel) ||
+            (el.innerText ? el.innerText.slice(0, 80) : undefined),
+          href: (el.dataset && el.dataset.trackHref) || href || undefined,
+          intent: (el.dataset && el.dataset.trackIntent) || undefined,
+          channel: (el.dataset && el.dataset.trackChannel) || undefined,
+          section: (el.dataset && el.dataset.trackSection) || undefined,
+        });
         return;
       }
       el = el.parentElement;

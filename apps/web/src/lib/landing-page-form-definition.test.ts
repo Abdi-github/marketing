@@ -56,4 +56,25 @@ describe("landing-page-form-definition", () => {
     expect(definition.submitLabel).toBe("Demander une offre");
     expect(definition.settings.success_message).toContain("Merci");
   });
+
+  it("builds callback-oriented forms when the page copy asks for a callback", () => {
+    const definition = buildAutoLandingFormDefinition({
+      locale: "en",
+      goal: "lead_capture",
+      composition: {
+        title: "Request a callback",
+        locale: "en",
+        sections: [{ type: "lead_form", order: 0, heading: "Request a callback" }],
+      },
+    });
+
+    expect(definition.kind).toBe("callback");
+    expect(definition.submitLabel).toBe("Request a callback");
+    expect(definition.steps[0]?.fields.find((field) => field.name === "phone")?.required).toBe(
+      true,
+    );
+    expect(definition.steps[0]?.fields.find((field) => field.name === "email")?.required).toBe(
+      false,
+    );
+  });
 });

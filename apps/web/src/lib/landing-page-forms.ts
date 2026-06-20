@@ -60,6 +60,7 @@ export async function ensureLandingPageLeadForm(input: {
   pageSlug: string;
   locale?: string | null;
   vertical?: string | null;
+  goal?: string | null;
   composition?: LandingPageComposition | null;
 }): Promise<LandingPageLeadFormRecord | null> {
   if (input.composition && !compositionHasLeadCapture(input.composition)) {
@@ -81,6 +82,8 @@ export async function ensureLandingPageLeadForm(input: {
   const autoForm = buildAutoLandingFormDefinition({
     locale: input.locale,
     vertical: input.vertical,
+    goal: input.goal,
+    composition: input.composition,
   });
   const slugStem = slugify(input.pageSlug || input.pageTitle || "landing-page");
   const slug = `${slugStem || "landing-page"}-lead-${input.landingPageId.slice(0, 8)}`;

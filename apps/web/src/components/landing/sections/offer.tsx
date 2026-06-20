@@ -1,5 +1,6 @@
 import type { OfferSection } from "@marketing/ai-router";
 import { renderRich } from "../rich-text";
+import { buildTrackedCtaProps } from "../tracking";
 
 type Props = { section: OfferSection; brandPrimary: string };
 
@@ -70,7 +71,15 @@ export function OfferBannerCentered({
           )}
           {extras?.validUntil && <p className="lp-obc__valid">Valid until: {extras.validUntil}</p>}
           {extras?.ctaText && (
-            <a href={extras.ctaHref ?? "#contact"} className="lp-obc__cta">
+            <a
+              href={extras.ctaHref ?? "#contact"}
+              className="lp-obc__cta"
+              {...buildTrackedCtaProps({
+                label: extras.ctaText,
+                href: extras.ctaHref ?? "#contact",
+                section: "offer",
+              })}
+            >
               {extras.ctaText}
             </a>
           )}
@@ -131,7 +140,15 @@ export function OfferSplitImagePrice({ section, brandPrimary }: Props) {
               <p className="lp-osip__valid">Valid until {extras.validUntil}</p>
             )}
             {extras?.ctaText && (
-              <a href={extras.ctaHref ?? "#contact"} className="lp-osip__cta">
+              <a
+                href={extras.ctaHref ?? "#contact"}
+                className="lp-osip__cta"
+                {...buildTrackedCtaProps({
+                  label: extras.ctaText,
+                  href: extras.ctaHref ?? "#contact",
+                  section: "offer",
+                })}
+              >
                 {extras.ctaText}
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
                   <path
@@ -201,7 +218,15 @@ export function OfferCountdownBold({ section, brandPrimary }: Props) {
             <p className="lp-ocb__valid">Offer expires: {extras.validUntil}</p>
           )}
           {extras?.ctaText && (
-            <a href={extras.ctaHref ?? "#contact"} className="lp-ocb__cta">
+            <a
+              href={extras.ctaHref ?? "#contact"}
+              className="lp-ocb__cta"
+              {...buildTrackedCtaProps({
+                label: extras.ctaText,
+                href: extras.ctaHref ?? "#contact",
+                section: "offer",
+              })}
+            >
               {extras.ctaText}
             </a>
           )}

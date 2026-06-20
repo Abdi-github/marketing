@@ -882,6 +882,7 @@ export const landingPagesRouter = router({
         pageSlug: `${baseSlug}-${landingPageId.slice(0, 8)}`,
         locale: languagePreferences.defaultLocale,
         vertical: input.vertical,
+        goal: primaryGoal,
       });
 
       try {
@@ -1420,9 +1421,15 @@ export const landingPagesRouter = router({
       const vertical =
         (
           (page.stepData as Record<string, unknown> | null | undefined)?.["wizardPayload"] as
-            | { vertical?: string }
+            | { vertical?: string; goal?: string }
             | undefined
         )?.vertical ?? null;
+      const goal =
+        (
+          (page.stepData as Record<string, unknown> | null | undefined)?.["wizardPayload"] as
+            | { vertical?: string; goal?: string }
+            | undefined
+        )?.goal ?? null;
       await ensureLandingPageLeadForm({
         tenantId,
         landingPageId: input.pageId,
@@ -1430,6 +1437,7 @@ export const landingPagesRouter = router({
         pageSlug: page.slug,
         locale: page.locale,
         vertical,
+        goal,
         composition: currentVersion.composition as LandingPageComposition,
       });
 

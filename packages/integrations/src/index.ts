@@ -37,6 +37,7 @@ export {
   sendWhatsAppTemplate,
   sendWhatsAppText,
   verifyWhatsAppWebhook,
+  verifyWhatsAppWebhookSignature,
   parseWhatsAppWebhook,
 } from "../whatsapp/client";
 export type {
