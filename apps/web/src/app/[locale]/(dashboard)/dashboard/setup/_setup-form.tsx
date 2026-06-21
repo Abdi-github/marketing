@@ -25,6 +25,8 @@ type UiLocale = "de" | "fr" | "it" | "en";
 type LeadChannelPreference = "auto" | "email" | "whatsapp" | "sms";
 type LeadCaptureSettings = {
   preferredConfirmationChannel?: LeadChannelPreference;
+  autoAcknowledgementEnabled?: boolean;
+  aiReplyAssistanceEnabled?: boolean;
   reservationConfirmationMessage?: string | null;
   callbackConfirmationMessage?: string | null;
   quoteConfirmationMessage?: string | null;
@@ -55,6 +57,12 @@ export function SetupForm({
   const [addressCity, setAddressCity] = useState(initialProfile?.addressCity ?? "");
   const [preferredChannel, setPreferredChannel] = useState<LeadChannelPreference>(
     initialProfile?.leadCaptureSettings.preferredConfirmationChannel ?? "auto",
+  );
+  const [autoAcknowledgementEnabled, setAutoAcknowledgementEnabled] = useState(
+    initialProfile?.leadCaptureSettings.autoAcknowledgementEnabled ?? true,
+  );
+  const [aiReplyAssistanceEnabled, setAiReplyAssistanceEnabled] = useState(
+    initialProfile?.leadCaptureSettings.aiReplyAssistanceEnabled ?? true,
   );
   const [reservationConfirmationMessage, setReservationConfirmationMessage] = useState(
     initialProfile?.leadCaptureSettings.reservationConfirmationMessage ?? "",
@@ -90,6 +98,8 @@ export function SetupForm({
         addressCity: addressCity.trim() || undefined,
         leadCaptureSettings: {
           preferredConfirmationChannel: preferredChannel,
+          autoAcknowledgementEnabled,
+          aiReplyAssistanceEnabled,
           reservationConfirmationMessage: reservationConfirmationMessage.trim() || undefined,
           callbackConfirmationMessage: callbackConfirmationMessage.trim() || undefined,
           quoteConfirmationMessage: quoteConfirmationMessage.trim() || undefined,
@@ -266,6 +276,43 @@ export function SetupForm({
                 <option value="whatsapp">WhatsApp first</option>
                 <option value="sms">SMS first</option>
               </select>
+            </div>
+
+            <div className="mt-4 grid gap-3 rounded-lg border border-gray-200 bg-white p-3">
+              <label className="flex items-start gap-3 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={autoAcknowledgementEnabled}
+                  onChange={(e) => setAutoAcknowledgementEnabled(e.target.checked)}
+                  className="mt-1"
+                />
+                <span>
+                  <span className="block font-medium text-gray-800">
+                    Send automatic acknowledgements
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    Capture the lead, create staff work, and immediately send a safe confirmation
+                    when the selected channel allows it.
+                  </span>
+                </span>
+              </label>
+              <label className="flex items-start gap-3 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={aiReplyAssistanceEnabled}
+                  onChange={(e) => setAiReplyAssistanceEnabled(e.target.checked)}
+                  className="mt-1"
+                />
+                <span>
+                  <span className="block font-medium text-gray-800">
+                    Use AI assistance for generic WhatsApp replies
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    AI can draft friendly replies for general questions. Reservations and business
+                    commitments stay staff-controlled.
+                  </span>
+                </span>
+              </label>
             </div>
 
             <div className="mt-4 grid gap-4">

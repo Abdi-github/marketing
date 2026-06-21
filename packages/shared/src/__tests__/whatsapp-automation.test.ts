@@ -81,9 +81,11 @@ describe("whatsapp automation helpers", () => {
     });
 
     expect(testHealth.mode).toBe("test_mode");
-    expect(testHealth.tokenSource).toBe("env_test");
+    expect(testHealth.channelMode).toBe("demo_test_number");
+    expect(testHealth.tokenSource).toBe("demo_test_number");
     expect(connectedHealth.mode).toBe("connected");
-    expect(connectedHealth.tokenSource).toBe("integration_connection");
+    expect(connectedHealth.channelMode).toBe("tenant_cloud_api");
+    expect(connectedHealth.tokenSource).toBe("tenant_cloud_api");
     expect(connectedHealth.lastFailureMessage).toBe("temporary issue");
   });
 });

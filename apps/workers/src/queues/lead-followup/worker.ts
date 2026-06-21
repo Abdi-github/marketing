@@ -65,6 +65,7 @@ type SendAttemptResult =
       toAddress: string;
       body: string;
       externalId: string | null;
+      policyState?: string | null;
       sandbox?: boolean;
     }
   | {
@@ -74,6 +75,8 @@ type SendAttemptResult =
       toAddress: string;
       body: string;
       error: string;
+      policyState?: string | null;
+      templateRequired?: boolean;
     };
 
 function asPayloadRecord(value: unknown): Record<string, unknown> {
@@ -310,7 +313,10 @@ async function trySendWhatsApp(
       fromAddress: wa.phoneNumberId,
       toAddress: ctx.contact.phone,
       body: copy.shortBody,
-      error: "Outside the 24-hour WhatsApp service window.",
+      error:
+        "Outside the 24-hour WhatsApp service window. Template sending is required for this follow-up.",
+      policyState: conversationState.policy,
+      templateRequired: true,
     };
   }
 
@@ -328,6 +334,7 @@ async function trySendWhatsApp(
       toAddress: ctx.contact.phone,
       body: copy.shortBody,
       externalId: result.messageId,
+      policyState: conversationState.policy,
     };
   } catch (err) {
     return {
@@ -337,6 +344,7 @@ async function trySendWhatsApp(
       toAddress: ctx.contact.phone,
       body: copy.shortBody,
       error: String(err),
+      policyState: conversationState.policy,
     };
   }
 }
@@ -387,6 +395,14 @@ async function recordAttempt(ctx: LeadFollowUpContext, attempt: SendAttemptResul
     toAddress: attempt.toAddress,
     body: attempt.body,
     status: attempt.ok ? "sent" : "failed",
+    policyState: attempt.policyState ?? null,
+    errorMessage: attempt.ok ? null : attempt.error,
+    meta: {
+      automated: true,
+      leadId: ctx.leadId,
+      templateRequired: attempt.ok ? false : attempt.templateRequired === true,
+      sandbox: attempt.ok ? attempt.sandbox === true : false,
+    },
     externalId: attempt.ok ? attempt.externalId : null,
   });
 }
@@ -395,6 +411,11 @@ async function processLeadFollowUp(job: Job<LeadFollowUpJob>): Promise<void> {
   const ctx = await loadLeadFollowUpContext(job.data.tenantId, job.data.leadId);
   if (ctx.status !== "new") {
     logger.debug({ leadId: ctx.leadId, status: ctx.status }, "[lead-follow-up] already progressed");
+    return;
+  }
+
+  if (!ctx.leadCaptureSettings.autoAcknowledgementEnabled) {
+    logger.info({ leadId: ctx.leadId }, "[lead-follow-up] auto acknowledgement disabled");
     return;
   }
 

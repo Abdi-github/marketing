@@ -5,6 +5,8 @@ export type LeadChannelPreference = "auto" | LeadConfirmationChannel;
 export type SupportedLeadLocale = "de-CH" | "fr-CH" | "it-CH" | "en";
 export type LeadCaptureSettings = {
   preferredConfirmationChannel?: LeadChannelPreference;
+  autoAcknowledgementEnabled?: boolean;
+  aiReplyAssistanceEnabled?: boolean;
   reservationConfirmationMessage?: string | null;
   callbackConfirmationMessage?: string | null;
   quoteConfirmationMessage?: string | null;
@@ -44,6 +46,8 @@ export type LeadConfirmationCopy = {
 
 const DEFAULT_LEAD_CAPTURE_SETTINGS: Required<LeadCaptureSettings> = {
   preferredConfirmationChannel: "auto",
+  autoAcknowledgementEnabled: true,
+  aiReplyAssistanceEnabled: true,
   reservationConfirmationMessage: null,
   callbackConfirmationMessage: null,
   quoteConfirmationMessage: null,
@@ -167,6 +171,14 @@ export function normalizeLeadCaptureSettings(value: unknown): Required<LeadCaptu
 
   return {
     preferredConfirmationChannel,
+    autoAcknowledgementEnabled:
+      typeof value["autoAcknowledgementEnabled"] === "boolean"
+        ? value["autoAcknowledgementEnabled"]
+        : true,
+    aiReplyAssistanceEnabled:
+      typeof value["aiReplyAssistanceEnabled"] === "boolean"
+        ? value["aiReplyAssistanceEnabled"]
+        : true,
     reservationConfirmationMessage:
       typeof value["reservationConfirmationMessage"] === "string" &&
       value["reservationConfirmationMessage"].trim()

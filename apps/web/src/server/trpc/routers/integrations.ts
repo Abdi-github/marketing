@@ -16,6 +16,9 @@ import {
   getWhatsAppTestModeConfig,
   getWhatsAppTestModeIssues,
   isWhatsAppTestModeTenant,
+  resolveWhatsappCredentials,
+  sendWhatsAppText,
+  WhatsAppApiError,
 } from "@marketing/integrations";
 import { env, summarizeWhatsappConnectionHealth } from "@marketing/shared";
 import { TRPCError } from "@trpc/server";
@@ -185,6 +188,101 @@ export const integrationsRouter = router({
           : meta,
     });
   }),
+
+  sendWhatsappTestMessage: requires("admin")
+    .input(
+      z.object({
+        toPhone: z.string().min(5).max(20),
+        text: z.string().min(1).max(4096).optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { tenantId } = ctx.tenantCtx;
+      const normalizedPhone = input.toPhone.replace(/[\s()+-]/g, "");
+      if (!/^\d{7,15}$/.test(normalizedPhone)) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Enter the recipient number in international format, for example +41761234567.",
+        });
+      }
+
+      const [[tenant], [conn]] = await Promise.all([
+        db
+          .select({ slug: tenants.slug, name: tenants.name })
+          .from(tenants)
+          .where(eq(tenants.id, tenantId))
+          .limit(1),
+        db
+          .select({
+            oauthTokens: integrationConnections.oauthTokens,
+            meta: integrationConnections.meta,
+          })
+          .from(integrationConnections)
+          .where(
+            and(
+              eq(integrationConnections.tenantId, tenantId),
+              eq(integrationConnections.provider, "meta"),
+            ),
+          )
+          .limit(1),
+      ]);
+
+      if (!tenant) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Tenant not found." });
+      }
+
+      const credentials = resolveWhatsappCredentials({
+        tenantSlug: tenant.slug,
+        connection: conn
+          ? {
+              oauthTokens: conn.oauthTokens,
+              meta:
+                conn.meta && typeof conn.meta === "object"
+                  ? (conn.meta as Record<string, unknown>)
+                  : null,
+            }
+          : null,
+        env,
+      });
+
+      if (!credentials) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "WhatsApp is not connected or demo mode is not enabled for this tenant.",
+        });
+      }
+
+      const text =
+        input.text?.trim() ||
+        `Test from ${tenant.name}: WhatsApp automation is connected and ready for lead follow-up.`;
+
+      try {
+        const result = await sendWhatsAppText(
+          credentials.phoneNumberId,
+          credentials.accessToken,
+          normalizedPhone,
+          text,
+        );
+
+        return {
+          ok: true,
+          messageId: result.messageId,
+          mode: credentials.mode,
+          toPhone: normalizedPhone,
+        };
+      } catch (error) {
+        const message =
+          error instanceof WhatsAppApiError
+            ? error.message
+            : error instanceof Error
+              ? error.message
+              : "WhatsApp test message failed.";
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message,
+        });
+      }
+    }),
 
   /** Connect a provider (API-key path). Admin+ only. */
   connect: requires("admin")

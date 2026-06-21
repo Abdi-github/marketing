@@ -142,6 +142,19 @@ function getFacts(context: ThreadContext | null): Array<{ label: string; value: 
   return rows;
 }
 
+function workflowButtonStyle(color: string): React.CSSProperties {
+  return {
+    border: "none",
+    borderRadius: 8,
+    background: color,
+    color: "#fff",
+    cursor: "pointer",
+    fontSize: "0.78rem",
+    fontWeight: 700,
+    padding: "0.45rem 0.7rem",
+  };
+}
+
 function ThreadItem({
   thread,
   active,
@@ -350,6 +363,45 @@ export default function InboxPage() {
     threadContext?.serviceWindow &&
     !threadContext.serviceWindow.open;
 
+  async function refreshActiveThread(thread = activeThread) {
+    if (!thread) return;
+    const [messageRows, context, issueRows] = await Promise.all([
+      trpc.inbox.getThread.query({
+        contactId: thread.contactId,
+        channel: thread.channel as Channel,
+        limit: 100,
+      }),
+      trpc.inbox.getThreadContext.query({
+        contactId: thread.contactId,
+        channel: thread.channel as Channel,
+      }),
+      trpc.inbox.listAutomationIssues.query({ limit: 8 }),
+    ]);
+    setMessages(messageRows as Message[]);
+    setThreadContext(context);
+    setIssues(issueRows);
+  }
+
+  async function updateWorkflowStatus(input: {
+    status: "new" | "contacted" | "confirmed" | "qualified" | "archived";
+    workflowState:
+      | "received"
+      | "missing_details"
+      | "awaiting_confirmation"
+      | "contacted"
+      | "confirmed"
+      | "declined"
+      | "cancelled"
+      | "manual_review";
+  }) {
+    if (!threadContext?.leadId) return;
+    await trpc.inbox.updateLeadWorkflowStatus.mutate({
+      leadId: threadContext.leadId,
+      ...input,
+    });
+    await refreshActiveThread();
+  }
+
   async function handleSend() {
     if (!activeThread || !replyText.trim() || activeThread.channel !== "whatsapp") return;
     if (serviceWindowClosed) {
@@ -371,21 +423,7 @@ export default function InboxPage() {
         text: replyText.trim(),
       });
       setReplyText("");
-      const [messageRows, context, issueRows] = await Promise.all([
-        trpc.inbox.getThread.query({
-          contactId: activeThread.contactId,
-          channel: "whatsapp",
-          limit: 100,
-        }),
-        trpc.inbox.getThreadContext.query({
-          contactId: activeThread.contactId,
-          channel: "whatsapp",
-        }),
-        trpc.inbox.listAutomationIssues.query({ limit: 8 }),
-      ]);
-      setMessages(messageRows as Message[]);
-      setThreadContext(context);
-      setIssues(issueRows);
+      await refreshActiveThread(activeThread);
     } catch (err) {
       setSendError(err instanceof Error ? err.message : "Send failed.");
     } finally {
@@ -708,6 +746,66 @@ export default function InboxPage() {
                         </div>
                       </div>
                     ))}
+                  </div>
+                ) : null}
+
+                {threadContext?.leadId ? (
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "0.5rem",
+                      flexWrap: "wrap",
+                      marginTop: "0.85rem",
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void updateWorkflowStatus({
+                          status: "contacted",
+                          workflowState: "contacted",
+                        })
+                      }
+                      style={workflowButtonStyle("#2563eb")}
+                    >
+                      Mark contacted
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void updateWorkflowStatus({
+                          status: "confirmed",
+                          workflowState: "confirmed",
+                        })
+                      }
+                      style={workflowButtonStyle("#16a34a")}
+                    >
+                      Confirm
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void updateWorkflowStatus({
+                          status: "archived",
+                          workflowState: "declined",
+                        })
+                      }
+                      style={workflowButtonStyle("#b45309")}
+                    >
+                      Decline
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void updateWorkflowStatus({
+                          status: "archived",
+                          workflowState: "cancelled",
+                        })
+                      }
+                      style={workflowButtonStyle("#64748b")}
+                    >
+                      Cancel
+                    </button>
                   </div>
                 ) : null}
               </div>

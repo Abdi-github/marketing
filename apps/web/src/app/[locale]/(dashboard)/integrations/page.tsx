@@ -1,7 +1,7 @@
 "use client";
 
 import React, { Suspense, useCallback, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { trpc } from "../../../../lib/trpc";
 
@@ -65,6 +65,8 @@ export default function IntegrationsPage() {
 function IntegrationsPageContent() {
   const t = useTranslations("Integrations");
   const searchParams = useSearchParams();
+  const params = useParams();
+  const locale = typeof params.locale === "string" ? params.locale : "en";
   const metaParam = searchParams.get("meta");
 
   const verticalLabel = (v: string): string => {
@@ -96,19 +98,22 @@ function IntegrationsPageContent() {
   const [connecting, setConnecting] = useState(false);
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [metaConnecting, setMetaConnecting] = useState(false);
+  const [whatsappTestPhone, setWhatsappTestPhone] = useState("");
+  const [whatsappTesting, setWhatsappTesting] = useState(false);
+  const [whatsappTestResult, setWhatsappTestResult] = useState<string | null>(null);
 
   const loadConnections = useCallback(async () => {
     try {
-      const [data, runs, metaHealth] = await Promise.all([
+      const [data, runs, metaHealth] = await Promise.allSettled([
         trpc.integrations.list.query(),
         trpc.integrations.listSyncRuns.query({ limit: 20 }),
         trpc.integrations.getMetaWhatsappHealth.query(),
       ]);
-      setConnections(data);
-      setSyncRuns(runs);
-      setMetaWhatsappHealth(metaHealth);
+      setConnections(data.status === "fulfilled" ? data.value : []);
+      setSyncRuns(runs.status === "fulfilled" ? runs.value : []);
+      setMetaWhatsappHealth(metaHealth.status === "fulfilled" ? metaHealth.value : null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Fehler beim Laden.");
+      setError(err instanceof Error ? friendlyIntegrationError(err.message) : "Fehler beim Laden.");
     } finally {
       setLoading(false);
     }
@@ -190,6 +195,28 @@ function IntegrationsPageContent() {
     }
   }
 
+  async function handleWhatsappTest(e: React.FormEvent) {
+    e.preventDefault();
+    if (!whatsappTestPhone.trim()) return;
+    setWhatsappTesting(true);
+    setWhatsappTestResult(null);
+    setError(null);
+    try {
+      const result = await trpc.integrations.sendWhatsappTestMessage.mutate({
+        toPhone: whatsappTestPhone.trim(),
+      });
+      setWhatsappTestResult(`Test message sent to +${result.toPhone}.`);
+      await loadConnections();
+    } catch (err) {
+      setWhatsappTestResult(null);
+      setError(
+        err instanceof Error ? friendlyIntegrationError(err.message) : "WhatsApp test failed.",
+      );
+    } finally {
+      setWhatsappTesting(false);
+    }
+  }
+
   const connectedProviders = new Set(
     connections.filter((c) => c.status === "connected").map((c) => c.provider),
   );
@@ -256,112 +283,302 @@ function IntegrationsPageContent() {
         />
       </div>
 
-      {metaWhatsappHealth && (
-        <section
+      <section
+        style={{
+          border: "1px solid #e5e7eb",
+          borderRadius: 10,
+          background: "#fff",
+          padding: "1.25rem",
+          marginBottom: "1.5rem",
+        }}
+      >
+        <div
           style={{
-            border: "1px solid #e5e7eb",
-            borderRadius: 10,
-            background: "#fff",
-            padding: "1rem 1.25rem",
-            marginBottom: "1.5rem",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: "1rem",
+            flexWrap: "wrap",
+          }}
+        >
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.55rem" }}>
+              <span
+                aria-hidden="true"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 34,
+                  height: 34,
+                  borderRadius: 8,
+                  background: "#ecfdf5",
+                  color: "#047857",
+                  fontWeight: 900,
+                  fontSize: "1rem",
+                }}
+              >
+                W
+              </span>
+              <div>
+                <h2 style={{ fontSize: "1rem", fontWeight: 700, margin: 0 }}>WhatsApp Business</h2>
+                <p style={{ color: "#6b7280", fontSize: "0.82rem", margin: "0.2rem 0 0" }}>
+                  Capture WhatsApp enquiries, save them to CRM, and send automatic replies.
+                </p>
+              </div>
+            </div>
+          </div>
+          <span style={whatsappStatusBadgeStyle(metaWhatsappHealth)}>
+            {formatWhatsappBusinessStatus(metaWhatsappHealth)}
+          </span>
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+            gap: "1rem",
+            marginTop: "1rem",
           }}
         >
           <div
             style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "flex-start",
-              gap: "1rem",
-              flexWrap: "wrap",
+              border: "1px solid #e2e8f0",
+              borderRadius: 8,
+              background: "#f8fafc",
+              padding: "1rem",
             }}
           >
-            <div>
-              <h2 style={{ fontSize: "1rem", fontWeight: 700, margin: 0 }}>WhatsApp automation</h2>
-              <p style={{ color: "#6b7280", fontSize: "0.82rem", margin: "0.25rem 0 0" }}>
-                Current channel mode, token source, phone number, and recent delivery health.
-              </p>
-            </div>
-            <span
-              style={runBadgeStyle(
-                metaWhatsappHealth.status === "test_mode"
-                  ? "queued"
-                  : metaWhatsappHealth.status === "connected"
-                    ? "success"
-                    : metaWhatsappHealth.status === "token_expired"
-                      ? "error"
-                      : "partial",
-              )}
+            <div
+              style={{
+                color: "#0f172a",
+                fontSize: "0.85rem",
+                fontWeight: 750,
+                marginBottom: "0.7rem",
+              }}
             >
-              {metaWhatsappHealth.mode === "test_mode" ? "Test mode" : metaWhatsappHealth.status}
-            </span>
+              What this does for your business
+            </div>
+            <div style={{ display: "grid", gap: "0.45rem" }}>
+              <WhatsAppCapability
+                label="New WhatsApp messages become CRM leads"
+                enabled={metaWhatsappHealth ? metaWhatsappHealth.status !== "disconnected" : false}
+              />
+              <WhatsAppCapability
+                label="Reservation, quote, and callback requests are classified"
+                enabled={metaWhatsappHealth ? metaWhatsappHealth.status !== "disconnected" : false}
+              />
+              <WhatsAppCapability
+                label="Automatic acknowledgements are sent when Meta accepts the token"
+                enabled={
+                  metaWhatsappHealth
+                    ? metaWhatsappHealth.status === "connected" ||
+                      metaWhatsappHealth.status === "test_mode"
+                    : false
+                }
+              />
+              <WhatsAppCapability
+                label="Staff can review and reply from the Inbox"
+                enabled={metaWhatsappHealth ? metaWhatsappHealth.status !== "disconnected" : false}
+              />
+            </div>
           </div>
+
           <div
             style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-              gap: "0.75rem",
+              border: "1px solid #e2e8f0",
+              borderRadius: 8,
+              background: "#fff",
+              padding: "1rem",
+            }}
+          >
+            <div
+              style={{
+                color: "#0f172a",
+                fontSize: "0.85rem",
+                fontWeight: 750,
+                marginBottom: "0.65rem",
+              }}
+            >
+              Next best action
+            </div>
+            <p style={{ color: "#64748b", fontSize: "0.8rem", lineHeight: 1.45, marginTop: 0 }}>
+              {getWhatsappNextAction(metaWhatsappHealth)}
+            </p>
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              <a href={`/${locale}/crm/inbox`} style={linkButtonStyle("#047857")}>
+                Open inbox
+              </a>
+              <a href={`/${locale}/dashboard/setup`} style={linkButtonStyle("#475569")}>
+                Automation settings
+              </a>
+            </div>
+          </div>
+        </div>
+
+        {metaWhatsappHealth ? (
+          <form
+            onSubmit={(event) => void handleWhatsappTest(event)}
+            style={{
               marginTop: "1rem",
+              border: "1px solid #e2e8f0",
+              borderRadius: 8,
+              background: "#fff",
+              padding: "1rem",
             }}
           >
-            <HealthCard
-              label="Token source"
-              value={metaWhatsappHealth.tokenSource}
-              tone="#0f766e"
-            />
-            <HealthCard
-              label="Expiry state"
-              value={metaWhatsappHealth.expiresState}
-              tone={metaWhatsappHealth.expiresState === "expired" ? "#dc2626" : "#475569"}
-            />
-            <HealthCard
-              label="Phone number ID"
-              value={metaWhatsappHealth.phoneNumberId ?? "Not set"}
-              tone="#4f46e5"
-            />
-          </div>
+            <label
+              style={{
+                display: "grid",
+                gap: "0.35rem",
+                color: "#0f172a",
+                fontSize: "0.85rem",
+                fontWeight: 750,
+              }}
+            >
+              Send a test WhatsApp
+              <span style={{ color: "#64748b", fontSize: "0.78rem", fontWeight: 500 }}>
+                Use an approved Meta test recipient in international format, for example
+                +41761234567.
+              </span>
+              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                <input
+                  value={whatsappTestPhone}
+                  onChange={(event) => setWhatsappTestPhone(event.target.value)}
+                  placeholder="+41761234567"
+                  style={{ ...inputStyle, maxWidth: 260 }}
+                />
+                <button
+                  type="submit"
+                  disabled={whatsappTesting || !whatsappTestPhone.trim()}
+                  style={btnStyle(
+                    whatsappTesting || !whatsappTestPhone.trim() ? "#9ca3af" : "#047857",
+                  )}
+                >
+                  {whatsappTesting ? "Sending..." : "Send test"}
+                </button>
+              </div>
+            </label>
+            {whatsappTestResult ? (
+              <p style={{ color: "#15803d", fontSize: "0.8rem", margin: "0.65rem 0 0" }}>
+                {whatsappTestResult}
+              </p>
+            ) : null}
+          </form>
+        ) : null}
+
+        {metaWhatsappHealth?.channelMode === "demo_test_number" ? (
           <div
             style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-              gap: "0.75rem",
               marginTop: "0.9rem",
+              border: "1px solid #bfdbfe",
+              borderRadius: 8,
+              background: "#eff6ff",
+              color: "#1e3a8a",
+              padding: "0.75rem 0.85rem",
+              fontSize: "0.8rem",
+              lineHeight: 1.45,
             }}
           >
-            <HealthCard
-              label="Last inbound webhook"
-              value={
-                metaWhatsappHealth.lastInboundAt
-                  ? formatDate(metaWhatsappHealth.lastInboundAt)
-                  : "No inbound yet"
-              }
-              tone="#0369a1"
-            />
-            <HealthCard
-              label="Last outbound"
-              value={
-                metaWhatsappHealth.lastOutboundAt
-                  ? formatDate(metaWhatsappHealth.lastOutboundAt)
-                  : "No outbound yet"
-              }
-              tone="#7c3aed"
-            />
-            <HealthCard
-              label="Last delivery status"
-              value={
-                metaWhatsappHealth.lastStatusAt
-                  ? formatDate(metaWhatsappHealth.lastStatusAt)
-                  : "No status yet"
-              }
-              tone="#475569"
-            />
-            <HealthCard
-              label="Last failure"
-              value={metaWhatsappHealth.lastFailureMessage ?? "No recent failures"}
-              tone={metaWhatsappHealth.lastFailureMessage ? "#dc2626" : "#16a34a"}
-            />
+            Demo mode is active. You can show the WhatsApp workflow with approved test numbers.
+            Connect a real WhatsApp Business number before using automation with real customers.
           </div>
-        </section>
-      )}
+        ) : null}
+
+        {metaWhatsappHealth?.lastFailureMessage ? (
+          <div
+            style={{
+              marginTop: "0.9rem",
+              border: "1px solid #fecaca",
+              borderRadius: 8,
+              background: "#fef2f2",
+              color: "#991b1b",
+              padding: "0.75rem 0.85rem",
+              fontSize: "0.8rem",
+              lineHeight: 1.45,
+            }}
+          >
+            Last reply problem: {metaWhatsappHealth.lastFailureMessage}
+          </div>
+        ) : null}
+
+        {metaWhatsappHealth ? (
+          <details
+            style={{
+              marginTop: "0.9rem",
+              borderTop: "1px solid #e2e8f0",
+              paddingTop: "0.9rem",
+            }}
+          >
+            <summary
+              style={{
+                cursor: "pointer",
+                color: "#475569",
+                fontSize: "0.8rem",
+                fontWeight: 700,
+              }}
+            >
+              Advanced connection details
+            </summary>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                gap: "0.75rem",
+                marginTop: "0.8rem",
+              }}
+            >
+              <HealthCard
+                label="Channel mode"
+                value={formatWhatsappChannelMode(metaWhatsappHealth.channelMode)}
+                tone="#0f766e"
+              />
+              <HealthCard
+                label="Token source"
+                value={formatWhatsappTokenSource(metaWhatsappHealth.tokenSource)}
+                tone="#475569"
+              />
+              <HealthCard
+                label="Expiry state"
+                value={metaWhatsappHealth.expiresState}
+                tone={metaWhatsappHealth.expiresState === "expired" ? "#dc2626" : "#475569"}
+              />
+              <HealthCard
+                label="Phone number ID"
+                value={metaWhatsappHealth.phoneNumberId ?? "Not set"}
+                tone="#4f46e5"
+              />
+              <HealthCard
+                label="Last inbound"
+                value={
+                  metaWhatsappHealth.lastInboundAt
+                    ? formatDate(metaWhatsappHealth.lastInboundAt)
+                    : "No inbound yet"
+                }
+                tone="#0369a1"
+              />
+              <HealthCard
+                label="Last outbound"
+                value={
+                  metaWhatsappHealth.lastOutboundAt
+                    ? formatDate(metaWhatsappHealth.lastOutboundAt)
+                    : "No outbound yet"
+                }
+                tone="#7c3aed"
+              />
+              <HealthCard
+                label="Last delivery status"
+                value={
+                  metaWhatsappHealth.lastStatusAt
+                    ? formatDate(metaWhatsappHealth.lastStatusAt)
+                    : "No status yet"
+                }
+                tone="#475569"
+              />
+            </div>
+          </details>
+        ) : null}
+      </section>
 
       {success && (
         <p
@@ -696,11 +913,106 @@ function HealthCard({ label, value, tone }: { label: string; value: string; tone
   );
 }
 
+function WhatsAppCapability({ label, enabled }: { label: string; enabled: boolean }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.82rem" }}>
+      <span
+        aria-hidden="true"
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: 18,
+          height: 18,
+          borderRadius: 999,
+          background: enabled ? "#dcfce7" : "#f1f5f9",
+          color: enabled ? "#15803d" : "#94a3b8",
+          fontSize: "0.72rem",
+          fontWeight: 900,
+          flex: "0 0 auto",
+        }}
+      >
+        {enabled ? "OK" : "-"}
+      </span>
+      <span style={{ color: enabled ? "#334155" : "#94a3b8" }}>{label}</span>
+    </div>
+  );
+}
+
 function formatDate(value: Date | string): string {
   return new Date(value).toLocaleString("de-CH", {
     dateStyle: "short",
     timeStyle: "short",
   });
+}
+
+function formatWhatsappBusinessStatus(health: MetaWhatsappHealth | null): string {
+  if (!health) return "Setup needed";
+  if (health.status === "connected") return "Connected";
+  if (health.status === "test_mode") return "Demo mode";
+  if (health.status === "token_expired") return "Needs token refresh";
+  if (health.status === "error") return "Needs attention";
+  return "Not connected";
+}
+
+function formatWhatsappChannelMode(mode: MetaWhatsappHealth["channelMode"]): string {
+  if (mode === "demo_test_number") return "Demo test number";
+  if (mode === "tenant_cloud_api") return "Tenant Cloud API";
+  return "Disabled";
+}
+
+function formatWhatsappTokenSource(source: MetaWhatsappHealth["tokenSource"]): string {
+  if (source === "demo_test_number") return "Meta test token";
+  if (source === "tenant_cloud_api") return "Tenant token";
+  return "None";
+}
+
+function getWhatsappNextAction(health: MetaWhatsappHealth | null): string {
+  if (!health) {
+    return "Ask an account admin to review WhatsApp setup, or enable demo mode for approved test recipients.";
+  }
+  if (health.status === "connected") {
+    return "Open the inbox to review conversations, or adjust automatic acknowledgement wording in setup.";
+  }
+  if (health.status === "test_mode") {
+    return "Use demo mode for approved test numbers. Refresh the Meta test token if outgoing replies fail.";
+  }
+  if (health.status === "token_expired") {
+    return "Refresh the Meta token, then restart the app and worker so automatic replies can be sent again.";
+  }
+  if (health.status === "error") {
+    return "Check the latest delivery issue below, then refresh the connection after fixing the Meta settings.";
+  }
+  return "Connect WhatsApp Business or enable demo mode before using WhatsApp automation with leads.";
+}
+
+function whatsappStatusBadgeStyle(health: MetaWhatsappHealth | null): React.CSSProperties {
+  const color = !health
+    ? "#64748b"
+    : health.status === "connected"
+      ? "#16a34a"
+      : health.status === "test_mode"
+        ? "#2563eb"
+        : health.status === "token_expired" || health.status === "error"
+          ? "#dc2626"
+          : "#64748b";
+
+  return {
+    borderRadius: 999,
+    background: `${color}18`,
+    color,
+    fontSize: "0.75rem",
+    fontWeight: 800,
+    padding: "0.25rem 0.6rem",
+    whiteSpace: "nowrap",
+  };
+}
+
+function friendlyIntegrationError(message: string): string {
+  if (message.toUpperCase().includes("UNAUTHORIZED")) {
+    return "Some integration details are only available to account admins.";
+  }
+  return message;
 }
 
 function runBadgeStyle(status: SyncRun["status"]): React.CSSProperties {
@@ -732,6 +1044,17 @@ function btnStyle(bg: string): React.CSSProperties {
     fontSize: "0.85rem",
     cursor: bg === "#9ca3af" ? "not-allowed" : "pointer",
     fontFamily: "inherit",
+  };
+}
+
+function linkButtonStyle(bg: string): React.CSSProperties {
+  return {
+    ...btnStyle(bg),
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    textDecoration: "none",
+    lineHeight: 1.2,
   };
 }
 

@@ -47,6 +47,8 @@ const businessProfileInput = z.object({
   leadCaptureSettings: z
     .object({
       preferredConfirmationChannel: z.enum(["auto", "email", "whatsapp", "sms"]).default("auto"),
+      autoAcknowledgementEnabled: z.boolean().optional(),
+      aiReplyAssistanceEnabled: z.boolean().optional(),
       reservationConfirmationMessage: z.string().max(500).optional(),
       callbackConfirmationMessage: z.string().max(500).optional(),
       quoteConfirmationMessage: z.string().max(500).optional(),

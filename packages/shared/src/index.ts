@@ -33,6 +33,7 @@ export {
   summarizeWhatsappConnectionHealth,
 } from "./whatsapp-automation";
 export type {
+  WhatsappChannelMode,
   WhatsappConnectionHealth,
   WhatsappConversationState,
   WhatsappInboundIntent,

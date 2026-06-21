@@ -1,7 +1,7 @@
 // Unified inbox router (step-29).
 // Threads = grouped messages per contact per channel.
 import { db } from "@marketing/db";
-import { contacts, leads, messages, tenants } from "@marketing/db";
+import { contacts, crmTasks, leads, messages, tenants } from "@marketing/db";
 import { computeWhatsappConversationState } from "@marketing/shared";
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
@@ -343,6 +343,71 @@ export const inboxRouter = router({
       return [...failedItems, ...pendingItems]
         .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime())
         .slice(0, input.limit);
+    }),
+
+  updateLeadWorkflowStatus: tenantProcedure
+    .input(
+      z.object({
+        leadId: z.string().uuid(),
+        status: z.enum(["new", "contacted", "confirmed", "qualified", "archived"]),
+        workflowState: z.enum([
+          "received",
+          "missing_details",
+          "awaiting_confirmation",
+          "contacted",
+          "confirmed",
+          "declined",
+          "cancelled",
+          "manual_review",
+        ]),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { tenantId } = ctx.tenantCtx;
+
+      const [lead] = await db
+        .select({
+          id: leads.id,
+          contactId: leads.contactId,
+          workflowKind: leads.workflowKind,
+        })
+        .from(leads)
+        .where(and(eq(leads.tenantId, tenantId), eq(leads.id, input.leadId)))
+        .limit(1);
+
+      if (!lead) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
+      }
+
+      await db.transaction(async (tx) => {
+        await tx
+          .update(leads)
+          .set({
+            status: input.status,
+            workflowState: input.workflowState,
+            lastAutomationAt: new Date(),
+          })
+          .where(and(eq(leads.tenantId, tenantId), eq(leads.id, input.leadId)));
+
+        if (["confirmed", "declined", "cancelled"].includes(input.workflowState)) {
+          await tx
+            .update(crmTasks)
+            .set({ status: "done", completedAt: new Date(), updatedAt: new Date() })
+            .where(
+              and(
+                eq(crmTasks.tenantId, tenantId),
+                sql`${crmTasks.meta}->>'leadId' = ${input.leadId}`,
+              ),
+            );
+        }
+      });
+
+      return {
+        leadId: lead.id,
+        workflowKind: lead.workflowKind,
+        workflowState: input.workflowState,
+        status: input.status,
+      };
     }),
 
   /**

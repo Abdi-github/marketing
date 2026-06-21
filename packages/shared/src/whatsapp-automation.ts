@@ -33,10 +33,13 @@ export type WhatsappConversationState = {
   windowClosesAt: Date | null;
 };
 
+export type WhatsappChannelMode = "disabled" | "demo_test_number" | "tenant_cloud_api";
+
 export type WhatsappConnectionHealth = {
   mode: "none" | "test_mode" | "connected";
   phoneNumberId: string | null;
-  tokenSource: "none" | "env_test" | "integration_connection";
+  channelMode: WhatsappChannelMode;
+  tokenSource: "none" | "demo_test_number" | "tenant_cloud_api";
   status: "connected" | "disconnected" | "error" | "token_expired" | "test_mode" | "missing";
   expiresState: "active" | "unknown" | "expired" | "missing";
   lastInboundAt: string | null;
@@ -85,9 +88,13 @@ function parsePartySize(value: string | null): number | null {
 
 function inferPartySizeFromText(text?: string | null): number | null {
   if (!text) return null;
-  const match = text.match(
+  const explicitGuestMatch = text.match(
     /\b(\d{1,2})\s*(?:guests?|people|persons?|pax|personnes?|persone|personen)\b/i,
   );
+  const tableForMatch = text.match(
+    /\b(?:table|reservation|booking|reserve|for)\s+for\s+(\d{1,2})\b/i,
+  );
+  const match = explicitGuestMatch ?? tableForMatch;
   if (!match) return null;
   const parsed = Number(match[1]);
   return Number.isFinite(parsed) ? parsed : null;
@@ -245,10 +252,15 @@ export function summarizeWhatsappConnectionHealth(input: {
     : input.connectionStatus === "connected" || input.phoneNumberId
       ? "connected"
       : "none";
+  const channelMode: WhatsappChannelMode = input.isTestMode
+    ? "demo_test_number"
+    : input.connectionStatus === "connected" || input.phoneNumberId
+      ? "tenant_cloud_api"
+      : "disabled";
   const tokenSource = input.isTestMode
-    ? "env_test"
+    ? "demo_test_number"
     : input.hasAccessToken
-      ? "integration_connection"
+      ? "tenant_cloud_api"
       : "none";
   const status = input.isTestMode
     ? "test_mode"
@@ -265,6 +277,7 @@ export function summarizeWhatsappConnectionHealth(input: {
   return {
     mode,
     phoneNumberId: input.phoneNumberId ?? null,
+    channelMode,
     tokenSource,
     status,
     expiresState,

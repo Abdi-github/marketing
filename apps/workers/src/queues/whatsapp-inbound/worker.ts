@@ -530,6 +530,7 @@ async function processWhatsappInbound(job: Job<WhatsappInboundJob>): Promise<voi
   });
 
   const canUseAiGreeter =
+    settings.aiReplyAssistanceEnabled &&
     workflowPlan.kind === "generic" &&
     !facts.needsManualReview &&
     (messageType === "text" || messageType === "button" || messageType === "interactive");
@@ -570,7 +571,9 @@ async function processWhatsappInbound(job: Job<WhatsappInboundJob>): Promise<voi
   let replyStatus: "sent" | "failed" = "failed";
   let replyError: string | null = null;
 
-  if (!credentials) {
+  if (!settings.autoAcknowledgementEnabled) {
+    replyError = "Automatic acknowledgement is disabled for this tenant.";
+  } else if (!credentials) {
     replyError = "WhatsApp is not connected for this tenant.";
   } else if (!conversationState.serviceWindowOpen) {
     replyError = "Outside the 24-hour WhatsApp service window.";
@@ -585,26 +588,28 @@ async function processWhatsappInbound(job: Job<WhatsappInboundJob>): Promise<voi
     }
   }
 
-  await db.insert(messages).values({
-    tenantId,
-    contactId: contact.id,
-    channel: "whatsapp",
-    direction: "outbound",
-    fromAddress: targetPhoneId,
-    toAddress: phoneNormalized,
-    body: replyText,
-    messageType: "text",
-    meta: {
-      automated: true,
-      leadId,
-      workflowKind: workflowPlan.kind,
-      whatsappIntent,
-    },
-    status: replyStatus,
-    policyState: conversationState.policy,
-    errorMessage: replyError,
-    externalId: externalReplyId,
-  });
+  if (settings.autoAcknowledgementEnabled) {
+    await db.insert(messages).values({
+      tenantId,
+      contactId: contact.id,
+      channel: "whatsapp",
+      direction: "outbound",
+      fromAddress: targetPhoneId,
+      toAddress: phoneNormalized,
+      body: replyText,
+      messageType: "text",
+      meta: {
+        automated: true,
+        leadId,
+        workflowKind: workflowPlan.kind,
+        whatsappIntent,
+      },
+      status: replyStatus,
+      policyState: conversationState.policy,
+      errorMessage: replyError,
+      externalId: externalReplyId,
+    });
+  }
 
   await db
     .update(leads)
@@ -615,26 +620,28 @@ async function processWhatsappInbound(job: Job<WhatsappInboundJob>): Promise<voi
     })
     .where(and(eq(leads.tenantId, tenantId), eq(leads.id, leadId)));
 
-  await upsertIntegrationHealthMeta(
-    tenantId,
-    replyStatus === "sent"
-      ? {
-          lastOutboundAt: new Date().toISOString(),
-          lastOutboundTo: phoneNormalized,
-          lastOutboundStatus: "sent",
-          lastOutboundMode: credentials?.mode ?? null,
-          lastFailureAt: null,
-          lastFailureMessage: null,
-        }
-      : {
-          lastOutboundAt: new Date().toISOString(),
-          lastOutboundTo: phoneNormalized,
-          lastOutboundStatus: "failed",
-          lastOutboundMode: credentials?.mode ?? null,
-          lastFailureAt: new Date().toISOString(),
-          lastFailureMessage: replyError,
-        },
-  );
+  if (settings.autoAcknowledgementEnabled) {
+    await upsertIntegrationHealthMeta(
+      tenantId,
+      replyStatus === "sent"
+        ? {
+            lastOutboundAt: new Date().toISOString(),
+            lastOutboundTo: phoneNormalized,
+            lastOutboundStatus: "sent",
+            lastOutboundMode: credentials?.mode ?? null,
+            lastFailureAt: null,
+            lastFailureMessage: null,
+          }
+        : {
+            lastOutboundAt: new Date().toISOString(),
+            lastOutboundTo: phoneNormalized,
+            lastOutboundStatus: "failed",
+            lastOutboundMode: credentials?.mode ?? null,
+            lastFailureAt: new Date().toISOString(),
+            lastFailureMessage: replyError,
+          },
+    );
+  }
 
   await db.insert(outbox).values({
     tenantId,
@@ -651,7 +658,8 @@ async function processWhatsappInbound(job: Job<WhatsappInboundJob>): Promise<voi
       whatsappIntent,
       workflowState,
       taskId,
-      replied: replyStatus === "sent",
+      replied: settings.autoAcknowledgementEnabled && replyStatus === "sent",
+      autoAcknowledgementEnabled: settings.autoAcknowledgementEnabled,
     },
   });
 

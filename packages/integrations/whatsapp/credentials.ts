@@ -17,7 +17,7 @@ type WhatsappCredentialEnv = {
 export type ResolvedWhatsappCredentials = {
   accessToken: string;
   phoneNumberId: string;
-  mode: "integration_connection" | "env_test";
+  mode: "tenant_cloud_api" | "demo_test_number";
 };
 
 export function resolveWhatsappCredentials(input: {
@@ -41,7 +41,7 @@ export function resolveWhatsappCredentials(input: {
     return {
       accessToken: connectedAccessToken,
       phoneNumberId: connectedPhoneNumberId,
-      mode: "integration_connection",
+      mode: "tenant_cloud_api",
     };
   }
 
@@ -54,6 +54,6 @@ export function resolveWhatsappCredentials(input: {
   return {
     accessToken: input.env.WHATSAPP_ACCESS_TOKEN,
     phoneNumberId: input.env.WHATSAPP_PHONE_NUMBER_ID,
-    mode: "env_test",
+    mode: "demo_test_number",
   };
 }

@@ -30,6 +30,12 @@ Right now the app can work with:
 
 This is called **WhatsApp test mode**.
 
+Inside the app this is now shown as **Demo test number** mode. The app separates three WhatsApp channel states:
+
+- `disabled` - no WhatsApp automation is available for the tenant
+- `demo_test_number` - the tenant is using the configured Meta test phone number and temporary token
+- `tenant_cloud_api` - the tenant has a real tenant-scoped WhatsApp Cloud API connection
+
 It is useful for:
 
 - internal QA
@@ -130,6 +136,25 @@ If these runtimes drift apart, you can get confusing split behavior such as:
 - workers send correctly but the web app says WhatsApp is not connected
 - inbound capture works while outbound still uses an expired token
 
+## Tenant automation controls
+
+Tenant admins can control WhatsApp and lead follow-up behavior from the business setup/settings page.
+
+Current controls:
+
+- preferred confirmation channel: auto, email, WhatsApp, or SMS
+- automatic acknowledgements on/off
+- AI assistance for generic WhatsApp replies on/off
+- custom wording for reservation, callback, quote, and generic confirmations
+
+The safest default is:
+
+- automatic acknowledgements enabled
+- AI assistance enabled only for generic replies
+- reservations still require staff confirmation
+
+If automatic acknowledgements are disabled, the app still captures the CRM lead, creates the task, and stores the inbox conversation. It simply does not send the automatic reply.
+
 ---
 
 ## Production parity checklist for Vercel and Fly
@@ -210,6 +235,7 @@ One more important detail:
 
 - a message being marked `sent` in the app means Meta accepted it
 - final delivery to the phone depends on later Meta status webhooks such as `delivered` and `read`
+- form submissions can prefer WhatsApp as a follow-up channel, but normal WhatsApp text replies require an open 24-hour customer-service window; outside that window the production path needs approved WhatsApp templates
 
 ---
 
@@ -242,6 +268,15 @@ System result:
 7. The worker creates an AI or fallback reply.
 8. The reply is sent back through Meta.
 9. Staff can see and continue the thread in the inbox.
+
+Staff can also move the reservation workflow forward in the inbox:
+
+- mark contacted
+- confirm
+- decline
+- cancel
+
+Confirming, declining, or cancelling completes related CRM follow-up tasks for that lead.
 
 In a known-good test run, both of these were verified:
 

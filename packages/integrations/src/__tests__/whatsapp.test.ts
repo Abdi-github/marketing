@@ -92,7 +92,7 @@ describe("resolveWhatsappCredentials", () => {
     expect(resolved).toEqual({
       accessToken: "real-token",
       phoneNumberId: "real-phone-id",
-      mode: "integration_connection",
+      mode: "tenant_cloud_api",
     });
   });
 
@@ -111,7 +111,7 @@ describe("resolveWhatsappCredentials", () => {
     expect(resolved).toEqual({
       accessToken: "test-token",
       phoneNumberId: "test-phone-id",
-      mode: "env_test",
+      mode: "demo_test_number",
     });
   });
 

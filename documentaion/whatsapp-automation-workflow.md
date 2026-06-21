@@ -19,6 +19,8 @@ For a restaurant tenant, the intended flow is:
 
 The product behavior is intentionally concierge-style, not autonomous booking confirmation. A reservation request is treated as received and waiting for staff confirmation.
 
+The tenant can now choose whether the system sends automatic acknowledgements at all. If automatic acknowledgements are disabled, the app still captures the lead, stores the inbox thread, and creates staff work, but it does not send a WhatsApp reply on its own.
+
 ## Current local verification result
 
 Verified on `localhost:3000` on June 21, 2026.
@@ -224,9 +226,12 @@ For restaurant reservations, the lead is meant to move through a reservation-ori
 
 - `new`
 - `contacted`
+- `awaiting_confirmation`
 - `confirmed`
+- `declined`
+- `cancelled`
 
-The current implementation already writes the reservation-related workflow metadata that will support that path.
+Staff can progress this path from the inbox. Confirming, declining, or cancelling a lead also completes CRM tasks connected to that lead.
 
 ## 7. Task creation for staff
 
@@ -280,6 +285,7 @@ The inbox currently shows:
 - message timeline
 - automation issue banner
 - failed outbound message details
+- staff actions to mark a request contacted, confirmed, declined, or cancelled
 
 In the verified run, the browser showed:
 
@@ -321,6 +327,8 @@ The browser also proved that the previous break was not hidden. It was visible a
 ## Current blocker
 
 There is no local architecture blocker in the verified test-mode flow anymore.
+
+The remaining production constraint is WhatsApp policy. If a lead arrives through a web form and the customer has not opened a WhatsApp conversation with the business, a normal WhatsApp text reply may be blocked by the 24-hour service-window rule. In that case the app records the failed/policy state and the future production path should use approved WhatsApp templates.
 
 The current operational risk is env/process consistency:
 
