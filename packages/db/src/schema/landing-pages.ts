@@ -275,6 +275,11 @@ export const leads = pgTable(
     payload: jsonb("payload").notNull(),
     /** Lightweight operational workflow status for form inboxes. */
     status: text("status").notNull().default("new"),
+    workflowKind: text("workflow_kind"),
+    workflowState: text("workflow_state"),
+    sourceChannel: text("source_channel").notNull().default("form"),
+    structuredData: jsonb("structured_data").notNull().default({}),
+    lastAutomationAt: timestamp("last_automation_at", { withTimezone: true }),
     sourceUrl: text("source_url"),
     submittedAt: timestamp("submitted_at", { withTimezone: true }).notNull().defaultNow(),
     /** Set by CRM dedup handler (Phase 7). Null at submission time. */
@@ -372,7 +377,7 @@ export type Form = typeof forms.$inferSelect;
 export type NewForm = typeof forms.$inferInsert;
 export type Lead = typeof leads.$inferSelect;
 export type NewLead = typeof leads.$inferInsert;
-export type LeadStatus = "new" | "contacted" | "qualified" | "archived";
+export type LeadStatus = "new" | "contacted" | "confirmed" | "qualified" | "archived";
 export type BrandEmbedding = typeof brandEmbeddings.$inferSelect;
 export type NewBrandEmbedding = typeof brandEmbeddings.$inferInsert;
 export type BrandContextType = (typeof brandContextTypeEnum.enumValues)[number];

@@ -114,6 +114,8 @@ const schema = z.object({
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
   // Secret token you define for Meta webhook verification.
   WHATSAPP_VERIFY_TOKEN: z.string().default("marketing-wa-verify"),
+  WHATSAPP_TEST_MODE_ENABLED: z.enum(["true", "false"]).default("false"),
+  WHATSAPP_TEST_TENANT_SLUG: z.string().optional(),
 
   // ─── Swiss SMS — aspsms.ch (step-29) ─────────────────────────────────────
   ASPSMS_USER_KEY: z.string().optional(),
@@ -131,4 +133,23 @@ if (!_result.success) {
   );
 }
 
-export const env = _result.data;
+function normalizeRedisUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if (
+      parsed.hostname === "localhost" &&
+      (parsed.protocol === "redis:" || parsed.protocol === "rediss:")
+    ) {
+      parsed.hostname = "127.0.0.1";
+      return parsed.toString();
+    }
+  } catch {
+    return url;
+  }
+  return url;
+}
+
+export const env = {
+  ..._result.data,
+  REDIS_URL: normalizeRedisUrl(_result.data.REDIS_URL),
+};

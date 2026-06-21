@@ -7,6 +7,7 @@ import { trpc } from "../../../../lib/trpc";
 
 type Connection = Awaited<ReturnType<typeof trpc.integrations.list.query>>[number];
 type SyncRun = Awaited<ReturnType<typeof trpc.integrations.listSyncRuns.query>>[number];
+type MetaWhatsappHealth = Awaited<ReturnType<typeof trpc.integrations.getMetaWhatsappHealth.query>>;
 
 const PROVIDER_META: Record<
   string,
@@ -75,6 +76,7 @@ function IntegrationsPageContent() {
 
   const [connections, setConnections] = useState<Connection[]>([]);
   const [syncRuns, setSyncRuns] = useState<SyncRun[]>([]);
+  const [metaWhatsappHealth, setMetaWhatsappHealth] = useState<MetaWhatsappHealth | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(
     metaParam === "denied"
@@ -97,12 +99,14 @@ function IntegrationsPageContent() {
 
   const loadConnections = useCallback(async () => {
     try {
-      const [data, runs] = await Promise.all([
+      const [data, runs, metaHealth] = await Promise.all([
         trpc.integrations.list.query(),
         trpc.integrations.listSyncRuns.query({ limit: 20 }),
+        trpc.integrations.getMetaWhatsappHealth.query(),
       ]);
       setConnections(data);
       setSyncRuns(runs);
+      setMetaWhatsappHealth(metaHealth);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Fehler beim Laden.");
     } finally {
@@ -251,6 +255,113 @@ function IntegrationsPageContent() {
           tone="#4f46e5"
         />
       </div>
+
+      {metaWhatsappHealth && (
+        <section
+          style={{
+            border: "1px solid #e5e7eb",
+            borderRadius: 10,
+            background: "#fff",
+            padding: "1rem 1.25rem",
+            marginBottom: "1.5rem",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+              gap: "1rem",
+              flexWrap: "wrap",
+            }}
+          >
+            <div>
+              <h2 style={{ fontSize: "1rem", fontWeight: 700, margin: 0 }}>WhatsApp automation</h2>
+              <p style={{ color: "#6b7280", fontSize: "0.82rem", margin: "0.25rem 0 0" }}>
+                Current channel mode, token source, phone number, and recent delivery health.
+              </p>
+            </div>
+            <span
+              style={runBadgeStyle(
+                metaWhatsappHealth.status === "test_mode"
+                  ? "queued"
+                  : metaWhatsappHealth.status === "connected"
+                    ? "success"
+                    : metaWhatsappHealth.status === "token_expired"
+                      ? "error"
+                      : "partial",
+              )}
+            >
+              {metaWhatsappHealth.mode === "test_mode" ? "Test mode" : metaWhatsappHealth.status}
+            </span>
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              gap: "0.75rem",
+              marginTop: "1rem",
+            }}
+          >
+            <HealthCard
+              label="Token source"
+              value={metaWhatsappHealth.tokenSource}
+              tone="#0f766e"
+            />
+            <HealthCard
+              label="Expiry state"
+              value={metaWhatsappHealth.expiresState}
+              tone={metaWhatsappHealth.expiresState === "expired" ? "#dc2626" : "#475569"}
+            />
+            <HealthCard
+              label="Phone number ID"
+              value={metaWhatsappHealth.phoneNumberId ?? "Not set"}
+              tone="#4f46e5"
+            />
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: "0.75rem",
+              marginTop: "0.9rem",
+            }}
+          >
+            <HealthCard
+              label="Last inbound webhook"
+              value={
+                metaWhatsappHealth.lastInboundAt
+                  ? formatDate(metaWhatsappHealth.lastInboundAt)
+                  : "No inbound yet"
+              }
+              tone="#0369a1"
+            />
+            <HealthCard
+              label="Last outbound"
+              value={
+                metaWhatsappHealth.lastOutboundAt
+                  ? formatDate(metaWhatsappHealth.lastOutboundAt)
+                  : "No outbound yet"
+              }
+              tone="#7c3aed"
+            />
+            <HealthCard
+              label="Last delivery status"
+              value={
+                metaWhatsappHealth.lastStatusAt
+                  ? formatDate(metaWhatsappHealth.lastStatusAt)
+                  : "No status yet"
+              }
+              tone="#475569"
+            />
+            <HealthCard
+              label="Last failure"
+              value={metaWhatsappHealth.lastFailureMessage ?? "No recent failures"}
+              tone={metaWhatsappHealth.lastFailureMessage ? "#dc2626" : "#16a34a"}
+            />
+          </div>
+        </section>
+      )}
 
       {success && (
         <p

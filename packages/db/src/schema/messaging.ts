@@ -1,4 +1,4 @@
-import { index, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { index, jsonb, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { contacts } from "./crm";
 
 // ─── Enums ─────────────────────────────────────────────────────────────────────
@@ -51,7 +51,11 @@ export const messages = pgTable(
     fromAddress: text("from_address").notNull(),
     toAddress: text("to_address").notNull(),
     body: text("body").notNull(),
+    messageType: text("message_type").notNull().default("text"),
+    meta: jsonb("meta").notNull().default({}),
     status: messageStatusEnum("status").notNull().default("queued"),
+    policyState: text("policy_state"),
+    errorMessage: text("error_message"),
     externalId: text("external_id"),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
   },

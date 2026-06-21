@@ -25,7 +25,7 @@ type FormData = {
 };
 
 type Option = { label: string; value: string };
-type LeadStatus = "new" | "contacted" | "qualified" | "archived";
+type LeadStatus = "new" | "contacted" | "confirmed" | "qualified" | "archived";
 type FormAnalytics = {
   periodDays: number;
   totals: {
@@ -53,6 +53,10 @@ type FormAnalytics = {
 type FormSubmission = {
   id: string;
   status: LeadStatus;
+  workflowKind: "booking" | "callback" | "quote" | "generic";
+  workflowState: string;
+  sourceChannel: string;
+  structuredData: Record<string, unknown>;
   payload: Record<string, unknown>;
   sourceUrl: string | null;
   submittedAt: string | Date;
@@ -63,6 +67,13 @@ type FormSubmission = {
     phone: string | null;
     message: string | null;
     answers: Array<{ key: string; value: string }>;
+  };
+  workflow: {
+    kind: "booking" | "callback" | "quote" | "generic";
+    title: string;
+    body: string;
+    priority: "low" | "normal" | "high";
+    dueInHours: number;
   };
   contact: {
     id: string;
@@ -91,6 +102,7 @@ type FormTemplate = {
 const LEAD_STATUSES: Array<{ value: LeadStatus; label: string }> = [
   { value: "new", label: "New" },
   { value: "contacted", label: "Contacted" },
+  { value: "confirmed", label: "Confirmed" },
   { value: "qualified", label: "Qualified" },
   { value: "archived", label: "Archived" },
 ];
@@ -245,8 +257,23 @@ function formatDateTime(value: string | Date): string {
 function statusClasses(status: LeadStatus): string {
   if (status === "new") return "bg-blue-50 text-blue-700";
   if (status === "contacted") return "bg-amber-50 text-amber-700";
+  if (status === "confirmed") return "bg-emerald-50 text-emerald-700";
   if (status === "qualified") return "bg-green-50 text-green-700";
   return "bg-gray-100 text-gray-600";
+}
+
+function workflowLabel(kind: FormSubmission["workflow"]["kind"]): string {
+  if (kind === "booking") return "Booking";
+  if (kind === "callback") return "Callback";
+  if (kind === "quote") return "Quote";
+  return "Lead";
+}
+
+function workflowClasses(kind: FormSubmission["workflow"]["kind"]): string {
+  if (kind === "booking") return "bg-rose-50 text-rose-700";
+  if (kind === "callback") return "bg-violet-50 text-violet-700";
+  if (kind === "quote") return "bg-emerald-50 text-emerald-700";
+  return "bg-slate-100 text-slate-700";
 }
 
 function contactName(submission: FormSubmission): string {
@@ -344,6 +371,13 @@ function SubmissionsPanel({
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="font-medium text-gray-900">{contactName(submission)}</p>
                     <span
+                      className={`rounded-full px-2 py-1 text-xs font-medium ${workflowClasses(
+                        submission.workflow.kind,
+                      )}`}
+                    >
+                      {workflowLabel(submission.workflow.kind)}
+                    </span>
+                    <span
                       className={`rounded-full px-2 py-1 text-xs font-medium ${statusClasses(
                         submission.status,
                       )}`}
@@ -436,11 +470,15 @@ function SubmissionDrawer({
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <InfoBox label="Email" value={submission.summary.email || submission.contact?.email} />
             <InfoBox label="Phone" value={submission.summary.phone || submission.contact?.phone} />
+            <InfoBox label="Lead type" value={workflowLabel(submission.workflow.kind)} />
+            <InfoBox label="Source" value={submission.sourceChannel} />
             <InfoBox label="Status" value={submission.status} />
+            <InfoBox label="Workflow state" value={submission.workflowState} />
             <InfoBox
               label="CRM stage"
               value={submission.contact?.lifecycleStage || "No linked contact"}
             />
+            <InfoBox label="Recommended action" value={submission.workflow.title} />
           </div>
 
           <div>
@@ -471,6 +509,7 @@ function SubmissionDrawer({
           </div>
 
           {submission.sourceUrl && <InfoBox label="Source URL" value={submission.sourceUrl} mono />}
+          <InfoBox label="Workflow note" value={submission.workflow.body} />
         </div>
 
         <div className="border-t border-gray-200 p-6">

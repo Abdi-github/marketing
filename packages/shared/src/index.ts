@@ -6,6 +6,39 @@ export { initOtel, shutdownOtel } from "./otel";
 export { createTrace, flushLangfuse } from "./langfuse";
 export { recordMetric, hashId } from "./metrics";
 export {
+  buildLeadConfirmationCopy,
+  buildLeadTaskDueAt,
+  buildLeadWorkflowPlan,
+  buildPhoneLeadPlaceholderEmail,
+  getLeadConfirmationChannelOrder,
+  inferLeadWorkflowKind,
+  isPlaceholderLeadEmail,
+  normalizeLeadCaptureSettings,
+  splitContactName,
+} from "./lead-capture-workflow";
+export type {
+  LeadConfirmationChannel,
+  LeadCaptureSettings,
+  LeadConfirmationCopy,
+  LeadChannelPreference,
+  LeadTaskPriority,
+  LeadWorkflowKind,
+  LeadWorkflowPlan,
+  SupportedLeadLocale,
+} from "./lead-capture-workflow";
+export {
+  computeWhatsappConversationState,
+  extractWhatsappLeadFacts,
+  mapLeadWorkflowKindToWhatsappIntent,
+  summarizeWhatsappConnectionHealth,
+} from "./whatsapp-automation";
+export type {
+  WhatsappConnectionHealth,
+  WhatsappConversationState,
+  WhatsappInboundIntent,
+  WhatsappLeadFacts,
+} from "./whatsapp-automation";
+export {
   TENANT_LIFECYCLE_EVENTS,
   tenantFirstPostEmittedPayloadSchema,
   tenantFirstPaidAtPayloadSchema,

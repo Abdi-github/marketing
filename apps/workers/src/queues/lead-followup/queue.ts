@@ -2,14 +2,14 @@ import { env } from "@marketing/shared";
 import { Queue } from "bullmq";
 import IORedis from "ioredis";
 
-export const WHATSAPP_INBOUND_QUEUE_NAME = "whatsapp-inbound" as const;
+export const LEAD_FOLLOW_UP_QUEUE_NAME = "lead-follow-up" as const;
 
 export const connection = new IORedis(env.REDIS_URL, {
   maxRetriesPerRequest: null,
   enableReadyCheck: false,
 });
 
-export const whatsappInboundQueue = new Queue<WhatsappInboundJob>(WHATSAPP_INBOUND_QUEUE_NAME, {
+export const leadFollowUpQueue = new Queue<LeadFollowUpJob>(LEAD_FOLLOW_UP_QUEUE_NAME, {
   connection,
   defaultJobOptions: {
     attempts: 3,
@@ -19,14 +19,7 @@ export const whatsappInboundQueue = new Queue<WhatsappInboundJob>(WHATSAPP_INBOU
   },
 });
 
-export type WhatsappInboundJob = {
+export type LeadFollowUpJob = {
   tenantId: string;
-  phoneNumberId: string;
-  messageId: string;
-  from: string;
-  messageType: string;
-  text: string | null;
-  bodyPreview: string;
-  meta: Record<string, unknown>;
-  timestamp: number;
+  leadId: string;
 };

@@ -17,7 +17,8 @@ import { requires, router, tenantProcedure } from "../trpc";
 
 let _redis: IORedis | null = null;
 function getRedis(): IORedis {
-  if (!_redis) _redis = new IORedis(env.REDIS_URL, { maxRetriesPerRequest: null, enableReadyCheck: false });
+  if (!_redis)
+    _redis = new IORedis(env.REDIS_URL, { maxRetriesPerRequest: null, enableReadyCheck: false });
   return _redis;
 }
 
@@ -43,6 +44,15 @@ const businessProfileInput = z.object({
   vertical: z.string().min(2).max(100),
   locale: z.enum(["de-CH", "fr-CH", "it-CH", "en"]),
   addressCity: z.string().max(100).optional(),
+  leadCaptureSettings: z
+    .object({
+      preferredConfirmationChannel: z.enum(["auto", "email", "whatsapp", "sms"]).default("auto"),
+      reservationConfirmationMessage: z.string().max(500).optional(),
+      callbackConfirmationMessage: z.string().max(500).optional(),
+      quoteConfirmationMessage: z.string().max(500).optional(),
+      genericConfirmationMessage: z.string().max(500).optional(),
+    })
+    .optional(),
 });
 
 export const tenancyRouter = router({
@@ -53,7 +63,10 @@ export const tenancyRouter = router({
   // Returns the tenant slug — used for building public/embed URLs client-side.
   getSlug: tenantProcedure.query(async ({ ctx }) => {
     const { tenantId } = ctx.tenantCtx;
-    const [row] = await db.select({ slug: tenants.slug }).from(tenants).where(eq(tenants.id, tenantId));
+    const [row] = await db
+      .select({ slug: tenants.slug })
+      .from(tenants)
+      .where(eq(tenants.id, tenantId));
     return { slug: row?.slug ?? "" };
   }),
 
@@ -69,17 +82,16 @@ export const tenancyRouter = router({
 
   // Enqueues an irreversible FADP Art. 17 hard-delete job for the current tenant.
   // Allowed by both owner and admin — they can request erasure of their own tenant.
-  requestDataErasure: requires("admin")
-    .mutation(async ({ ctx }) => {
-      const { tenantId, userId } = ctx.tenantCtx;
+  requestDataErasure: requires("admin").mutation(async ({ ctx }) => {
+    const { tenantId, userId } = ctx.tenantCtx;
 
-      const job = await getDataErasureQueue().add(
-        "data-erasure",
-        { tenantId, requestedBy: userId },
-        { jobId: `erasure:${tenantId}` },
-      );
+    const job = await getDataErasureQueue().add(
+      "data-erasure",
+      { tenantId, requestedBy: userId },
+      { jobId: `erasure:${tenantId}` },
+    );
 
-      logger.info({ tenantId, userId, bullJobId: job.id }, "[tenancy] data erasure job enqueued");
-      return { ok: true, jobId: job.id };
-    }),
+    logger.info({ tenantId, userId, bullJobId: job.id }, "[tenancy] data erasure job enqueued");
+    return { ok: true, jobId: job.id };
+  }),
 });

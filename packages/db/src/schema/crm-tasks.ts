@@ -1,4 +1,4 @@
-import { index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { index, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { contacts } from "./crm";
 import { deals } from "./deals";
 import { tenants } from "./tenants";
@@ -16,6 +16,7 @@ export const crmTasks = pgTable(
     dealId: uuid("deal_id").references(() => deals.id, { onDelete: "set null" }),
     title: text("title").notNull(),
     body: text("body"),
+    meta: jsonb("meta").notNull().default({}),
     dueAt: timestamp("due_at", { withTimezone: true }),
     status: text("status").notNull().default("open"),
     priority: text("priority").notNull().default("normal"),

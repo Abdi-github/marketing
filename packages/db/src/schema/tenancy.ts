@@ -1,4 +1,13 @@
-import { index, pgEnum, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import {
+  index,
+  jsonb,
+  pgEnum,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { users } from "./auth";
 import { tenants } from "./tenants";
 
@@ -53,6 +62,7 @@ export const businessProfiles = pgTable(
     addressCity: text("address_city"),
     addressPostalCode: text("address_postal_code"),
     addressCountry: text("address_country").notNull().default("CH"),
+    leadCaptureSettings: jsonb("lead_capture_settings").notNull().default({}),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

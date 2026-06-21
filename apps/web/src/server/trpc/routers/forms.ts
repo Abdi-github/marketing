@@ -8,7 +8,7 @@ import {
 import { smartFormSchema } from "@marketing/ai-router/form-schema";
 import { db } from "@marketing/db";
 import { contacts, events, forms, leads, type EventType, type LeadStatus } from "@marketing/db";
-import { logger } from "@marketing/shared";
+import { buildLeadWorkflowPlan, logger } from "@marketing/shared";
 import { TRPCError } from "@trpc/server";
 import { and, count, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -30,7 +30,7 @@ const formUpsertInput = z.object({
   landingPageId: z.string().uuid().optional(),
 });
 
-const leadStatusSchema = z.enum(["new", "contacted", "qualified", "archived"]);
+const leadStatusSchema = z.enum(["new", "contacted", "confirmed", "qualified", "archived"]);
 
 function payloadRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -171,12 +171,25 @@ export const formsRouter = router({
           })
           .from(forms)
           .leftJoin(leads, eq(leads.formId, forms.id))
-          .where(eq(forms.tenantId, tenantId))
+          .where(
+            and(
+              eq(forms.tenantId, tenantId),
+              sql`COALESCE(${forms.settings}->>'system_kind', '') = ''`,
+            ),
+          )
           .groupBy(forms.id)
           .orderBy(desc(forms.createdAt))
           .limit(input.pageSize)
           .offset(offset),
-        db.select({ total: count() }).from(forms).where(eq(forms.tenantId, tenantId)),
+        db
+          .select({ total: count() })
+          .from(forms)
+          .where(
+            and(
+              eq(forms.tenantId, tenantId),
+              sql`COALESCE(${forms.settings}->>'system_kind', '') = ''`,
+            ),
+          ),
       ]);
 
       return { rows, total: totalRows[0]?.total ?? 0, page: input.page, pageSize: input.pageSize };
@@ -346,6 +359,10 @@ export const formsRouter = router({
           .select({
             id: leads.id,
             status: leads.status,
+            workflowKind: leads.workflowKind,
+            workflowState: leads.workflowState,
+            sourceChannel: leads.sourceChannel,
+            structuredData: leads.structuredData,
             payload: leads.payload,
             sourceUrl: leads.sourceUrl,
             submittedAt: leads.submittedAt,
@@ -377,7 +394,16 @@ export const formsRouter = router({
         rows: rows.map((row) => ({
           ...row,
           status: row.status as LeadStatus,
+          workflowKind:
+            (row.workflowKind as "booking" | "callback" | "quote" | "generic" | null) ?? "generic",
+          workflowState: (row.workflowState as string | null) ?? "received",
+          sourceChannel: (row.sourceChannel as string | null) ?? "form",
+          structuredData:
+            row.structuredData && typeof row.structuredData === "object"
+              ? (row.structuredData as Record<string, unknown>)
+              : {},
           summary: summarizePayload(row.payload),
+          workflow: buildLeadWorkflowPlan(form, payloadRecord(row.payload), row.sourceUrl),
           contact: row.contactId
             ? {
                 id: row.contactId,

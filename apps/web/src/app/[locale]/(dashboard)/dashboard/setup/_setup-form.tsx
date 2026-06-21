@@ -22,12 +22,21 @@ const CONTENT_LOCALES = [
 
 type ProfileLocale = "de-CH" | "fr-CH" | "it-CH" | "en";
 type UiLocale = "de" | "fr" | "it" | "en";
+type LeadChannelPreference = "auto" | "email" | "whatsapp" | "sms";
+type LeadCaptureSettings = {
+  preferredConfirmationChannel?: LeadChannelPreference;
+  reservationConfirmationMessage?: string | null;
+  callbackConfirmationMessage?: string | null;
+  quoteConfirmationMessage?: string | null;
+  genericConfirmationMessage?: string | null;
+};
 
 type InitialProfile = {
   businessName: string;
   vertical: string;
   locale: ProfileLocale;
   addressCity: string;
+  leadCaptureSettings: LeadCaptureSettings;
 } | null;
 
 export function SetupForm({
@@ -44,6 +53,21 @@ export function SetupForm({
   const [vertical, setVertical] = useState(initialProfile?.vertical ?? "");
   const [profileLocale, setProfileLocale] = useState<ProfileLocale>(initialProfile?.locale ?? "en");
   const [addressCity, setAddressCity] = useState(initialProfile?.addressCity ?? "");
+  const [preferredChannel, setPreferredChannel] = useState<LeadChannelPreference>(
+    initialProfile?.leadCaptureSettings.preferredConfirmationChannel ?? "auto",
+  );
+  const [reservationConfirmationMessage, setReservationConfirmationMessage] = useState(
+    initialProfile?.leadCaptureSettings.reservationConfirmationMessage ?? "",
+  );
+  const [callbackConfirmationMessage, setCallbackConfirmationMessage] = useState(
+    initialProfile?.leadCaptureSettings.callbackConfirmationMessage ?? "",
+  );
+  const [quoteConfirmationMessage, setQuoteConfirmationMessage] = useState(
+    initialProfile?.leadCaptureSettings.quoteConfirmationMessage ?? "",
+  );
+  const [genericConfirmationMessage, setGenericConfirmationMessage] = useState(
+    initialProfile?.leadCaptureSettings.genericConfirmationMessage ?? "",
+  );
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -64,6 +88,13 @@ export function SetupForm({
         vertical: vertical.trim(),
         locale: profileLocale,
         addressCity: addressCity.trim() || undefined,
+        leadCaptureSettings: {
+          preferredConfirmationChannel: preferredChannel,
+          reservationConfirmationMessage: reservationConfirmationMessage.trim() || undefined,
+          callbackConfirmationMessage: callbackConfirmationMessage.trim() || undefined,
+          quoteConfirmationMessage: quoteConfirmationMessage.trim() || undefined,
+          genericConfirmationMessage: genericConfirmationMessage.trim() || undefined,
+        },
       });
       router.push(`/${locale}/dashboard/posts/new`);
     } catch (err) {
@@ -209,6 +240,91 @@ export function SetupForm({
               maxLength={100}
               className="w-full rounded border px-3 py-2 text-sm"
             />
+          </div>
+
+          <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-800">Lead Follow-up Automation</h3>
+              <p className="mt-1 text-xs text-gray-500">
+                Choose how confirmations are sent after a form or WhatsApp lead is captured, and
+                optionally override the default wording.
+              </p>
+            </div>
+
+            <div className="mt-4">
+              <label className="mb-1 block text-sm font-medium" htmlFor="preferredChannel">
+                Preferred confirmation channel
+              </label>
+              <select
+                id="preferredChannel"
+                value={preferredChannel}
+                onChange={(e) => setPreferredChannel(e.target.value as LeadChannelPreference)}
+                className="w-full rounded border bg-white px-3 py-2 text-sm"
+              >
+                <option value="auto">Auto (email, then WhatsApp, then SMS)</option>
+                <option value="email">Email first</option>
+                <option value="whatsapp">WhatsApp first</option>
+                <option value="sms">SMS first</option>
+              </select>
+            </div>
+
+            <div className="mt-4 grid gap-4">
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium text-gray-700">
+                  Reservation confirmation wording
+                </span>
+                <textarea
+                  value={reservationConfirmationMessage}
+                  onChange={(e) => setReservationConfirmationMessage(e.target.value)}
+                  rows={3}
+                  maxLength={500}
+                  placeholder="Optional custom text for restaurant bookings or appointments."
+                  className="w-full rounded border bg-white px-3 py-2 text-sm"
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium text-gray-700">
+                  Callback confirmation wording
+                </span>
+                <textarea
+                  value={callbackConfirmationMessage}
+                  onChange={(e) => setCallbackConfirmationMessage(e.target.value)}
+                  rows={3}
+                  maxLength={500}
+                  placeholder="Optional custom text for call-back leads."
+                  className="w-full rounded border bg-white px-3 py-2 text-sm"
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium text-gray-700">
+                  Quote confirmation wording
+                </span>
+                <textarea
+                  value={quoteConfirmationMessage}
+                  onChange={(e) => setQuoteConfirmationMessage(e.target.value)}
+                  rows={3}
+                  maxLength={500}
+                  placeholder="Optional custom text for quote or service inquiries."
+                  className="w-full rounded border bg-white px-3 py-2 text-sm"
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium text-gray-700">
+                  General confirmation wording
+                </span>
+                <textarea
+                  value={genericConfirmationMessage}
+                  onChange={(e) => setGenericConfirmationMessage(e.target.value)}
+                  rows={3}
+                  maxLength={500}
+                  placeholder="Optional custom text for generic leads."
+                  className="w-full rounded border bg-white px-3 py-2 text-sm"
+                />
+              </label>
+            </div>
           </div>
 
           <button

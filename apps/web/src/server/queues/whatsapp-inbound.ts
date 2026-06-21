@@ -11,14 +11,15 @@ export type WhatsappInboundJob = {
   phoneNumberId: string;
   messageId: string;
   from: string;
-  text: string;
+  messageType: string;
+  text: string | null;
+  bodyPreview: string;
+  meta: Record<string, unknown>;
   timestamp: number;
 };
 
 // Serverless note: per-call connections avoid the Vercel 504 caused by persistent sockets.
-export async function enqueueWhatsappInboundJob(
-  data: WhatsappInboundJob,
-): Promise<void> {
+export async function enqueueWhatsappInboundJob(data: WhatsappInboundJob): Promise<void> {
   const connection = new IORedis(env.REDIS_URL, {
     maxRetriesPerRequest: 2,
     enableReadyCheck: false,

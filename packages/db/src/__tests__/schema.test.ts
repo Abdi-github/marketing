@@ -7,7 +7,9 @@ import {
   emailSuppressions,
   emailPreferences,
   emailSendingDomains,
+  leads,
   mediaAssets,
+  messages,
 } from "../schema";
 
 describe("db schema", () => {
@@ -168,5 +170,38 @@ describe("db schema", () => {
     expect(migration).toContain('CREATE POLICY "media_assets_tenant_isolation"');
     expect(migration).toContain("current_setting('app.current_tenant_id', true)::uuid");
     expect(migration).toMatch(/CREATE POLICY "media_assets_tenant_isolation"[\s\S]+WITH CHECK/);
+  });
+
+  it("messages schema exposes WhatsApp automation metadata columns", () => {
+    const cols = Object.keys(messages);
+    expect(cols).toContain("messageType");
+    expect(cols).toContain("meta");
+    expect(cols).toContain("policyState");
+    expect(cols).toContain("errorMessage");
+  });
+
+  it("leads schema exposes workflow metadata columns", () => {
+    const cols = Object.keys(leads);
+    expect(cols).toContain("workflowKind");
+    expect(cols).toContain("workflowState");
+    expect(cols).toContain("sourceChannel");
+    expect(cols).toContain("structuredData");
+    expect(cols).toContain("lastAutomationAt");
+  });
+
+  it("WhatsApp automation migration adds message, task, and lead metadata columns", () => {
+    const migration = readFileSync(
+      new URL("../../migrations/0041_whatsapp_automation_foundations.sql", import.meta.url),
+      "utf8",
+    );
+
+    expect(migration).toContain("ALTER TABLE messages");
+    expect(migration).toContain("message_type");
+    expect(migration).toContain("ALTER TABLE crm_tasks");
+    expect(migration).toContain("meta jsonb");
+    expect(migration).toContain("ALTER TABLE leads");
+    expect(migration).toContain("workflow_kind");
+    expect(migration).toContain("source_channel");
+    expect(migration).toContain("structured_data");
   });
 });

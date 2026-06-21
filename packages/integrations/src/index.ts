@@ -39,13 +39,23 @@ export {
   verifyWhatsAppWebhook,
   verifyWhatsAppWebhookSignature,
   parseWhatsAppWebhook,
+  WhatsAppApiError,
 } from "../whatsapp/client";
+export {
+  getWhatsAppTestModeConfig,
+  getWhatsAppTestModeIssues,
+  hasCompleteWhatsAppTestModeConfig,
+  isWhatsAppTestModePhoneNumber,
+  isWhatsAppTestModeTenant,
+} from "../whatsapp/test-mode";
+export { resolveWhatsappCredentials } from "../whatsapp/credentials";
 export type {
   WaTemplateComponent,
   WaSendResult,
   WaInboundMessage,
   WaWebhookEntry,
 } from "../whatsapp/client";
+export type { ResolvedWhatsappCredentials } from "../whatsapp/credentials";
 
 export { sendSmsViaAspSms } from "../sms-aspsms/client";
 export type { AspSmsOptions, AspSmsSendResult } from "../sms-aspsms/client";

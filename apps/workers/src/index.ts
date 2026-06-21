@@ -12,6 +12,7 @@ import "./queues/contact-score/worker";
 import "./queues/email-sequence-tick/worker";
 import "./queues/deal-summarize/worker";
 import "./queues/whatsapp-inbound/worker";
+import "./queues/lead-followup/worker";
 
 initOtel("marketing-workers");
 logger.info("Workers started — listening for jobs");

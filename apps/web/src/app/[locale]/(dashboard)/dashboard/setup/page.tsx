@@ -10,6 +10,13 @@ import { eq } from "drizzle-orm";
 import { SetupForm } from "./_setup-form";
 
 type Props = { params: Promise<{ locale: string }> };
+type LeadCaptureSettings = {
+  preferredConfirmationChannel?: "auto" | "email" | "whatsapp" | "sms";
+  reservationConfirmationMessage?: string | null;
+  callbackConfirmationMessage?: string | null;
+  quoteConfirmationMessage?: string | null;
+  genericConfirmationMessage?: string | null;
+};
 
 export default async function SetupPage({ params }: Props) {
   const { locale } = await params;
@@ -32,6 +39,7 @@ export default async function SetupPage({ params }: Props) {
         vertical: profile.vertical,
         locale: profile.locale as "de-CH" | "fr-CH" | "it-CH" | "en",
         addressCity: profile.addressCity ?? "",
+        leadCaptureSettings: (profile.leadCaptureSettings ?? {}) as LeadCaptureSettings,
       }
     : null;
 

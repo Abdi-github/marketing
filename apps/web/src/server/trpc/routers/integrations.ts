@@ -1,13 +1,23 @@
 import { db } from "@marketing/db";
-import { integrationConnections, integrationSyncRuns, socialPosts, outbox } from "@marketing/db";
+import {
+  integrationConnections,
+  integrationSyncRuns,
+  outbox,
+  socialPosts,
+  tenants,
+} from "@marketing/db";
 import { eq, and, desc } from "drizzle-orm";
 import {
   GastrofixAdapter,
   LightspeedChAdapter,
   EversportsAdapter,
   MetaAdapter,
+  decryptTokens,
+  getWhatsAppTestModeConfig,
+  getWhatsAppTestModeIssues,
+  isWhatsAppTestModeTenant,
 } from "@marketing/integrations";
-import { env } from "@marketing/shared";
+import { env, summarizeWhatsappConnectionHealth } from "@marketing/shared";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
@@ -112,6 +122,69 @@ export const integrationsRouter = router({
         .orderBy(desc(integrationSyncRuns.createdAt))
         .limit(input.limit);
     }),
+
+  getMetaWhatsappHealth: tenantProcedure.query(async ({ ctx }) => {
+    const { tenantId } = ctx.tenantCtx;
+
+    const [[tenant], [conn]] = await Promise.all([
+      db.select({ slug: tenants.slug }).from(tenants).where(eq(tenants.id, tenantId)).limit(1),
+      db
+        .select({
+          id: integrationConnections.id,
+          status: integrationConnections.status,
+          oauthTokens: integrationConnections.oauthTokens,
+          meta: integrationConnections.meta,
+        })
+        .from(integrationConnections)
+        .where(
+          and(
+            eq(integrationConnections.tenantId, tenantId),
+            eq(integrationConnections.provider, "meta"),
+          ),
+        )
+        .limit(1),
+    ]);
+
+    const meta = (conn?.meta ?? {}) as Record<string, unknown>;
+    const phoneNumberId =
+      typeof meta["phoneNumberId"] === "string" ? (meta["phoneNumberId"] as string) : null;
+    let hasAccessToken = false;
+    if (conn?.oauthTokens && env.INTEGRATION_ENCRYPTION_KEY) {
+      try {
+        hasAccessToken = Boolean(
+          (
+            decryptTokens(conn.oauthTokens, env.INTEGRATION_ENCRYPTION_KEY) as {
+              accessToken?: string;
+            }
+          ).accessToken,
+        );
+      } catch {
+        hasAccessToken = false;
+      }
+    }
+
+    const testMode = getWhatsAppTestModeConfig(env);
+    const testModeIssues = getWhatsAppTestModeIssues(testMode);
+    const isTestMode = isWhatsAppTestModeTenant(testMode, tenant?.slug ?? null);
+    const testModeReady = isTestMode && testModeIssues.length === 0;
+
+    return summarizeWhatsappConnectionHealth({
+      connectionStatus: conn?.status ?? null,
+      phoneNumberId:
+        phoneNumberId ?? (testModeReady ? (env.WHATSAPP_PHONE_NUMBER_ID ?? null) : null),
+      hasAccessToken: hasAccessToken || (testModeReady && Boolean(env.WHATSAPP_ACCESS_TOKEN)),
+      isTestMode: testModeReady && !conn,
+      meta:
+        testModeIssues.length > 0
+          ? {
+              ...meta,
+              lastFailureMessage:
+                meta["lastFailureMessage"] ??
+                `WhatsApp test mode is incomplete: ${testModeIssues.join(", ")}`,
+            }
+          : meta,
+    });
+  }),
 
   /** Connect a provider (API-key path). Admin+ only. */
   connect: requires("admin")

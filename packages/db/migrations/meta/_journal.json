@@ -281,6 +281,20 @@
       "when": 1781838000000,
       "tag": "0039_platform_admin_control_panel",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1781992800000,
+      "tag": "0040_business_profile_lead_capture_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1782039600000,
+      "tag": "0041_whatsapp_automation_foundations",
+      "breakpoints": true
     }
   ]
 }

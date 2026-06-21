@@ -4,20 +4,53 @@
 // See docs/WORKFLOWS.md §Lead capture.
 import { db } from "@marketing/db";
 import { forms, leads, tenants, outbox, contacts, crmTasks, events } from "@marketing/db";
-import { logger } from "@marketing/shared";
+import {
+  buildLeadTaskDueAt,
+  buildLeadWorkflowPlan,
+  buildPhoneLeadPlaceholderEmail,
+  logger,
+  splitContactName,
+} from "@marketing/shared";
 import { and, eq, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { validateAndSanitizeFormPayload } from "../../../../../lib/form-validation";
+import { enqueueLeadFollowUpJob } from "../../../../../server/queues/lead-followup";
 
 export const dynamic = "force-dynamic";
 
 type Params = Promise<{ tenantSlug: string; formSlug: string }>;
 
-function buildLeadFollowUpDueAt(now = new Date()): Date {
-  const dueAt = new Date(now);
-  dueAt.setHours(dueAt.getHours() + 4);
-  return dueAt;
+function firstStringValue(payload: Record<string, unknown>, keys: string[]): string | null {
+  for (const key of keys) {
+    const value = payload[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  }
+  return null;
+}
+
+function parseWorkflowState(
+  workflowKind: "booking" | "callback" | "quote" | "generic",
+  payload: Record<string, unknown>,
+): string {
+  if (workflowKind !== "booking") return "received";
+  const hasDate = Boolean(firstStringValue(payload, ["date", "reservation_date"]));
+  const hasTime = Boolean(firstStringValue(payload, ["time", "reservation_time"]));
+  const hasPartySize = Boolean(firstStringValue(payload, ["party_size", "guest_count", "guests"]));
+  return hasDate && hasTime && hasPartySize ? "awaiting_confirmation" : "missing_details";
+}
+
+function buildStructuredLeadData(payload: Record<string, unknown>): Record<string, unknown> {
+  return {
+    name: firstStringValue(payload, ["name", "full_name"]),
+    email: firstStringValue(payload, ["email"]),
+    phone: firstStringValue(payload, ["phone", "telephone", "mobile"]),
+    message: firstStringValue(payload, ["message", "notes", "comment", "details"]),
+    reservationDate: firstStringValue(payload, ["date", "reservation_date"]),
+    reservationTime: firstStringValue(payload, ["time", "reservation_time"]),
+    partySize: firstStringValue(payload, ["party_size", "guest_count", "guests"]),
+  };
 }
 
 // ─── Turnstile verification ────────────────────────────────────────────────────
@@ -122,6 +155,9 @@ export async function POST(
   // 8. Insert lead + CRM contact + outbox event in one transaction.
   const sourceUrl = req.headers.get("referer") ?? undefined;
   const anonymousId = req.cookies.get("__tid")?.value ?? null;
+  const workflowPlan = buildLeadWorkflowPlan(form, sanitizedPayload, sourceUrl);
+  const contactName = splitContactName(sanitizedPayload);
+  let createdLeadId: string | null = null;
 
   try {
     await db.transaction(async (tx) => {
@@ -131,9 +167,14 @@ export async function POST(
           tenantId: tenant.id,
           formId: form.id,
           payload: sanitizedPayload,
+          workflowKind: workflowPlan.kind,
+          workflowState: parseWorkflowState(workflowPlan.kind, sanitizedPayload),
+          sourceChannel: form.landingPageId ? "landing_page_form" : "form",
+          structuredData: buildStructuredLeadData(sanitizedPayload),
           sourceUrl,
         })
         .returning({ id: leads.id });
+      createdLeadId = lead?.id ?? null;
 
       // CRM dedup: find-or-create contact by email, then link the lead.
       let capturedContactId: string | null = null;
@@ -144,11 +185,19 @@ export async function POST(
           : null;
       const email =
         typeof rawEmail === "string" && rawEmail.trim() ? rawEmail.toLowerCase().trim() : null;
+      const placeholderEmail = rawPhone ? buildPhoneLeadPlaceholderEmail(rawPhone) : null;
 
       if (email || rawPhone) {
         const [existingByEmail] = email
           ? await tx
-              .select({ id: contacts.id })
+              .select({
+                id: contacts.id,
+                email: contacts.email,
+                firstName: contacts.firstName,
+                lastName: contacts.lastName,
+                phone: contacts.phone,
+                lifecycleStage: contacts.lifecycleStage,
+              })
               .from(contacts)
               .where(and(eq(contacts.tenantId, tenant.id), eq(contacts.email, email)))
           : [];
@@ -156,43 +205,46 @@ export async function POST(
         const [existingByPhone] =
           !existingByEmail && rawPhone
             ? await tx
-                .select({ id: contacts.id })
+                .select({
+                  id: contacts.id,
+                  email: contacts.email,
+                  firstName: contacts.firstName,
+                  lastName: contacts.lastName,
+                  phone: contacts.phone,
+                  lifecycleStage: contacts.lifecycleStage,
+                })
                 .from(contacts)
                 .where(and(eq(contacts.tenantId, tenant.id), eq(contacts.phone, rawPhone)))
                 .limit(1)
             : [];
 
-        let contactId: string | null = existingByEmail?.id ?? existingByPhone?.id ?? null;
+        const existingContact = existingByEmail ?? existingByPhone ?? null;
+        let contactId: string | null = existingContact?.id ?? null;
         if (contactId) {
+          const shouldAdoptRealEmail =
+            email && existingContact?.email === placeholderEmail && email !== existingContact.email;
+
           await tx
             .update(contacts)
-            .set({ lastSeenAt: new Date(), updatedAt: new Date() })
+            .set({
+              email: shouldAdoptRealEmail ? email : (existingContact?.email ?? email ?? undefined),
+              firstName: existingContact?.firstName ?? contactName.firstName,
+              lastName: existingContact?.lastName ?? contactName.lastName,
+              phone: existingContact?.phone ?? rawPhone,
+              lastSeenAt: new Date(),
+              updatedAt: new Date(),
+            })
             .where(and(eq(contacts.tenantId, tenant.id), eq(contacts.id, contactId)));
-        } else if (email) {
-          // Accept common name field keys: name, fullName, full_name, firstName (+ lastName)
-          const rawName =
-            typeof sanitizedPayload["name"] === "string" && sanitizedPayload["name"].trim()
-              ? sanitizedPayload["name"].trim()
-              : typeof sanitizedPayload["fullName"] === "string" &&
-                  sanitizedPayload["fullName"].trim()
-                ? sanitizedPayload["fullName"].trim()
-                : typeof sanitizedPayload["full_name"] === "string" &&
-                    sanitizedPayload["full_name"].trim()
-                  ? sanitizedPayload["full_name"].trim()
-                  : "";
-          const spaceIdx = rawName.indexOf(" ");
-          const firstName = spaceIdx > -1 ? rawName.slice(0, spaceIdx) : rawName || null;
-          const lastName = spaceIdx > -1 ? rawName.slice(spaceIdx + 1) || null : null;
-
+        } else if (email || placeholderEmail) {
           const [newContact] = await tx
             .insert(contacts)
             .values({
               tenantId: tenant.id,
-              email,
-              firstName,
-              lastName,
+              email: email ?? placeholderEmail!,
+              firstName: contactName.firstName,
+              lastName: contactName.lastName,
               phone: rawPhone,
-              source: rawPhone && !email ? "phone" : "form",
+              source: workflowPlan.kind === "callback" || (rawPhone && !email) ? "phone" : "form",
             })
             .returning({ id: contacts.id });
           contactId = newContact?.id ?? null;
@@ -209,12 +261,17 @@ export async function POST(
           await tx.insert(crmTasks).values({
             tenantId: tenant.id,
             contactId,
-            title: `Follow up new ${form.name} lead`,
-            body: sourceUrl
-              ? `New form submission from ${form.name}. Source: ${sourceUrl}`
-              : `New form submission from ${form.name}.`,
-            dueAt: buildLeadFollowUpDueAt(),
-            priority: "high",
+            title: workflowPlan.title,
+            body: workflowPlan.body,
+            meta: {
+              sourceChannel: form.landingPageId ? "landing_page_form" : "form",
+              workflowKind: workflowPlan.kind,
+              workflowState: parseWorkflowState(workflowPlan.kind, sanitizedPayload),
+              leadId: lead!.id,
+              structuredData: buildStructuredLeadData(sanitizedPayload),
+            },
+            dueAt: buildLeadTaskDueAt(workflowPlan),
+            priority: workflowPlan.priority,
           });
 
           if (anonymousId) {
@@ -242,12 +299,23 @@ export async function POST(
           formSlug,
           contactId: capturedContactId,
           phone: rawPhone,
+          leadKind: workflowPlan.kind,
+          lifecycleStage: "lead",
         },
       });
     });
   } catch (err) {
     logger.error({ err: String(err), tenantSlug, formSlug }, "[form] insert failed");
     return NextResponse.json({ error: "Server error" }, { status: 500 });
+  }
+
+  if (createdLeadId) {
+    await enqueueLeadFollowUpJob({ tenantId: tenant.id, leadId: createdLeadId }).catch((err) => {
+      logger.warn(
+        { err: String(err), tenantId: tenant.id, leadId: createdLeadId },
+        "[form] follow-up job enqueue failed",
+      );
+    });
   }
 
   // 9. Return success — never echo PII back.
