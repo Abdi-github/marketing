@@ -1,0 +1,38 @@
+[
+  {
+    "name": "Published restaurant reservation page",
+    "result": "PASS",
+    "screenshot": "sms-documentaion/screenshots/02-restaurant-golden-path/01-published-restaurant-page.png",
+    "url": "http://localhost:3000/p/geneva-restaurant-e2e-jz3bc/abdi-restaurant-d5edaf2d"
+  },
+  {
+    "name": "Reservation form and preferred channels",
+    "result": "PASS",
+    "screenshot": "sms-documentaion/screenshots/02-restaurant-golden-path/02-reservation-form-channels.png"
+  },
+  {
+    "name": "Mobile restaurant navigation and form",
+    "result": "PASS",
+    "screenshot": "sms-documentaion/screenshots/02-restaurant-golden-path/03-mobile-restaurant-page.png"
+  },
+  {
+    "name": "Restaurant owner login",
+    "result": "PASS"
+  },
+  {
+    "name": "SMS provider readiness panel",
+    "result": "PASS",
+    "screenshot": "sms-documentaion/screenshots/01-provider-readiness/01-twilio-health-no-send.png",
+    "note": "No test SMS button was clicked."
+  },
+  {
+    "name": "Restaurant SMS presets and automation builder",
+    "result": "PASS",
+    "screenshot": "sms-documentaion/screenshots/04-sms-templates-and-sequences/01-restaurant-presets-and-builder.png"
+  },
+  {
+    "name": "CRM Inbox SMS operations",
+    "result": "PASS",
+    "screenshot": "sms-documentaion/screenshots/03-missing-details-and-two-way-replies/01-crm-inbox-before-replies.png"
+  }
+]

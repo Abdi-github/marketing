@@ -15,8 +15,7 @@ export type TemplateGoal =
   | "appointment_booking"
   | "info_brochure";
 
-export type TemplateVertical =
-  | "cafe" | "restaurant" | "fitness" | "clinic" | "retail" | "service";
+export type TemplateVertical = "cafe" | "restaurant" | "fitness" | "clinic" | "retail" | "service";
 
 export type TemplateStyle = "minimal" | "bold" | "elegant" | "playful";
 
@@ -58,7 +57,10 @@ export type SectionExtrasMap = {
     address?: string;
     mapEmbedUrl?: string;
   };
-  lead_form: Record<string, never>;
+  lead_form: {
+    captureChannels?: Array<"email" | "phone" | "sms" | "whatsapp">;
+    leadKind?: "booking" | "callback" | "quote" | "generic";
+  };
   whatsapp_cta: {
     phoneNumber?: string;
     prefillText?: string;
@@ -144,7 +146,9 @@ export function defineTemplate(def: TemplateDefinition): TemplateDefinition {
 }
 
 /** Extract the section structure (type + variant + order) — used by AI translator + screenshot pipeline. */
-export function getSectionStructure(def: TemplateDefinition): Array<{ type: SectionType; variant: string; order: number }> {
+export function getSectionStructure(
+  def: TemplateDefinition,
+): Array<{ type: SectionType; variant: string; order: number }> {
   const firstLocale = Object.keys(def.sectionsByLocale)[0] as SwissLocale | undefined;
   if (!firstLocale) return [];
   return def.sectionsByLocale[firstLocale]!.map((s) => ({

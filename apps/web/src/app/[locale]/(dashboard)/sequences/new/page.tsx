@@ -13,6 +13,8 @@ type TriggerEvent =
   | "contact.lifecycle_changed"
   | "manual";
 
+type LeadIntent = "booking" | "callback" | "quote" | "generic";
+
 type SuggestedStep = {
   delay_minutes: number;
   suggested_subject: string;
@@ -24,6 +26,11 @@ type TemplateOption = {
   name: string;
   subject: string;
   locale: string;
+};
+
+type SenderSettings = {
+  canSendProduction: boolean;
+  readinessMessage: string;
 };
 
 function trpc() {
@@ -52,14 +59,22 @@ export default function NewSequencePage() {
   const [suggesting, setSuggesting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [suggestContext, setSuggestContext] = useState("");
+  const [intent, setIntent] = useState<LeadIntent>("booking");
   const [templates, setTemplates] = useState<TemplateOption[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(true);
+  const [senderSettings, setSenderSettings] = useState<SenderSettings | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
-    trpc()
-      .sequences.listTemplates.query()
-      .then((rows) => setTemplates(rows as TemplateOption[]))
+    const client = trpc();
+    Promise.all([
+      client.sequences.listTemplates.query(),
+      client.sequences.getSenderSettings.query(),
+    ])
+      .then(([templateRows, settings]) => {
+        setTemplates(templateRows as TemplateOption[]);
+        setSenderSettings(settings as SenderSettings);
+      })
       .finally(() => setTemplatesLoading(false));
   }, []);
 
@@ -69,14 +84,39 @@ export default function NewSequencePage() {
       const result = await trpc().sequences.aiSuggestSequence.mutate({
         triggerEvent,
         context: suggestContext,
+        locale,
+        intent,
       });
-      setName(result.name);
-      setSteps(
-        result.steps.map((s) => ({
-          delay_minutes: s.delay_minutes,
-          suggested_subject: s.suggested_subject,
-        })),
-      );
+      for (let i = 0; i < 30; i++) {
+        const job = await trpc().sequences.getAutomationJob.query({ jobId: result.jobId });
+        if (job.status === "completed") {
+          const applied = await trpc().sequences.applyAutomationJob.mutate({
+            jobId: result.jobId,
+            locale,
+          });
+          router.push(`/${locale}/sequences/${applied.sequenceId}`);
+          return;
+        }
+        if (job.status === "failed") {
+          setSaveError(job.errorMessage ?? "AI automation draft failed.");
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      }
+      setSaveError("The AI draft is still running. Refresh the automations list in a moment.");
+    } finally {
+      setSuggesting(false);
+    }
+  }
+
+  async function handleRestaurantPreset() {
+    setSuggesting(true);
+    setSaveError(null);
+    try {
+      const created = await trpc().sequences.createRestaurantPreset.mutate({ locale });
+      router.push(`/${locale}/sequences/${created.sequenceId}`);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Could not create restaurant preset.");
     } finally {
       setSuggesting(false);
     }
@@ -109,6 +149,7 @@ export default function NewSequencePage() {
       const { id } = await trpc().sequences.createSequence.mutate({
         name: name.trim(),
         triggerEvent,
+        triggerFilter: triggerEvent === "lead.captured" ? { leadKind: intent } : {},
         steps: validSteps.map((s) => ({
           delay_minutes: s.delay_minutes,
           template_id: s.template_id!,
@@ -125,6 +166,42 @@ export default function NewSequencePage() {
   return (
     <div className="mx-auto max-w-7xl px-6 py-8">
       <h1 className="mb-6 text-2xl font-semibold text-gray-900">{t("newTitle")}</h1>
+
+      <section
+        className={`mb-4 rounded-xl border p-5 ${
+          senderSettings?.canSendProduction
+            ? "border-emerald-200 bg-emerald-50"
+            : "border-amber-200 bg-amber-50"
+        }`}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p
+              className={`text-sm font-semibold ${
+                senderSettings?.canSendProduction ? "text-emerald-900" : "text-amber-900"
+              }`}
+            >
+              {senderSettings?.canSendProduction
+                ? "Automation can send"
+                : "Automation will be saved paused"}
+            </p>
+            <p
+              className={`mt-1 text-xs ${
+                senderSettings?.canSendProduction ? "text-emerald-700" : "text-amber-800"
+              }`}
+            >
+              {senderSettings?.readinessMessage ??
+                "Checking whether a production sender is configured."}
+            </p>
+          </div>
+          <Link
+            href={`/${locale}/emails/settings`}
+            className="text-xs font-semibold underline underline-offset-2"
+          >
+            Email settings
+          </Link>
+        </div>
+      </section>
 
       {/* Name */}
       <section className="mb-4 rounded-xl border border-gray-200 bg-white p-6">
@@ -155,7 +232,40 @@ export default function NewSequencePage() {
 
       {/* AI Suggest */}
       <section className="mb-4 rounded-xl border border-gray-200 bg-white p-6">
-        <div className="flex items-end gap-3">
+        <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-emerald-900">
+                Restaurant reservation automation
+              </p>
+              <p className="mt-1 text-xs text-emerald-700">
+                Creates safe reservation follow-up templates and an intent-aware sequence.
+              </p>
+            </div>
+            <button
+              onClick={handleRestaurantPreset}
+              disabled={suggesting}
+              className="rounded-lg bg-emerald-700 px-4 py-2 text-sm text-white hover:bg-emerald-800 disabled:opacity-50"
+            >
+              Use restaurant preset
+            </button>
+          </div>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-[180px_1fr_auto] md:items-end">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Lead intent</label>
+            <select
+              value={intent}
+              onChange={(e) => setIntent(e.target.value as LeadIntent)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="booking">Reservation / booking</option>
+              <option value="quote">Quote request</option>
+              <option value="callback">Callback request</option>
+              <option value="generic">General inquiry</option>
+            </select>
+          </div>
           <div className="flex-1">
             <label className="mb-1 block text-sm font-medium text-gray-700">
               {t("aiContextLabel")}
@@ -173,7 +283,7 @@ export default function NewSequencePage() {
             disabled={suggesting}
             className="whitespace-nowrap rounded-lg bg-purple-600 px-4 py-2 text-sm text-white hover:bg-purple-700 disabled:opacity-50"
           >
-            {suggesting ? t("suggesting") : t("aiSuggest")}
+            {suggesting ? "Generating..." : "Generate with AI"}
           </button>
         </div>
         <p className="mt-2 text-xs text-gray-400">{t("aiSuggestHint")}</p>

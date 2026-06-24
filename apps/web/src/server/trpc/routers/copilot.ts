@@ -15,18 +15,26 @@ import {
 } from "@marketing/ai-router";
 import { db } from "@marketing/db";
 import {
+  businessProfiles,
   contacts,
   copilotMessages,
   copilotThreads,
+  crmTasks,
   emailSequences,
+  emailSendingDomains,
+  emailSends,
+  emailTemplates,
+  forms,
   landingPages,
   landingPageVersions,
+  leads,
   outbox,
+  socialPosts,
 } from "@marketing/db";
 import type { LandingPageComposition } from "@marketing/ai-router";
 import { env, logger } from "@marketing/shared";
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, count } from "drizzle-orm";
+import { and, count, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { tenantProcedure, router } from "../trpc";
 
@@ -106,7 +114,52 @@ const COPILOT_TOOLS: ToolDefinition[] = [
   {
     name: "summarize_stats",
     description:
-      "Safe read-only action — auto-executes. Returns a business stats summary: total contacts, open deals, active sequences, landing pages published.",
+      "Safe read-only action — auto-executes. Returns a business stats summary: total contacts, open tasks, active sequences, forms, landing pages published, and recent email failures.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "list_forms",
+    description:
+      "Safe read-only action — auto-executes. Returns smart forms, their active status, linked page, and recent submission count. Use when the user asks about forms, lead capture, booking forms, or quote forms.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        limit: { type: "integer", minimum: 1, maximum: 20, default: 10 },
+      },
+    },
+  },
+  {
+    name: "list_recent_leads",
+    description:
+      "Safe read-only action — auto-executes. Returns recent captured leads with workflow/status/source information. Use when the user asks whether forms are capturing leads or wants recent customer requests.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        limit: { type: "integer", minimum: 1, maximum: 20, default: 8 },
+      },
+    },
+  },
+  {
+    name: "list_email_automations",
+    description:
+      "Safe read-only action — auto-executes. Returns email sender readiness, template count, sequence list, and recent send failures. Use when the user asks about email automation, templates, sequences, or production readiness.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "list_social_posts",
+    description:
+      "Safe read-only action — auto-executes. Returns recent social post jobs and graphic generation status. Use when the user asks about social posts, graphics, Meta/Facebook posting, or creative status.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        limit: { type: "integer", minimum: 1, maximum: 20, default: 8 },
+      },
+    },
+  },
+  {
+    name: "audit_launch_readiness",
+    description:
+      "Safe read-only action — auto-executes. Checks whether the tenant is ready for a real-world launch: business profile, landing pages, forms, CRM leads, email sender, sequences, and social posts.",
     inputSchema: { type: "object", properties: {} },
   },
   {
@@ -192,7 +245,16 @@ const COPILOT_TOOLS: ToolDefinition[] = [
 ];
 
 // Safe tools execute immediately; all others require user confirm.
-const SAFE_TOOLS = new Set(["list_contacts", "summarize_stats", "list_landing_pages"]);
+const SAFE_TOOLS = new Set([
+  "list_contacts",
+  "summarize_stats",
+  "list_landing_pages",
+  "list_forms",
+  "list_recent_leads",
+  "list_email_automations",
+  "list_social_posts",
+  "audit_launch_readiness",
+]);
 
 // ─── Provider ────────────────────────────────────────────────────────────────
 
@@ -201,6 +263,48 @@ function buildProvider() {
     return new EchoProvider();
   }
   return createAnthropicSonnet();
+}
+
+function isUsablePlatformSender(address: string): boolean {
+  const normalized = address.trim().toLowerCase();
+  const email = normalized.match(/<([^>]+)>/)?.[1] ?? normalized;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && !email.endsWith(".localhost");
+}
+
+async function resolveEmailSenderReadiness(tenantId: string) {
+  const [verifiedDomain] = await db
+    .select({
+      domain: emailSendingDomains.domain,
+      fromName: emailSendingDomains.fromName,
+      fromLocalPart: emailSendingDomains.fromLocalPart,
+    })
+    .from(emailSendingDomains)
+    .where(
+      and(
+        eq(emailSendingDomains.tenantId, tenantId),
+        eq(emailSendingDomains.status, "verified"),
+        eq(emailSendingDomains.isPrimary, true),
+      ),
+    );
+
+  const platformSenderReady = isUsablePlatformSender(env.EMAIL_FROM_ADDRESS);
+  return {
+    ready: Boolean(verifiedDomain || platformSenderReady),
+    mode: verifiedDomain ? "tenant_domain" : "platform_sender",
+    sender: verifiedDomain
+      ? `${verifiedDomain.fromName} <${verifiedDomain.fromLocalPart}@${verifiedDomain.domain}>`
+      : env.EMAIL_FROM_ADDRESS,
+    message: verifiedDomain
+      ? "A verified business sender domain is active."
+      : platformSenderReady
+        ? "The platform sender is configured. Confirm the domain is verified in Resend before production delivery."
+        : "No production email sender is configured yet.",
+  };
+}
+
+function compactDate(value: Date | string | null | undefined): string {
+  if (!value) return "unknown";
+  return new Date(value).toISOString().slice(0, 10);
 }
 
 // ─── Tool execution ───────────────────────────────────────────────────────────
@@ -213,7 +317,18 @@ async function executeSafeTool(
   if (toolName === "list_contacts") {
     const conditions = [eq(contacts.tenantId, tenantId)];
     if (toolArgs.lifecycleStage) {
-      conditions.push(eq(contacts.lifecycleStage, toolArgs.lifecycleStage as "lead"));
+      conditions.push(
+        eq(
+          contacts.lifecycleStage,
+          toolArgs.lifecycleStage as
+            | "subscriber"
+            | "lead"
+            | "mql"
+            | "sql"
+            | "customer"
+            | "evangelist",
+        ),
+      );
     }
     const [total] = await db
       .select({ total: count() })
@@ -237,25 +352,223 @@ async function executeSafeTool(
   }
 
   if (toolName === "summarize_stats") {
-    const [contactTotal] = await db
-      .select({ total: count() })
-      .from(contacts)
-      .where(eq(contacts.tenantId, tenantId));
-
-    const [pageTotal] = await db
-      .select({ total: count() })
-      .from(landingPages)
-      .where(and(eq(landingPages.tenantId, tenantId), eq(landingPages.status, "published")));
-
-    const [seqTotal] = await db
-      .select({ total: count() })
-      .from(emailSequences)
-      .where(and(eq(emailSequences.tenantId, tenantId), eq(emailSequences.status, "active")));
+    const [contactTotal, pageTotal, formTotal, leadTotal, taskTotal, seqTotal, failedEmailTotal] =
+      await Promise.all([
+        db.select({ total: count() }).from(contacts).where(eq(contacts.tenantId, tenantId)),
+        db
+          .select({ total: count() })
+          .from(landingPages)
+          .where(and(eq(landingPages.tenantId, tenantId), eq(landingPages.status, "published"))),
+        db.select({ total: count() }).from(forms).where(eq(forms.tenantId, tenantId)),
+        db.select({ total: count() }).from(leads).where(eq(leads.tenantId, tenantId)),
+        db
+          .select({ total: count() })
+          .from(crmTasks)
+          .where(and(eq(crmTasks.tenantId, tenantId), eq(crmTasks.status, "open"))),
+        db
+          .select({ total: count() })
+          .from(emailSequences)
+          .where(and(eq(emailSequences.tenantId, tenantId), eq(emailSequences.status, "active"))),
+        db
+          .select({ total: count() })
+          .from(emailSends)
+          .where(and(eq(emailSends.tenantId, tenantId), eq(emailSends.status, "failed"))),
+      ]);
 
     return {
-      totalContacts: contactTotal?.total ?? 0,
-      publishedPages: pageTotal?.total ?? 0,
-      activeSequences: seqTotal?.total ?? 0,
+      totalContacts: contactTotal[0]?.total ?? 0,
+      publishedPages: pageTotal[0]?.total ?? 0,
+      forms: formTotal[0]?.total ?? 0,
+      capturedLeads: leadTotal[0]?.total ?? 0,
+      openTasks: taskTotal[0]?.total ?? 0,
+      activeSequences: seqTotal[0]?.total ?? 0,
+      failedEmailSends: failedEmailTotal[0]?.total ?? 0,
+    };
+  }
+
+  if (toolName === "list_forms") {
+    const limit = Number(toolArgs.limit ?? 10);
+    const rows = await db
+      .select({
+        id: forms.id,
+        name: forms.name,
+        slug: forms.slug,
+        isActive: forms.isActive,
+        submitLabel: forms.submitLabel,
+        landingPageId: forms.landingPageId,
+        createdAt: forms.createdAt,
+      })
+      .from(forms)
+      .where(eq(forms.tenantId, tenantId))
+      .orderBy(desc(forms.updatedAt))
+      .limit(limit);
+
+    const withCounts = await Promise.all(
+      rows.map(async (form) => {
+        const [leadCount] = await db
+          .select({ total: count() })
+          .from(leads)
+          .where(and(eq(leads.tenantId, tenantId), eq(leads.formId, form.id)));
+        return { ...form, leads: leadCount?.total ?? 0 };
+      }),
+    );
+    return { forms: withCounts };
+  }
+
+  if (toolName === "list_recent_leads") {
+    const rows = await db
+      .select({
+        id: leads.id,
+        status: leads.status,
+        workflowKind: leads.workflowKind,
+        workflowState: leads.workflowState,
+        sourceChannel: leads.sourceChannel,
+        submittedAt: leads.submittedAt,
+        formName: forms.name,
+        formSlug: forms.slug,
+        contactEmail: contacts.email,
+        contactFirstName: contacts.firstName,
+        contactLastName: contacts.lastName,
+      })
+      .from(leads)
+      .innerJoin(forms, and(eq(forms.id, leads.formId), eq(forms.tenantId, tenantId)))
+      .leftJoin(contacts, and(eq(contacts.id, leads.contactId), eq(contacts.tenantId, tenantId)))
+      .where(eq(leads.tenantId, tenantId))
+      .orderBy(desc(leads.submittedAt))
+      .limit(Number(toolArgs.limit ?? 8));
+
+    return { leads: rows };
+  }
+
+  if (toolName === "list_email_automations") {
+    const sender = await resolveEmailSenderReadiness(tenantId);
+    const [templateTotal, failedTotal] = await Promise.all([
+      db
+        .select({ total: count() })
+        .from(emailTemplates)
+        .where(eq(emailTemplates.tenantId, tenantId)),
+      db
+        .select({ total: count() })
+        .from(emailSends)
+        .where(and(eq(emailSends.tenantId, tenantId), eq(emailSends.status, "failed"))),
+    ]);
+    const sequences = await db
+      .select({
+        id: emailSequences.id,
+        name: emailSequences.name,
+        status: emailSequences.status,
+        triggerEvent: emailSequences.triggerEvent,
+        category: emailSequences.category,
+        updatedAt: emailSequences.updatedAt,
+      })
+      .from(emailSequences)
+      .where(eq(emailSequences.tenantId, tenantId))
+      .orderBy(desc(emailSequences.updatedAt))
+      .limit(10);
+
+    return {
+      sender,
+      templates: templateTotal[0]?.total ?? 0,
+      failedSends: failedTotal[0]?.total ?? 0,
+      sequences,
+    };
+  }
+
+  if (toolName === "list_social_posts") {
+    const rows = await db
+      .select({
+        id: socialPosts.id,
+        status: socialPosts.status,
+        creativeStatus: socialPosts.creativeStatus,
+        creativeTemplate: socialPosts.creativeTemplate,
+        creativeAspectRatio: socialPosts.creativeAspectRatio,
+        publishedToMetaAt: socialPosts.publishedToMetaAt,
+        createdAt: socialPosts.createdAt,
+      })
+      .from(socialPosts)
+      .where(eq(socialPosts.tenantId, tenantId))
+      .orderBy(desc(socialPosts.createdAt))
+      .limit(Number(toolArgs.limit ?? 8));
+    return { posts: rows };
+  }
+
+  if (toolName === "audit_launch_readiness") {
+    const sender = await resolveEmailSenderReadiness(tenantId);
+    const [
+      profile,
+      publishedPages,
+      activeForms,
+      capturedLeads,
+      activeSequences,
+      failedSends,
+      recentSocialPosts,
+      openTasks,
+    ] = await Promise.all([
+      db
+        .select({
+          businessName: businessProfiles.businessName,
+          vertical: businessProfiles.vertical,
+          city: businessProfiles.addressCity,
+          locale: businessProfiles.locale,
+        })
+        .from(businessProfiles)
+        .where(eq(businessProfiles.tenantId, tenantId))
+        .limit(1),
+      db
+        .select({ total: count() })
+        .from(landingPages)
+        .where(and(eq(landingPages.tenantId, tenantId), eq(landingPages.status, "published"))),
+      db
+        .select({ total: count() })
+        .from(forms)
+        .where(and(eq(forms.tenantId, tenantId), eq(forms.isActive, true))),
+      db.select({ total: count() }).from(leads).where(eq(leads.tenantId, tenantId)),
+      db
+        .select({ total: count() })
+        .from(emailSequences)
+        .where(and(eq(emailSequences.tenantId, tenantId), eq(emailSequences.status, "active"))),
+      db
+        .select({ total: count() })
+        .from(emailSends)
+        .where(and(eq(emailSends.tenantId, tenantId), eq(emailSends.status, "failed"))),
+      db.select({ total: count() }).from(socialPosts).where(eq(socialPosts.tenantId, tenantId)),
+      db
+        .select({ total: count() })
+        .from(crmTasks)
+        .where(and(eq(crmTasks.tenantId, tenantId), eq(crmTasks.status, "open"))),
+    ]);
+
+    const checks = [
+      {
+        key: "business_profile",
+        ok: Boolean(profile[0]?.businessName && profile[0]?.vertical),
+        label: "Business profile",
+      },
+      { key: "published_page", ok: (publishedPages[0]?.total ?? 0) > 0, label: "Published page" },
+      { key: "lead_capture", ok: (activeForms[0]?.total ?? 0) > 0, label: "Active lead form" },
+      { key: "crm_leads", ok: (capturedLeads[0]?.total ?? 0) > 0, label: "CRM leads captured" },
+      { key: "email_sender", ok: sender.ready, label: "Email sender ready" },
+      {
+        key: "email_sequence",
+        ok: (activeSequences[0]?.total ?? 0) > 0,
+        label: "Active email sequence",
+      },
+      { key: "email_health", ok: (failedSends[0]?.total ?? 0) === 0, label: "No failed emails" },
+    ];
+
+    return {
+      profile: profile[0] ?? null,
+      sender,
+      checks,
+      counts: {
+        publishedPages: publishedPages[0]?.total ?? 0,
+        activeForms: activeForms[0]?.total ?? 0,
+        capturedLeads: capturedLeads[0]?.total ?? 0,
+        activeSequences: activeSequences[0]?.total ?? 0,
+        failedEmailSends: failedSends[0]?.total ?? 0,
+        socialPosts: recentSocialPosts[0]?.total ?? 0,
+        openTasks: openTasks[0]?.total ?? 0,
+      },
     };
   }
 
@@ -283,6 +596,106 @@ async function executeSafeTool(
 
 function formatHistory(msgs: Array<{ role: string; content: string }>): string {
   return msgs.map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`).join("\n\n");
+}
+
+function formatSafeToolResult(
+  toolName: string,
+  execResult: Record<string, unknown>,
+): string | null {
+  if (toolName === "summarize_stats") {
+    const r = execResult as {
+      totalContacts: number;
+      publishedPages: number;
+      forms: number;
+      capturedLeads: number;
+      openTasks: number;
+      activeSequences: number;
+      failedEmailSends: number;
+    };
+    return `Here's your marketing snapshot:\n- **${r.totalContacts}** contact${r.totalContacts !== 1 ? "s" : ""}\n- **${r.capturedLeads}** captured lead${r.capturedLeads !== 1 ? "s" : ""}\n- **${r.publishedPages}** published page${r.publishedPages !== 1 ? "s" : ""}\n- **${r.forms}** form${r.forms !== 1 ? "s" : ""}\n- **${r.activeSequences}** active email sequence${r.activeSequences !== 1 ? "s" : ""}\n- **${r.openTasks}** open CRM task${r.openTasks !== 1 ? "s" : ""}\n- **${r.failedEmailSends}** failed email send${r.failedEmailSends !== 1 ? "s" : ""}`;
+  }
+
+  if (toolName === "list_forms") {
+    const r = execResult as {
+      forms: Array<{ name: string; slug: string; isActive: boolean; leads: number }>;
+    };
+    if (r.forms.length === 0) return "You do not have any lead capture forms yet.";
+    return `Your forms:\n${r.forms
+      .map(
+        (form) =>
+          `- **${form.name}** — ${form.isActive ? "active" : "inactive"}, ${form.leads} lead${form.leads !== 1 ? "s" : ""} · /${form.slug}`,
+      )
+      .join("\n")}`;
+  }
+
+  if (toolName === "list_recent_leads") {
+    const r = execResult as {
+      leads: Array<{
+        formName: string;
+        status: string;
+        workflowKind: string | null;
+        workflowState: string | null;
+        submittedAt: Date | string;
+        contactEmail: string | null;
+      }>;
+    };
+    if (r.leads.length === 0) return "No leads have been captured yet.";
+    return `Recent captured leads:\n${r.leads
+      .map(
+        (lead) =>
+          `- ${lead.contactEmail ?? "Unknown contact"} — ${lead.formName}, ${lead.status}${lead.workflowKind ? `/${lead.workflowKind}` : ""}${lead.workflowState ? ` (${lead.workflowState})` : ""}, ${compactDate(lead.submittedAt)}`,
+      )
+      .join("\n")}`;
+  }
+
+  if (toolName === "list_email_automations") {
+    const r = execResult as {
+      sender: { ready: boolean; mode: string; sender: string; message: string };
+      templates: number;
+      failedSends: number;
+      sequences: Array<{ name: string; status: string; triggerEvent: string }>;
+    };
+    const lines = r.sequences
+      .map((seq) => `- **${seq.name}** — ${seq.status}, ${seq.triggerEvent}`)
+      .join("\n");
+    return `Email automation health:\n- Sender: **${r.sender.ready ? "ready" : "not ready"}** (${r.sender.mode})\n- From: ${r.sender.sender}\n- Templates: **${r.templates}**\n- Failed sends: **${r.failedSends}**${
+      lines ? `\n\nSequences:\n${lines}` : "\n\nNo sequences yet."
+    }\n\n${r.sender.message}`;
+  }
+
+  if (toolName === "list_social_posts") {
+    const r = execResult as {
+      posts: Array<{
+        status: string;
+        creativeStatus: string;
+        creativeTemplate: string | null;
+        publishedToMetaAt: Date | string | null;
+        createdAt: Date | string;
+      }>;
+    };
+    if (r.posts.length === 0) return "No social post jobs yet.";
+    return `Recent social posts:\n${r.posts
+      .map(
+        (post) =>
+          `- ${compactDate(post.createdAt)} — ${post.status}, graphic: ${post.creativeStatus}${post.creativeTemplate ? ` (${post.creativeTemplate})` : ""}${post.publishedToMetaAt ? ", published" : ""}`,
+      )
+      .join("\n")}`;
+  }
+
+  if (toolName === "audit_launch_readiness") {
+    const r = execResult as {
+      sender: { message: string };
+      checks: Array<{ ok: boolean; label: string }>;
+    };
+    const blocker = r.checks.find((check) => !check.ok);
+    return `Launch readiness:\n${r.checks
+      .map((check) => `- ${check.ok ? "OK" : "Needs work"}: ${check.label}`)
+      .join("\n")}\n\nMain next step: ${
+      blocker?.label ?? "run a real end-to-end customer test"
+    }.\n\nEmail sender: ${r.sender.message}`;
+  }
+
+  return null;
 }
 
 // ─── Router ──────────────────────────────────────────────────────────────────
@@ -337,6 +750,7 @@ export const copilotRouter = router({
       z.object({
         threadId: z.string().uuid().optional(),
         message: z.string().min(1).max(2000),
+        currentPath: z.string().max(300).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -376,6 +790,16 @@ export const copilotRouter = router({
       const historyExcludingCurrent = history.reverse().slice(0, -1); // exclude the message we just inserted
 
       const conversationHistory = formatHistory(historyExcludingCurrent);
+      const [profile] = await db
+        .select({
+          businessName: businessProfiles.businessName,
+          vertical: businessProfiles.vertical,
+          city: businessProfiles.addressCity,
+          locale: businessProfiles.locale,
+        })
+        .from(businessProfiles)
+        .where(eq(businessProfiles.tenantId, tenantId));
+      const sender = await resolveEmailSenderReadiness(tenantId);
 
       // Call Sonnet with tools.
       const prompt = getPrompt("copilot-system-v1");
@@ -394,9 +818,9 @@ export const copilotRouter = router({
       if (provider.completionWithTools) {
         const callOpts: CallOpts = {
           tenantId,
-          jobId: `copilot-${threadId}-${Date.now()}`,
+          jobId: crypto.randomUUID(),
           promptId: "copilot-system-v1",
-          promptVersion: 1,
+          promptVersion: 2,
           costBudgetCents: 30,
         };
 
@@ -406,6 +830,14 @@ export const copilotRouter = router({
               prompt: prompt.buildUserPrompt({
                 conversationHistory,
                 userMessage: input.message,
+                currentPath: input.currentPath ?? "",
+                businessName: profile?.businessName ?? "Unknown business",
+                vertical: profile?.vertical ?? "unknown SME",
+                city: profile?.city ?? "",
+                locale: profile?.locale ?? "en",
+                emailSenderReady: sender.ready ? "yes" : "no",
+                emailSenderMode: sender.mode,
+                emailSenderMessage: sender.message,
               }),
               systemPrompt: prompt.systemPrompt,
               maxTokens: 1024,
@@ -475,6 +907,7 @@ export const copilotRouter = router({
                     ? "You don't have any landing pages yet."
                     : `Your landing pages:\n${lines}`;
               }
+              resultSummary = formatSafeToolResult(toolName, execResult) ?? resultSummary;
               replyText = [replyText, resultSummary].filter(Boolean).join("\n\n").trim();
             } else {
               // Requires confirm — propose action to user.

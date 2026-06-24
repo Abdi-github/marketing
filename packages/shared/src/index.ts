@@ -40,6 +40,16 @@ export type {
   WhatsappLeadFacts,
 } from "./whatsapp-automation";
 export {
+  classifySmsKeyword,
+  interpolateSmsTemplate,
+  isInsideQuietHours,
+  isSmsMarketingPurpose,
+  localMinutesAt,
+  matchesSmsTriggerFilter,
+  normalizeSmsPhone,
+} from "./sms-automation";
+export type { SmsPurpose, SmsTriggerFilter } from "./sms-automation";
+export {
   TENANT_LIFECYCLE_EVENTS,
   tenantFirstPostEmittedPayloadSchema,
   tenantFirstPaidAtPayloadSchema,
@@ -50,3 +60,5 @@ export type {
   TenantFirstPaidAtPayload,
   TenantChurnedPayload,
 } from "./events/tenant-lifecycle";
+export { reservationStatusChangedV1 } from "./events/reservation";
+export type { ReservationStatusChanged } from "./events/reservation";

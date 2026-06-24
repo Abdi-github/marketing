@@ -18,6 +18,7 @@ import { segmentsRouter } from "./segments";
 import { sequencesRouter } from "./sequences";
 import { tenancyRouter } from "./tenancy";
 import { uploadsRouter } from "./uploads";
+import { smsAutomationRouter } from "./sms-automation";
 
 export const appRouter = router({
   auth: authRouter,
@@ -37,6 +38,7 @@ export const appRouter = router({
   platform: platformRouter,
   segments: segmentsRouter,
   sequences: sequencesRouter,
+  smsAutomation: smsAutomationRouter,
   tenancy: tenancyRouter,
   uploads: uploadsRouter,
 });

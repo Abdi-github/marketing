@@ -2,25 +2,29 @@ import { db } from "@marketing/db";
 import {
   integrationConnections,
   integrationSyncRuns,
+  messages,
   outbox,
   socialPosts,
   tenants,
 } from "@marketing/db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, inArray, sql } from "drizzle-orm";
 import {
   GastrofixAdapter,
   LightspeedChAdapter,
   EversportsAdapter,
   MetaAdapter,
   decryptTokens,
+  encryptTokens,
   getWhatsAppTestModeConfig,
   getWhatsAppTestModeIssues,
   isWhatsAppTestModeTenant,
   resolveWhatsappCredentials,
+  getSmsProviderHealth,
+  resolveSmsCredentials,
   sendWhatsAppText,
   WhatsAppApiError,
 } from "@marketing/integrations";
-import { env, summarizeWhatsappConnectionHealth } from "@marketing/shared";
+import { env, normalizeSmsPhone, summarizeWhatsappConnectionHealth } from "@marketing/shared";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
@@ -28,6 +32,7 @@ import {
   getSocialCreativePublicUrl,
 } from "../../../lib/social-creative";
 import { enqueueIntegrationSyncJob } from "../../queues/integration-sync";
+import { enqueueSmsSendJob } from "../../queues/sms";
 import { router, tenantProcedure, requires } from "../trpc";
 
 // ─── Adapter instances ─────────────────────────────────────────────────────────
@@ -68,6 +73,40 @@ function getMetaAdapter(): MetaAdapter {
 
   const redirectUri = `${appUrl}/api/integrations/meta/callback`;
   return new MetaAdapter(db, encKey, appId, appSecret, redirectUri);
+}
+
+async function resolveSmsForTenant(tenantId: string) {
+  const [[tenant], [connection]] = await Promise.all([
+    db.select({ slug: tenants.slug }).from(tenants).where(eq(tenants.id, tenantId)).limit(1),
+    db
+      .select({
+        oauthTokens: integrationConnections.oauthTokens,
+        meta: integrationConnections.meta,
+      })
+      .from(integrationConnections)
+      .where(
+        and(
+          eq(integrationConnections.tenantId, tenantId),
+          eq(integrationConnections.provider, "twilio"),
+          eq(integrationConnections.status, "connected"),
+        ),
+      )
+      .limit(1),
+  ]);
+  if (!tenant) return null;
+  return resolveSmsCredentials({
+    tenantSlug: tenant.slug,
+    connection: connection
+      ? {
+          oauthTokens: connection.oauthTokens,
+          meta:
+            connection.meta && typeof connection.meta === "object"
+              ? (connection.meta as Record<string, unknown>)
+              : null,
+        }
+      : null,
+    env,
+  });
 }
 
 // ─── Router ───────────────────────────────────────────────────────────────────
@@ -188,6 +227,193 @@ export const integrationsRouter = router({
           : meta,
     });
   }),
+
+  getSmsHealth: tenantProcedure.query(async ({ ctx }) => {
+    const { tenantId } = ctx.tenantCtx;
+    const credentials = await resolveSmsForTenant(tenantId);
+    const providerHealth = getSmsProviderHealth(credentials ?? { SMS_PROVIDER: env.SMS_PROVIDER });
+
+    const [[lastOutbound], [failedCount], [sentCount]] = await Promise.all([
+      db
+        .select({
+          occurredAt: messages.occurredAt,
+          status: messages.status,
+          errorMessage: messages.errorMessage,
+          toAddress: messages.toAddress,
+        })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.tenantId, tenantId),
+            eq(messages.channel, "sms"),
+            eq(messages.direction, "outbound"),
+          ),
+        )
+        .orderBy(desc(messages.occurredAt))
+        .limit(1),
+      db
+        .select({ total: sql<number>`count(*)::int` })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.tenantId, tenantId),
+            eq(messages.channel, "sms"),
+            eq(messages.direction, "outbound"),
+            eq(messages.status, "failed"),
+          ),
+        ),
+      db
+        .select({ total: sql<number>`count(*)::int` })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.tenantId, tenantId),
+            eq(messages.channel, "sms"),
+            eq(messages.direction, "outbound"),
+            inArray(messages.status, ["sent", "delivered", "read"]),
+          ),
+        ),
+    ]);
+
+    const failedSends = Number(failedCount?.total ?? 0);
+    return {
+      status: providerHealth.configured ? (failedSends > 0 ? "attention" : "ready") : "missing",
+      provider: providerHealth.providerLabel,
+      providerKey: providerHealth.provider,
+      configured: providerHealth.configured,
+      originator: providerHealth.senderLabel,
+      missing: providerHealth.missing,
+      hasUserKey: providerHealth.configured,
+      hasPassword: providerHealth.configured,
+      lastOutboundAt: lastOutbound?.occurredAt ?? null,
+      lastOutboundStatus: lastOutbound?.status ?? null,
+      lastRecipient: lastOutbound?.toAddress ?? null,
+      lastFailureMessage: lastOutbound?.status === "failed" ? lastOutbound.errorMessage : null,
+      failedSends,
+      sentSends: Number(sentCount?.total ?? 0),
+      maxRecommendedChars: providerHealth.maxRecommendedChars,
+      credentialMode: credentials?.mode ?? null,
+    };
+  }),
+
+  connectTwilio: requires("admin")
+    .input(
+      z.object({
+        accountSid: z.string().regex(/^AC[a-zA-Z0-9]{20,}$/),
+        authToken: z.string().min(20),
+        fromNumber: z.string().min(8).max(20),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (!env.INTEGRATION_ENCRYPTION_KEY) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "Integration encryption is not configured.",
+        });
+      }
+      const fromNumber = normalizeSmsPhone(input.fromNumber);
+      const encrypted = encryptTokens(
+        {
+          accountSid: input.accountSid,
+          authToken: input.authToken,
+          fromNumber,
+        },
+        env.INTEGRATION_ENCRYPTION_KEY,
+      );
+      const [connection] = await db
+        .insert(integrationConnections)
+        .values({
+          tenantId: ctx.tenantCtx.tenantId,
+          provider: "twilio",
+          externalAccountId: fromNumber,
+          oauthTokens: encrypted,
+          status: "connected",
+          scopes: ["sms:send", "sms:receive"],
+          meta: { fromNumber },
+        })
+        .onConflictDoUpdate({
+          target: [
+            integrationConnections.tenantId,
+            integrationConnections.provider,
+            integrationConnections.externalAccountId,
+          ],
+          set: {
+            oauthTokens: encrypted,
+            status: "connected",
+            scopes: ["sms:send", "sms:receive"],
+            meta: { fromNumber },
+            updatedAt: new Date(),
+          },
+        })
+        .returning({ id: integrationConnections.id });
+      return { id: connection?.id, fromNumber };
+    }),
+
+  sendSmsTestMessage: requires("admin")
+    .input(
+      z.object({
+        toPhone: z.string().min(5).max(20),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { tenantId } = ctx.tenantCtx;
+      const credentials = await resolveSmsForTenant(tenantId);
+      if (!credentials) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "SMS is not configured for this tenant.",
+        });
+      }
+
+      let normalizedPhone: string;
+      try {
+        normalizedPhone = normalizeSmsPhone(input.toPhone);
+      } catch {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Enter the recipient number in international format, for example +41761234567.",
+        });
+      }
+
+      const [tenant] = await db
+        .select({ name: tenants.name })
+        .from(tenants)
+        .where(eq(tenants.id, tenantId))
+        .limit(1);
+      if (!tenant) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Tenant not found." });
+      }
+
+      const text = `Test from ${tenant.name}: SMS automation is connected and ready for lead follow-up.`;
+      const [message] = await db
+        .insert(messages)
+        .values({
+          tenantId,
+          channel: "sms",
+          direction: "outbound",
+          fromAddress: credentials.senderAddress,
+          toAddress: normalizedPhone,
+          body: text,
+          messageType: "test",
+          status: "queued",
+          meta: {
+            provider: credentials.provider,
+            integrationTest: true,
+            purpose: "integration_test",
+          },
+        })
+        .returning({ id: messages.id });
+      if (!message) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      await enqueueSmsSendJob({ tenantId, messageId: message.id });
+      return {
+        ok: true,
+        provider: getSmsProviderHealth(credentials).providerLabel,
+        toPhone: normalizedPhone,
+        messageId: message.id,
+        sandbox: credentials.provider === "sandbox",
+        queued: true,
+      };
+    }),
 
   sendWhatsappTestMessage: requires("admin")
     .input(
@@ -350,13 +576,29 @@ export const integrationsRouter = router({
           message: `Connection is ${row.status}`,
         });
       }
+      const syncProviders = [
+        "gastrofix",
+        "lightspeed_ch",
+        "eversports",
+        "bexio",
+        "meta",
+        "google_business",
+        "resend",
+      ] as const;
+      if (!(syncProviders as readonly string[]).includes(row.provider)) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: `${row.provider} is event-driven and does not support manual sync.`,
+        });
+      }
+      const syncProvider = row.provider as (typeof syncProviders)[number];
 
       const [syncRun] = await db
         .insert(integrationSyncRuns)
         .values({
           tenantId: ctx.tenantCtx.tenantId,
           connectionId: row.id,
-          provider: row.provider,
+          provider: syncProvider,
           externalAccountId: row.externalAccountId,
           status: "queued",
           source: "manual",
@@ -376,7 +618,7 @@ export const integrationsRouter = router({
           tenantId: ctx.tenantCtx.tenantId,
           connectionId: row.id,
           syncRunId: syncRun.id,
-          provider: row.provider,
+          provider: syncProvider,
           source: "manual",
         },
         {

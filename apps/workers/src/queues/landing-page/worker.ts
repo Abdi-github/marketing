@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import {
   type LandingPageJob,
   type LandingPageComposition,
+  type LandingPageSection,
   type UsageRecord,
   ProviderRouter,
   EchoProvider,
@@ -22,9 +23,11 @@ import {
   createLandingPageDesignPlan,
   designPlanSeed,
   enhanceCompositionWithWebsite,
+  resolveLeadCapturePreset,
   type EmbedStore,
   type SectionType,
   type LandingPageDesignPlan,
+  type LeadCapturePresetConfig,
 } from "@marketing/ai-router";
 import { pickBundleForVertical, buildUnsplashUrl } from "@marketing/landing-design-system";
 import { getPlanCaps, monthlyBudgetKey, BUDGET_KEY_TTL_SECONDS } from "@marketing/billing";
@@ -295,6 +298,20 @@ async function markLandingPageFailed(
       updatedAt: new Date(),
     })
     .where(and(eq(landingPages.tenantId, ctx.tenantId), eq(landingPages.id, pageId)));
+}
+
+async function markLandingPageGenerationCompleted(
+  ctx: TenantContext,
+  pageId: string,
+  versionId: string,
+): Promise<void> {
+  await updateStepDataPatch(ctx, pageId, {
+    generationControl: {
+      state: "completed",
+      completedAt: new Date().toISOString(),
+      versionId,
+    },
+  });
 }
 
 async function insertAiUsage(record: UsageRecord): Promise<string> {
@@ -677,6 +694,121 @@ function rebuildLocalizedWebsiteShell(
   };
 }
 
+function applyLeadCapturePresetToComposition(
+  composition: LandingPageComposition,
+  config: LeadCapturePresetConfig,
+): LandingPageComposition {
+  const locale = composition.locale.toLowerCase();
+  const ctaLabels = {
+    reservation: locale.startsWith("fr")
+      ? "Reserver une table"
+      : locale.startsWith("de")
+        ? "Tisch anfragen"
+        : locale.startsWith("it")
+          ? "Prenota un tavolo"
+          : "Reserve a table",
+    quote: locale.startsWith("fr")
+      ? "Demander une offre"
+      : locale.startsWith("de")
+        ? "Angebot anfragen"
+        : locale.startsWith("it")
+          ? "Richiedi un preventivo"
+          : "Request quote",
+    callback: locale.startsWith("fr")
+      ? "Demander un rappel"
+      : locale.startsWith("de")
+        ? "Rueckruf anfragen"
+        : locale.startsWith("it")
+          ? "Richiedi richiamata"
+          : "Request a callback",
+    newsletter: locale.startsWith("fr")
+      ? "S'inscrire"
+      : locale.startsWith("de")
+        ? "Anmelden"
+        : locale.startsWith("it")
+          ? "Iscriviti"
+          : "Subscribe",
+    whatsapp_first: "WhatsApp",
+    sms_fallback: locale.startsWith("fr")
+      ? "Nous contacter"
+      : locale.startsWith("de")
+        ? "Kontakt aufnehmen"
+        : locale.startsWith("it")
+          ? "Contattaci"
+          : "Contact us",
+  } satisfies Record<LeadCapturePresetConfig["preset"], string>;
+  const applyToSection = (section: LandingPageSection): LandingPageSection => {
+    if (section.type !== "lead_form") return section;
+    return {
+      ...section,
+      extras: {
+        ...(section.extras ?? {}),
+        captureChannels: config.captureChannels,
+        leadKind: config.leadKind,
+      },
+    };
+  };
+
+  return {
+    ...composition,
+    sections: composition.sections.map(applyToSection),
+    site: composition.site
+      ? {
+          ...composition.site,
+          nav: composition.site.nav
+            ? {
+                ...composition.site.nav,
+                cta: composition.site.nav.cta
+                  ? {
+                      ...composition.site.nav.cta,
+                      label: ctaLabels[config.preset],
+                    }
+                  : {
+                      label: ctaLabels[config.preset],
+                      pageSlug: "contact",
+                    },
+              }
+            : composition.site.nav,
+          pages: composition.site.pages?.map((page) => ({
+            ...page,
+            sections: page.sections.map(applyToSection),
+          })),
+        }
+      : composition.site,
+  };
+}
+
+function applyBusinessContactDetails(
+  composition: LandingPageComposition,
+  businessAddress: string | undefined,
+): LandingPageComposition {
+  if (!businessAddress) return composition;
+  const applyToSection = (section: LandingPageSection): LandingPageSection => {
+    if (section.type !== "contact") return section;
+    const { mapEmbedUrl: _staleMapEmbedUrl, ...extras } = section.extras ?? {};
+    return {
+      ...section,
+      extras: {
+        ...extras,
+        address: businessAddress,
+      },
+    };
+  };
+  return {
+    ...composition,
+    sections: composition.sections.map(applyToSection),
+    site: composition.site
+      ? {
+          ...composition.site,
+          pages: composition.site.pages?.map((page) => ({
+            ...page,
+            sections: page.sections.map(applyToSection),
+          })),
+        }
+      : composition.site,
+  };
+}
+
 async function buildLocalizedCompositions(input: {
   ctx: TenantContext;
   data: LandingPageJob;
@@ -872,6 +1004,7 @@ async function handleCopy(
         goals?: string[];
         imageStrategy?: string;
         siteMode?: "website" | "campaign";
+        leadCapturePreset?: string;
       }
     | undefined;
 
@@ -953,6 +1086,9 @@ async function handleCopy(
     hintsParts.push("Site type: focused campaign landing page with one primary action.");
   } else if (wizardPayload?.siteMode === "website") {
     hintsParts.push("Site type: small business website with supporting pages.");
+  }
+  if (wizardPayload?.leadCapturePreset) {
+    hintsParts.push(`Lead capture preset: ${wizardPayload.leadCapturePreset.replace(/_/g, " ")}.`);
   }
 
   const prompt = getPrompt(promptId);
@@ -1096,6 +1232,7 @@ async function handleLayout(
         goal?: string;
         brief?: string;
         siteMode?: "website" | "campaign";
+        leadCapturePreset?: string;
       }
     | undefined;
 
@@ -1270,6 +1407,14 @@ async function handleLayout(
     });
   }
 
+  if (wizardPayload) {
+    composition = applyLeadCapturePresetToComposition(
+      composition,
+      resolveLeadCapturePreset(wizardPayload.leadCapturePreset),
+    );
+  }
+  composition = applyBusinessContactDetails(composition, data.businessAddress);
+
   const { localizedCompositions, localizedAiUsageIds } = await buildLocalizedCompositions({
     ctx,
     data,
@@ -1377,8 +1522,17 @@ async function handlePublish(
 ): Promise<void> {
   const page = await assertGenerationRunnable(ctx, data.landingPageId, "publish");
 
-  if (page.status === "published" && page.currentVersionId) {
-    logger.info({ jobId, step: "publish" }, "[landing-page] already published — skipping");
+  if (page.currentVersionId) {
+    await markLandingPageGenerationCompleted(ctx, data.landingPageId, page.currentVersionId);
+    logger.info(
+      {
+        jobId,
+        step: "publish",
+        landingPageId: data.landingPageId,
+        versionId: page.currentVersionId,
+      },
+      "[landing-page] draft already finalized - skipping",
+    );
     return;
   }
 
@@ -1386,7 +1540,7 @@ async function handlePublish(
   const layout = stepData["layout"] as
     | { composition: LandingPageComposition; aiUsageId: string }
     | undefined;
-  if (!layout) throw new Error("Layout step output missing — cannot publish");
+  if (!layout) throw new Error("Layout step output missing - cannot publish");
 
   await assertGenerationRunnable(ctx, data.landingPageId, "publish");
 
@@ -1413,6 +1567,8 @@ async function handlePublish(
       updatedAt: new Date(),
     })
     .where(and(eq(landingPages.tenantId, ctx.tenantId), eq(landingPages.id, data.landingPageId)));
+
+  await markLandingPageGenerationCompleted(ctx, data.landingPageId, versionId);
 
   await emitOutboxEvent(ctx, "content.draft.created", {
     landingPageId: data.landingPageId,

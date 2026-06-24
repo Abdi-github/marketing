@@ -36,6 +36,19 @@ type TemplateOption = {
   locale: string;
 };
 
+type ContactOption = {
+  id: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  phone: string | null;
+};
+
+type SenderSettings = {
+  canSendProduction: boolean;
+  readinessMessage: string;
+};
+
 function trpc() {
   return createTRPCClient<AppRouter>({
     links: [httpBatchLink({ url: "/api/trpc" })],
@@ -48,6 +61,10 @@ function delayLabel(minutes: number): string {
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours}h`;
   return `${Math.floor(hours / 24)}d`;
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 export default function SequenceDetailPage() {
@@ -64,23 +81,44 @@ export default function SequenceDetailPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [enrollContactId, setEnrollContactId] = useState("");
+  const [contactSearch, setContactSearch] = useState("");
+  const [contactOptions, setContactOptions] = useState<ContactOption[]>([]);
+  const [selectedContact, setSelectedContact] = useState<ContactOption | null>(null);
   const [enrolling, setEnrolling] = useState(false);
   const [enrollError, setEnrollError] = useState<string | null>(null);
   const [templates, setTemplates] = useState<TemplateOption[]>([]);
+  const [senderSettings, setSenderSettings] = useState<SenderSettings | null>(null);
+
+  useEffect(() => {
+    const q = contactSearch.trim();
+    if (q.length < 2) {
+      setContactOptions([]);
+      return;
+    }
+    const handle = window.setTimeout(() => {
+      trpc()
+        .sequences.searchContacts.query({ query: q })
+        .then((rows) => setContactOptions(rows as ContactOption[]))
+        .catch(() => setContactOptions([]));
+    }, 250);
+    return () => window.clearTimeout(handle);
+  }, [contactSearch]);
 
   useEffect(() => {
     Promise.all([
       trpc().sequences.getSequence.query({ sequenceId: id }),
       trpc().sequences.listEnrollments.query({ sequenceId: id }),
       trpc().sequences.listTemplates.query(),
+      trpc().sequences.getSenderSettings.query(),
     ])
-      .then(([sequence, enrollResp, templateRows]) => {
+      .then(([sequence, enrollResp, templateRows, settings]) => {
         setSeq(sequence as unknown as Sequence);
         setName((sequence as unknown as Sequence).name);
         setSteps(((sequence as unknown as Sequence).steps ?? []) as SequenceStep[]);
         setEnrollments(enrollResp.rows as unknown as Enrollment[]);
         setEnrollTotal(enrollResp.total);
         setTemplates(templateRows as TemplateOption[]);
+        setSenderSettings(settings as SenderSettings);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -137,15 +175,19 @@ export default function SequenceDetailPage() {
   }
 
   async function handleEnroll() {
-    if (!enrollContactId.trim() || !seq) return;
+    const rawContactId = enrollContactId.trim();
+    const contactId = selectedContact?.id ?? (isUuid(rawContactId) ? rawContactId : "");
+    if (!contactId || !seq) return;
     setEnrolling(true);
     setEnrollError(null);
     try {
       await trpc().sequences.enrollContact.mutate({
         sequenceId: seq.id,
-        contactId: enrollContactId.trim(),
+        contactId,
       });
       setEnrollContactId("");
+      setContactSearch("");
+      setSelectedContact(null);
       const resp = await trpc().sequences.listEnrollments.query({ sequenceId: seq.id });
       setEnrollments(resp.rows as unknown as Enrollment[]);
       setEnrollTotal(resp.total);
@@ -202,6 +244,41 @@ export default function SequenceDetailPage() {
           {seq.status === "active" ? t("statusActive") : t("statusPaused")}
         </span>
       </div>
+
+      <section
+        className={`rounded-xl border p-5 ${
+          senderSettings?.canSendProduction
+            ? "border-emerald-200 bg-emerald-50"
+            : "border-amber-200 bg-amber-50"
+        }`}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p
+              className={`text-sm font-semibold ${
+                senderSettings?.canSendProduction ? "text-emerald-900" : "text-amber-900"
+              }`}
+            >
+              {senderSettings?.canSendProduction ? "Email sender ready" : "Email sender not ready"}
+            </p>
+            <p
+              className={`mt-1 text-xs ${
+                senderSettings?.canSendProduction ? "text-emerald-700" : "text-amber-800"
+              }`}
+            >
+              {senderSettings?.readinessMessage ??
+                "Checking whether a production sender is configured."}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => router.push(`/${locale}/emails/settings`)}
+            className="text-xs font-semibold underline underline-offset-2"
+          >
+            Email settings
+          </button>
+        </div>
+      </section>
 
       {/* Edit section */}
       <section className="rounded-xl border border-gray-200 bg-white p-6">
@@ -291,17 +368,59 @@ export default function SequenceDetailPage() {
       {/* Manual enroll */}
       <section className="rounded-xl border border-gray-200 bg-white p-6">
         <h2 className="mb-3 text-sm font-semibold text-gray-800">{t("enrollTitle")}</h2>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={enrollContactId}
-            onChange={(e) => setEnrollContactId(e.target.value)}
-            placeholder={t("enrollPlaceholder")}
-            className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+        <div className="grid gap-2 md:grid-cols-[1fr_auto]">
+          <div className="relative">
+            <input
+              type="text"
+              value={selectedContact ? selectedContact.email : contactSearch}
+              onChange={(e) => {
+                setSelectedContact(null);
+                setContactSearch(e.target.value);
+                setEnrollContactId(e.target.value);
+              }}
+              placeholder="Search by name, email, or phone"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            {contactOptions.length > 0 && !selectedContact && (
+              <div className="absolute z-10 mt-1 max-h-64 w-full overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+                {contactOptions.map((contact) => {
+                  const name =
+                    [contact.firstName, contact.lastName].filter(Boolean).join(" ") ||
+                    contact.email;
+                  return (
+                    <button
+                      key={contact.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedContact(contact);
+                        setEnrollContactId(contact.id);
+                        setContactOptions([]);
+                      }}
+                      className="block w-full px-3 py-2 text-left text-sm hover:bg-gray-50"
+                    >
+                      <span className="font-medium text-gray-900">{name}</span>
+                      <span className="block text-xs text-gray-500">
+                        {contact.email}
+                        {contact.phone ? ` · ${contact.phone}` : ""}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
           <button
             onClick={handleEnroll}
-            disabled={enrolling || !enrollContactId.trim()}
+            disabled={
+              enrolling ||
+              !senderSettings?.canSendProduction ||
+              !(selectedContact?.id || isUuid(enrollContactId.trim()))
+            }
+            title={
+              !senderSettings?.canSendProduction
+                ? "Configure a production sender before enrolling contacts."
+                : undefined
+            }
             className="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
           >
             {enrolling ? t("enrolling") : t("enroll")}

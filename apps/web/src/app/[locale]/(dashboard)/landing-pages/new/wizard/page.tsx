@@ -83,6 +83,67 @@ const GOALS = [
 ] as const;
 type Goal = (typeof GOALS)[number]["key"];
 
+type LeadCapturePreset =
+  | "reservation"
+  | "quote"
+  | "callback"
+  | "newsletter"
+  | "whatsapp_first"
+  | "sms_fallback";
+
+const LEAD_CAPTURE_OPTIONS: Array<{
+  key: LeadCapturePreset;
+  title: string;
+  badge?: string;
+  description: string;
+  channels: string;
+  bestFor: string;
+}> = [
+  {
+    key: "reservation",
+    title: "Reservation",
+    badge: "Best for restaurants",
+    description: "Collect guest details, phone, and messaging channels for booking requests.",
+    channels: "Email + phone + SMS + WhatsApp",
+    bestFor: "Table bookings, appointments, scheduled visits",
+  },
+  {
+    key: "quote",
+    title: "Quote request",
+    description: "Ask for contact details and enough context to prepare an offer.",
+    channels: "Email + phone",
+    bestFor: "Services, retail orders, project estimates",
+  },
+  {
+    key: "callback",
+    title: "Callback",
+    description: "Prioritize phone capture so the team can call the lead quickly.",
+    channels: "Phone + SMS",
+    bestFor: "Urgent inquiries, sales calls, consultations",
+  },
+  {
+    key: "newsletter",
+    title: "Newsletter",
+    description: "Keep the form light when the goal is audience building.",
+    channels: "Email only",
+    bestFor: "Updates, offers, launch lists",
+  },
+  {
+    key: "whatsapp_first",
+    title: "WhatsApp-first",
+    description: "Make WhatsApp the preferred follow-up path, with phone as backup.",
+    channels: "WhatsApp + phone",
+    bestFor: "Conversational SMEs and mobile-first customers",
+  },
+  {
+    key: "sms_fallback",
+    title: "SMS fallback",
+    description: "Capture enough details to follow up by SMS when email is missed.",
+    channels: "Phone + SMS + email",
+    bestFor: "Reminders, quick confirmations, time-sensitive leads",
+  },
+];
+
 // Palettes mirrored from landing-design-system (key fields only, for chip display).
 const PALETTES = [
   { key: "warm-roasted", name: "Warm Roasted", primary: "#8B4513", swiss: false, vibe: "warm" },
@@ -162,6 +223,7 @@ type WizardState = {
   customVertical: string;
   // Multiple goals allowed; the first is treated as primary.
   goals: Goal[];
+  leadCapturePreset: LeadCapturePreset | null;
   siteMode: SiteMode;
   templateKey: string | null;
   // True when the user explicitly chose "no template — design from scratch".
@@ -184,6 +246,7 @@ const INITIAL_STATE: WizardState = {
   vertical: null,
   customVertical: "",
   goals: [],
+  leadCapturePreset: null,
   siteMode: "website",
   templateKey: null,
   noTemplate: false,
@@ -200,10 +263,24 @@ function effectiveVertical(s: WizardState): string | null {
   return s.vertical;
 }
 
+function suggestedLeadCapturePreset(
+  goals: Goal[],
+  vertical: WizardState["vertical"],
+): LeadCapturePreset {
+  const primary = goals[0];
+  if (primary === "appointment_booking") return "reservation";
+  if (vertical === "restaurant" || vertical === "cafe") return "reservation";
+  if (primary === "sales_promo") return "quote";
+  if (primary === "event_signup") return "reservation";
+  if (primary === "info_brochure") return "newsletter";
+  return "quote";
+}
+
 const STEP_TITLES = [
   "Language",
   "Industry",
   "Goal",
+  "Lead capture",
   "Site type",
   "Template",
   "Palette",
@@ -248,7 +325,7 @@ export default function LandingPageWizard() {
 
   // ─── Load templates when entering the template step ─────────────────────────
   useEffect(() => {
-    if (state.step !== 4) return;
+    if (state.step !== 5) return;
     // Custom industries have no curated templates — go straight to the from-scratch option.
     if (state.vertical === "other" || state.vertical === null) {
       setTemplates([]);
@@ -345,20 +422,22 @@ export default function LandingPageWizard() {
       case 2:
         return (state.goals?.length ?? 0) > 0;
       case 3:
-        return true;
+        return state.leadCapturePreset !== null;
       case 4:
-        return state.templateKey !== null || state.noTemplate;
+        return true;
       case 5:
-        return state.paletteKey !== null;
+        return state.templateKey !== null || state.noTemplate;
       case 6:
-        return state.fontPairKey !== null;
+        return state.paletteKey !== null;
       case 7:
-        return true;
+        return state.fontPairKey !== null;
       case 8:
-        return state.brief.trim().length >= 10;
-      case 9:
         return true;
+      case 9:
+        return state.brief.trim().length >= 10;
       case 10:
+        return true;
+      case 11:
         return true;
       default:
         return false;
@@ -378,6 +457,7 @@ export default function LandingPageWizard() {
       !state.locale ||
       !vertical ||
       goals.length === 0 ||
+      !state.leadCapturePreset ||
       !state.paletteKey ||
       !state.fontPairKey
     ) {
@@ -399,6 +479,7 @@ export default function LandingPageWizard() {
         locales: state.locales,
         vertical,
         goals,
+        leadCapturePreset: state.leadCapturePreset,
         siteMode: state.siteMode,
         templateKey: state.noTemplate ? undefined : (state.templateKey ?? undefined),
         paletteKey: state.paletteKey,
@@ -508,8 +589,9 @@ export default function LandingPageWizard() {
         {state.step === 0 && <StepLocale state={state} setState={setState} />}
         {state.step === 1 && <StepVertical state={state} setState={setState} />}
         {state.step === 2 && <StepGoal state={state} setState={setState} />}
-        {state.step === 3 && <StepSiteMode state={state} setState={setState} />}
-        {state.step === 4 && (
+        {state.step === 3 && <StepLeadCapture state={state} setState={setState} />}
+        {state.step === 4 && <StepSiteMode state={state} setState={setState} />}
+        {state.step === 5 && (
           <StepTemplate
             state={state}
             setState={setState}
@@ -517,12 +599,12 @@ export default function LandingPageWizard() {
             loading={templatesLoading}
           />
         )}
-        {state.step === 5 && <StepPalette state={state} setState={setState} />}
-        {state.step === 6 && <StepFont state={state} setState={setState} />}
-        {state.step === 7 && <StepVibe state={state} setState={setState} />}
-        {state.step === 8 && <StepBrief state={state} setState={setState} />}
-        {state.step === 9 && <StepImageStrategy state={state} setState={setState} />}
-        {state.step === 10 && <StepReview state={state} />}
+        {state.step === 6 && <StepPalette state={state} setState={setState} />}
+        {state.step === 7 && <StepFont state={state} setState={setState} />}
+        {state.step === 8 && <StepVibe state={state} setState={setState} />}
+        {state.step === 9 && <StepBrief state={state} setState={setState} />}
+        {state.step === 10 && <StepImageStrategy state={state} setState={setState} />}
+        {state.step === 11 && <StepReview state={state} />}
       </main>
 
       {/* ─── Footer navigation ─── */}
@@ -708,7 +790,15 @@ function StepGoal({ state, setState }: StepProps) {
     setState((s) => {
       const has = s.goals.includes(key);
       const goals = has ? s.goals.filter((g) => g !== key) : [...s.goals, key];
-      return { ...s, goals, templateKey: null, noTemplate: false };
+      return {
+        ...s,
+        goals,
+        leadCapturePreset:
+          s.leadCapturePreset ??
+          (goals.length > 0 ? suggestedLeadCapturePreset(goals, s.vertical) : null),
+        templateKey: null,
+        noTemplate: false,
+      };
     });
   return (
     <div className="mx-auto max-w-3xl">
@@ -741,6 +831,67 @@ function StepGoal({ state, setState }: StepProps) {
               </div>
               <span
                 className={`mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md border-2 ${selected ? "border-purple-600 bg-purple-600" : "border-gray-300"}`}
+              >
+                {selected && (
+                  <svg className="h-4 w-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <path
+                      fillRule="evenodd"
+                      d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                )}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function StepLeadCapture({ state, setState }: StepProps) {
+  return (
+    <div className="mx-auto max-w-4xl">
+      <h2 className="mb-2 text-3xl font-bold text-gray-900">How should this page capture leads?</h2>
+      <p className="mb-8 text-gray-600">
+        This controls the generated form fields and the first follow-up path. You can still adjust
+        channels later in the editor.
+      </p>
+      <div className="grid gap-4 sm:grid-cols-2">
+        {LEAD_CAPTURE_OPTIONS.map((option) => {
+          const selected = state.leadCapturePreset === option.key;
+          return (
+            <button
+              key={option.key}
+              onClick={() => setState((s) => ({ ...s, leadCapturePreset: option.key }))}
+              className={`flex min-h-[210px] flex-col rounded-xl border-2 bg-white p-5 text-left transition-all ${selected ? "border-purple-600 bg-purple-50 shadow-lg" : "border-gray-200 hover:border-purple-300 hover:shadow-md"}`}
+            >
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div
+                  className={`flex h-11 w-11 items-center justify-center rounded-xl text-sm font-black ${selected ? "bg-purple-600 text-white" : "bg-gray-100 text-gray-700"}`}
+                >
+                  {option.title
+                    .split(" ")
+                    .map((word) => word[0])
+                    .join("")
+                    .slice(0, 2)
+                    .toUpperCase()}
+                </div>
+                {option.badge && (
+                  <span className="rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-800">
+                    {option.badge}
+                  </span>
+                )}
+              </div>
+              <p className="text-lg font-bold text-gray-900">{option.title}</p>
+              <p className="mt-2 text-sm text-gray-600">{option.description}</p>
+              <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-purple-700">
+                {option.channels}
+              </p>
+              <p className="mt-2 text-xs text-gray-500">{option.bestFor}</p>
+              <span
+                className={`mt-auto flex h-6 w-6 items-center justify-center self-end rounded-full border-2 ${selected ? "border-purple-600 bg-purple-600" : "border-gray-300"}`}
               >
                 {selected && (
                   <svg className="h-4 w-4 text-white" fill="currentColor" viewBox="0 0 20 20">
@@ -1199,6 +1350,7 @@ function StepReview({ state }: { state: WizardState }) {
       return g ? `${g.icon} ${g.label}` : key;
     })
     .join(",  ");
+  const leadCapture = LEAD_CAPTURE_OPTIONS.find((option) => option.key === state.leadCapturePreset);
   const languageLabel =
     state.locales.length > 1
       ? `${state.locales.length} languages, default ${LOCALES.find((l) => l.key === state.locale)?.label ?? state.locale}`
@@ -1215,6 +1367,10 @@ function StepReview({ state }: { state: WizardState }) {
           value={languageLabel}
         />
         <ReviewRow label="Industry" value={industryLabel} />
+        <ReviewRow
+          label="Lead capture"
+          value={leadCapture ? `${leadCapture.title} - ${leadCapture.channels}` : "—"}
+        />
         <ReviewRow
           label="Site type"
           value={state.siteMode === "website" ? "Small business website" : "Campaign landing page"}

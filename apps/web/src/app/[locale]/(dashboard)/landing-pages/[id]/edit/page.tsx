@@ -140,6 +140,28 @@ type CarouselSettings = {
   effect?: "fade" | "slide";
 };
 
+type LeadCaptureChannel = "email" | "phone" | "sms" | "whatsapp";
+
+const LEAD_CAPTURE_CHANNEL_OPTIONS: Array<{
+  value: LeadCaptureChannel;
+  label: string;
+  description: string;
+}> = [
+  { value: "email", label: "Email", description: "Ask for an email address." },
+  { value: "phone", label: "Phone call", description: "Ask for a phone number." },
+  { value: "sms", label: "SMS", description: "Enable SMS follow-up." },
+  { value: "whatsapp", label: "WhatsApp", description: "Enable WhatsApp follow-up." },
+];
+
+function normalizeEditorCaptureChannels(value: unknown): LeadCaptureChannel[] {
+  const channels = Array.isArray(value) ? value : [];
+  const allowed = new Set(LEAD_CAPTURE_CHANNEL_OPTIONS.map((option) => option.value));
+  const normalized = channels.filter((channel): channel is LeadCaptureChannel =>
+    allowed.has(channel as LeadCaptureChannel),
+  );
+  return normalized.length > 0 ? Array.from(new Set(normalized)) : ["email", "phone"];
+}
+
 type DesignPlanView = {
   archetype?: string;
   sectionTopology?: string;
@@ -707,7 +729,8 @@ function SectionBlock({
   onSwapVariant,
   onSwapImage,
   onUpdateCarousel,
-  onUpdateContactLocation,
+  onUpdateContactDetails,
+  onUpdateLeadCaptureChannels,
   onDelete,
   onMoveUp,
   onMoveDown,
@@ -738,7 +761,14 @@ function SectionBlock({
     currentUrl: string | null,
   ) => void;
   onUpdateCarousel: (sectionIndex: number, settings: CarouselSettings) => void;
-  onUpdateContactLocation: (sectionIndex: number, address: string) => void;
+  onUpdateContactDetails: (
+    sectionIndex: number,
+    details: { address: string; phone: string; email: string; openingHours: string },
+  ) => void;
+  onUpdateLeadCaptureChannels: (
+    sectionIndex: number,
+    captureChannels: LeadCaptureChannel[],
+  ) => void;
   onDelete: (sectionIndex: number) => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
@@ -759,8 +789,19 @@ function SectionBlock({
   const [editingBody, setEditingBody] = useState(false);
   const [heading, setHeading] = useState(section.heading);
   const [body, setBody] = useState(section.body ?? "");
-  const [address, setAddress] = useState(
-    ((section.extras as Record<string, unknown> | undefined)?.address as string | undefined) ?? "",
+  const [contactDetails, setContactDetails] = useState(() => {
+    const extras = (section.extras as Record<string, unknown> | undefined) ?? {};
+    return {
+      address: (extras["address"] as string | undefined) ?? "",
+      phone: (extras["phone"] as string | undefined) ?? "",
+      email: (extras["email"] as string | undefined) ?? "",
+      openingHours: (extras["openingHours"] as string | undefined) ?? "",
+    };
+  });
+  const [leadCaptureChannels, setLeadCaptureChannels] = useState<LeadCaptureChannel[]>(() =>
+    normalizeEditorCaptureChannels(
+      (section.extras as Record<string, unknown> | undefined)?.["captureChannels"],
+    ),
   );
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -774,10 +815,14 @@ function SectionBlock({
     if (editingBody) bodyRef.current?.focus();
   }, [editingBody]);
   useEffect(() => {
-    setAddress(
-      ((section.extras as Record<string, unknown> | undefined)?.address as string | undefined) ??
-        "",
-    );
+    const extras = (section.extras as Record<string, unknown> | undefined) ?? {};
+    setContactDetails({
+      address: (extras["address"] as string | undefined) ?? "",
+      phone: (extras["phone"] as string | undefined) ?? "",
+      email: (extras["email"] as string | undefined) ?? "",
+      openingHours: (extras["openingHours"] as string | undefined) ?? "",
+    });
+    setLeadCaptureChannels(normalizeEditorCaptureChannels(extras["captureChannels"]));
   }, [section.extras]);
 
   async function saveHeading() {
@@ -816,21 +861,51 @@ function SectionBlock({
     }
   }
 
-  async function saveContactLocation() {
-    const trimmed = address.trim();
+  async function saveContactDetails() {
+    const extras = (section.extras as Record<string, unknown> | undefined) ?? {};
+    const trimmed = {
+      address: contactDetails.address.trim(),
+      phone: contactDetails.phone.trim(),
+      email: contactDetails.email.trim(),
+      openingHours: contactDetails.openingHours.trim(),
+    };
     if (
-      !trimmed ||
-      trimmed === ((section.extras as Record<string, unknown> | undefined)?.address ?? "")
+      trimmed.address === ((extras["address"] as string | undefined) ?? "") &&
+      trimmed.phone === ((extras["phone"] as string | undefined) ?? "") &&
+      trimmed.email === ((extras["email"] as string | undefined) ?? "") &&
+      trimmed.openingHours === ((extras["openingHours"] as string | undefined) ?? "")
     ) {
       return;
     }
     setSaving(true);
     setSaveError(null);
     try {
-      await onUpdateContactLocation(index, trimmed);
+      await onUpdateContactDetails(index, trimmed);
       await onSaved();
     } catch {
-      setSaveError("Could not save location.");
+      setSaveError("Could not save contact details.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveLeadCaptureChannels() {
+    const current = normalizeEditorCaptureChannels(
+      (section.extras as Record<string, unknown> | undefined)?.["captureChannels"],
+    );
+    if (
+      current.length === leadCaptureChannels.length &&
+      current.every((channel) => leadCaptureChannels.includes(channel))
+    ) {
+      return;
+    }
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await onUpdateLeadCaptureChannels(index, leadCaptureChannels);
+      await onSaved();
+    } catch {
+      setSaveError("Could not save lead capture channels.");
     } finally {
       setSaving(false);
     }
@@ -1069,33 +1144,106 @@ function SectionBlock({
           <div className="space-y-2 rounded-lg border border-emerald-100 bg-emerald-50/70 p-3">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
-                Map location
+                Contact details
               </p>
               <p className="text-[11px] text-emerald-700/75">
-                Used for the embedded map. Default: Neuchatel, Switzerland.
+                Used by the contact cards, click-to-call/email links, hours, and embedded map.
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="grid gap-2">
               <input
-                value={address}
-                onChange={(event) => setAddress(event.target.value)}
+                value={contactDetails.address}
+                onChange={(event) =>
+                  setContactDetails((prev) => ({ ...prev, address: event.target.value }))
+                }
                 onKeyDown={(event) => {
                   if (event.key === "Enter") {
                     event.preventDefault();
-                    void saveContactLocation();
+                    void saveContactDetails();
                   }
                 }}
                 placeholder="Business address"
-                className="min-w-0 flex-1 rounded-md border border-emerald-200 bg-white px-3 py-2 text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                className="rounded-md border border-emerald-200 bg-white px-3 py-2 text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+              />
+              <input
+                value={contactDetails.phone}
+                onChange={(event) =>
+                  setContactDetails((prev) => ({ ...prev, phone: event.target.value }))
+                }
+                placeholder="Phone number"
+                className="rounded-md border border-emerald-200 bg-white px-3 py-2 text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+              />
+              <input
+                value={contactDetails.email}
+                onChange={(event) =>
+                  setContactDetails((prev) => ({ ...prev, email: event.target.value }))
+                }
+                placeholder="Email address"
+                className="rounded-md border border-emerald-200 bg-white px-3 py-2 text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+              />
+              <input
+                value={contactDetails.openingHours}
+                onChange={(event) =>
+                  setContactDetails((prev) => ({ ...prev, openingHours: event.target.value }))
+                }
+                placeholder="Opening hours"
+                className="rounded-md border border-emerald-200 bg-white px-3 py-2 text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-200"
               />
               <button
                 type="button"
-                onClick={() => void saveContactLocation()}
+                onClick={() => void saveContactDetails()}
                 className="rounded-md bg-emerald-700 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-800"
               >
                 Save
               </button>
             </div>
+          </div>
+        )}
+
+        {section.type === "lead_form" && (
+          <div className="space-y-3 rounded-lg border border-sky-100 bg-sky-50/70 p-3">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-sky-700">
+                Lead capture channels
+              </p>
+              <p className="text-[11px] text-sky-700/75">
+                Choose what the public form asks for. SMS and WhatsApp require a phone number.
+              </p>
+            </div>
+            <div className="grid gap-2">
+              {LEAD_CAPTURE_CHANNEL_OPTIONS.map((option) => {
+                const checked = leadCaptureChannels.includes(option.value);
+                return (
+                  <label
+                    key={option.value}
+                    className="flex cursor-pointer gap-2 rounded-md border border-sky-100 bg-white px-3 py-2 text-xs text-gray-700"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(event) => {
+                        const next = event.target.checked
+                          ? [...leadCaptureChannels, option.value]
+                          : leadCaptureChannels.filter((channel) => channel !== option.value);
+                        setLeadCaptureChannels(next.length > 0 ? next : [option.value]);
+                      }}
+                      className="mt-0.5"
+                    />
+                    <span>
+                      <span className="block font-semibold text-gray-900">{option.label}</span>
+                      <span className="block text-gray-500">{option.description}</span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            <button
+              type="button"
+              onClick={() => void saveLeadCaptureChannels()}
+              className="rounded-md bg-sky-700 px-3 py-2 text-xs font-semibold text-white hover:bg-sky-800"
+            >
+              Apply channels
+            </button>
           </div>
         )}
 
@@ -1509,9 +1657,25 @@ export default function EditLandingPage() {
     [pageId, loadPage],
   );
 
-  const updateContactLocation = useCallback(
-    async (sectionIndex: number, address: string) => {
-      await trpc.landingPages.updateContactLocation.mutate({ pageId, sectionIndex, address });
+  const updateContactDetails = useCallback(
+    async (
+      sectionIndex: number,
+      details: { address: string; phone: string; email: string; openingHours: string },
+    ) => {
+      await trpc.landingPages.updateContactDetails.mutate({ pageId, sectionIndex, ...details });
+      lastEditedSectionIndexRef.current = sectionIndex;
+      await loadPage({ focusSectionIndex: sectionIndex });
+    },
+    [pageId, loadPage],
+  );
+
+  const updateLeadCaptureChannels = useCallback(
+    async (sectionIndex: number, captureChannels: LeadCaptureChannel[]) => {
+      await trpc.landingPages.updateLeadCaptureChannels.mutate({
+        pageId,
+        sectionIndex,
+        captureChannels,
+      });
       lastEditedSectionIndexRef.current = sectionIndex;
       await loadPage({ focusSectionIndex: sectionIndex });
     },
@@ -1842,7 +2006,8 @@ export default function EditLandingPage() {
                 onSwapVariant={handleSwapVariant}
                 onSwapImage={handleSwapImage}
                 onUpdateCarousel={updateCarousel}
-                onUpdateContactLocation={updateContactLocation}
+                onUpdateContactDetails={updateContactDetails}
+                onUpdateLeadCaptureChannels={updateLeadCaptureChannels}
                 onDelete={deleteSection}
                 onMoveUp={() => moveSection(i, i - 1)}
                 onMoveDown={() => moveSection(i, i + 1)}

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { leadCaptureChannelSchema, leadKindSchema } from "./lead-capture-presets";
 
 export const imageItemSchema = z.object({
   url: z.string().max(500),
@@ -123,7 +124,12 @@ export const aboutExtrasSchema = z
   })
   .optional();
 
-export const leadFormExtrasSchema = z.object({}).optional();
+export const leadFormExtrasSchema = z
+  .object({
+    captureChannels: z.array(leadCaptureChannelSchema).min(1).max(4).optional(),
+    leadKind: leadKindSchema.optional(),
+  })
+  .optional();
 
 export const whatsappCtaExtrasSchema = z
   .object({
@@ -333,6 +339,7 @@ export const landingPageJobSchema = z.object({
   businessName: z.string().min(1).max(200),
   vertical: z.string().min(2).max(100),
   city: z.string().max(100).optional(),
+  businessAddress: z.string().max(300).optional(),
   locale: z.string().default("de-CH"),
   languagePreferences: landingPageLanguagePreferencesSchema.optional(),
   /** Free-text user brief. Used as seed for the brief step. */

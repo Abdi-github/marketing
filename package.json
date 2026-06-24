@@ -5,6 +5,7 @@
   "scripts": {
     "build": "turbo build",
     "dev": "turbo dev --parallel",
+    "redev": "node scripts/redev.mjs",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
     "test": "vitest run --workspace vitest.workspace.ts",

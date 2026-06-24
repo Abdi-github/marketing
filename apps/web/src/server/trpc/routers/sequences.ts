@@ -3,28 +3,27 @@
 // Sequences: CRUD + manual enroll/unenroll + AI suggest (Haiku).
 // Actual sending is handled by the email-sequence-tick BullMQ worker.
 // ADR-0023: platform-level Resend send; sandbox mode when RESEND_API_KEY unset.
-import {
-  createAnthropicHaiku,
-  createAnthropicSonnet,
-  EchoProvider,
-  getPrompt,
-} from "@marketing/ai-router";
+import type { EmailAutomationIntent, EmailAutomationKind } from "@marketing/ai-router";
 import { db } from "@marketing/db";
 import {
+  businessProfiles,
   contacts,
+  emailAutomationJobs,
   emailSendingDomains,
   emailSequenceEnrollments,
   emailSequences,
   emailSends,
+  emailSuppressions,
   emailTemplates,
+  tenantUsers,
+  users,
 } from "@marketing/db";
 import { TRPCError } from "@trpc/server";
 import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { tenantProcedure, router } from "../trpc";
-import type { CallOpts, ToolDefinition } from "@marketing/ai-router";
 import { env } from "@marketing/shared";
-import { businessProfiles } from "@marketing/db";
+import { enqueueEmailAutomationJob } from "../../queues/email-automation";
 
 // ─── Zod schemas ─────────────────────────────────────────────────────────────
 
@@ -32,6 +31,19 @@ const sequenceStepSchema = z.object({
   delay_minutes: z.number().int().min(0),
   template_id: z.string().uuid(),
 });
+
+const sequenceTriggerFilterSchema = z
+  .object({
+    lifecycle_stage: z.string().optional(),
+    min_delta: z.number().optional(),
+    min_score: z.number().optional(),
+    leadKind: z.enum(["booking", "callback", "quote", "generic"]).optional(),
+    sourceChannel: z.string().optional(),
+    formId: z.string().uuid().optional(),
+    landingPageId: z.string().uuid().optional(),
+    requireMarketingConsent: z.boolean().optional(),
+  })
+  .default({});
 
 const triggerEventEnum = z.enum([
   "lead.captured",
@@ -54,6 +66,12 @@ function normalizeDomain(input: string): string {
 function normalizeLocalPart(input: string | undefined): string {
   const local = (input ?? "hello").trim().toLowerCase();
   return /^[a-z0-9._%+-]{1,64}$/.test(local) ? local : "hello";
+}
+
+function isUsablePlatformSender(address: string): boolean {
+  const normalized = address.trim().toLowerCase();
+  const email = normalized.match(/<([^>]+)>/)?.[1] ?? normalized;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && !email.endsWith(".localhost");
 }
 
 function buildEmailDnsInstructions(domain: string, verifyToken: string) {
@@ -117,6 +135,63 @@ async function resolveSenderAddress(tenantId: string): Promise<string> {
   return `${domain.fromName} <${domain.fromLocalPart}@${domain.domain}>`;
 }
 
+async function resolveReplyToAddress(tenantId: string): Promise<string | undefined> {
+  const [owner] = await db
+    .select({ email: users.email })
+    .from(tenantUsers)
+    .innerJoin(users, eq(users.id, tenantUsers.userId))
+    .where(and(eq(tenantUsers.tenantId, tenantId), eq(tenantUsers.role, "owner")));
+
+  return owner?.email;
+}
+
+async function resolveSenderSettings(tenantId: string) {
+  const [domain] = await db
+    .select({
+      domain: emailSendingDomains.domain,
+      fromName: emailSendingDomains.fromName,
+      fromLocalPart: emailSendingDomains.fromLocalPart,
+    })
+    .from(emailSendingDomains)
+    .where(
+      and(
+        eq(emailSendingDomains.tenantId, tenantId),
+        eq(emailSendingDomains.status, "verified"),
+        eq(emailSendingDomains.isPrimary, true),
+      ),
+    );
+
+  const replyTo = await resolveReplyToAddress(tenantId);
+  const tenantSender = domain
+    ? `${domain.fromName} <${domain.fromLocalPart}@${domain.domain}>`
+    : null;
+  const platformSenderConfigured = isUsablePlatformSender(env.EMAIL_FROM_ADDRESS);
+
+  return {
+    mode: tenantSender ? "tenant_domain" : "platform_sender",
+    platformSender: env.EMAIL_FROM_ADDRESS,
+    platformSenderConfigured,
+    sender: tenantSender ?? env.EMAIL_FROM_ADDRESS,
+    replyTo: replyTo ?? null,
+    canSendProduction: Boolean(tenantSender || platformSenderConfigured),
+    readinessMessage: tenantSender
+      ? "Business sender verified."
+      : platformSenderConfigured
+        ? "Platform sender configured. Verify it in Resend before production delivery."
+        : "Configure a real platform sender or verify a business sending domain before activating automations.",
+  };
+}
+
+async function assertProductionSenderReady(tenantId: string): Promise<void> {
+  const sender = await resolveSenderSettings(tenantId);
+  if (!sender.canSendProduction) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: sender.readinessMessage,
+    });
+  }
+}
+
 type SequenceStepInput = z.infer<typeof sequenceStepSchema>;
 
 async function assertTemplatesBelongToTenant(
@@ -139,56 +214,182 @@ async function assertTemplatesBelongToTenant(
   }
 }
 
-// ─── AI tool definitions ──────────────────────────────────────────────────────
-
-const CREATE_EMAIL_TEMPLATE_TOOL: ToolDefinition = {
-  name: "create_email_template",
-  description: "Return a drafted email template with subject, HTML body, and plain-text body",
-  inputSchema: {
-    type: "object",
-    required: ["subject", "body_html", "body_text"],
-    properties: {
-      subject: { type: "string", maxLength: 120 },
-      body_html: { type: "string" },
-      body_text: { type: "string" },
-    },
-  },
+type AutomationStepDraft = {
+  delay_minutes: number;
+  template_name: string;
+  subject: string;
+  body_html: string;
+  body_text: string;
 };
 
-const SUGGEST_SEQUENCE_TOOL: ToolDefinition = {
-  name: "suggest_email_sequence",
-  description: "Propose a 3-step email sequence",
-  inputSchema: {
-    type: "object",
-    required: ["name", "steps"],
-    properties: {
-      name: { type: "string", maxLength: 80 },
-      steps: {
-        type: "array",
-        minItems: 3,
-        maxItems: 3,
-        items: {
-          type: "object",
-          required: ["delay_minutes", "suggested_subject"],
-          properties: {
-            delay_minutes: { type: "integer", minimum: 0 },
-            suggested_subject: { type: "string", maxLength: 120 },
-          },
-        },
+type AutomationDraftResult = {
+  name: string;
+  category?: string;
+  trigger_filter?: Record<string, unknown>;
+  steps: AutomationStepDraft[];
+};
+
+function htmlShell(body: string): string {
+  const escaped = body.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return `<!doctype html><html><body style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#111;line-height:1.5">${escaped
+    .split(/\n\n+/)
+    .map((p) => `<p>${p.replace(/\n/g, "<br>")}</p>`)
+    .join("\n")}</body></html>`;
+}
+
+function restaurantReservationPreset(businessName: string): AutomationDraftResult {
+  return {
+    name: "Restaurant reservation follow-up",
+    category: "restaurant_reservation",
+    trigger_filter: { leadKind: "booking", requireMarketingConsent: false },
+    steps: [
+      {
+        delay_minutes: 0,
+        template_name: "Reservation request received",
+        subject: `Your request to {{business_name}}`,
+        body_text: `Hello {{first_name}},
+
+Thanks for your reservation request for ${businessName}. We received your details and our team will confirm the booking shortly.
+
+If anything changes, simply reply to this email.
+
+{{business_name}}`,
+        body_html: htmlShell(`Hello {{first_name}},
+
+Thanks for your reservation request for ${businessName}. We received your details and our team will confirm the booking shortly.
+
+If anything changes, simply reply to this email.
+
+{{business_name}}`),
       },
-    },
-  },
-};
+      {
+        delay_minutes: 1440,
+        template_name: "Reservation follow-up",
+        subject: `Following up from {{business_name}}`,
+        body_text: `Hello {{first_name}},
 
-function buildSonnet() {
-  if (env.AI_PROVIDER_FALLBACK === "echo" || !env.ANTHROPIC_API_KEY) return new EchoProvider();
-  return createAnthropicSonnet();
+We wanted to follow up on your reservation request. If you still need help or want to change the details, reply and our team will take care of it.
+
+{{business_name}}`,
+        body_html: htmlShell(`Hello {{first_name}},
+
+We wanted to follow up on your reservation request. If you still need help or want to change the details, reply and our team will take care of it.
+
+{{business_name}}`),
+      },
+      {
+        delay_minutes: 4320,
+        template_name: "Visit reminder",
+        subject: `Before your visit to {{business_name}}`,
+        body_text: `Hello {{first_name}},
+
+We look forward to welcoming you. If you have allergies, special requests, or need to adjust your reservation, please let us know.
+
+{{business_name}}`,
+        body_html: htmlShell(`Hello {{first_name}},
+
+We look forward to welcoming you. If you have allergies, special requests, or need to adjust your reservation, please let us know.
+
+{{business_name}}`),
+      },
+      {
+        delay_minutes: 10080,
+        template_name: "Thank you and review request",
+        subject: `Thank you from {{business_name}}`,
+        body_text: `Hello {{first_name}},
+
+Thank you for choosing us. We hope you enjoyed your experience. Your feedback helps our small team improve and helps new guests discover us.
+
+{{business_name}}`,
+        body_html: htmlShell(`Hello {{first_name}},
+
+Thank you for choosing us. We hope you enjoyed your experience. Your feedback helps our small team improve and helps new guests discover us.
+
+{{business_name}}`),
+      },
+    ],
+  };
 }
 
-function buildHaiku() {
-  if (env.AI_PROVIDER_FALLBACK === "echo" || !env.ANTHROPIC_API_KEY) return new EchoProvider();
-  return createAnthropicHaiku();
+function parseAutomationDraft(value: unknown): AutomationDraftResult {
+  const schema = z.object({
+    name: z.string().min(1).max(120),
+    category: z.string().max(80).optional(),
+    trigger_filter: z.record(z.string(), z.unknown()).optional(),
+    steps: z
+      .array(
+        z.object({
+          delay_minutes: z.number().int().min(0),
+          template_name: z.string().min(1).max(120),
+          subject: z.string().min(1).max(200),
+          body_html: z.string().min(1).max(50_000),
+          body_text: z.string().min(1).max(20_000),
+        }),
+      )
+      .min(1)
+      .max(10),
+  });
+  return schema.parse(value);
 }
+
+async function createAutomationFromDraft(input: {
+  tenantId: string;
+  draft: AutomationDraftResult;
+  presetKey: string;
+  locale: string;
+}) {
+  const { tenantId, draft, presetKey, locale } = input;
+  const category = draft.category ?? "custom";
+  const sender = await resolveSenderSettings(tenantId);
+
+  const [existing] = await db
+    .select({ id: emailSequences.id })
+    .from(emailSequences)
+    .where(and(eq(emailSequences.tenantId, tenantId), eq(emailSequences.presetKey, presetKey)));
+  if (existing) return { sequenceId: existing.id, reused: true };
+
+  return await db.transaction(async (tx) => {
+    const sequenceSteps: SequenceStepInput[] = [];
+    for (const step of draft.steps) {
+      const [template] = await tx
+        .insert(emailTemplates)
+        .values({
+          tenantId,
+          name: step.template_name,
+          subject: step.subject,
+          bodyHtml: step.body_html,
+          bodyText: step.body_text,
+          locale,
+          presetKey,
+          category,
+          aiDraftedAt: presetKey.startsWith("ai:") ? new Date() : null,
+        })
+        .returning({ id: emailTemplates.id });
+      sequenceSteps.push({
+        delay_minutes: step.delay_minutes,
+        template_id: template!.id,
+      });
+    }
+
+    const [sequence] = await tx
+      .insert(emailSequences)
+      .values({
+        tenantId,
+        name: draft.name,
+        triggerEvent: "lead.captured",
+        triggerFilter: draft.trigger_filter ?? {},
+        steps: sequenceSteps,
+        status: sender.canSendProduction ? "active" : "paused",
+        presetKey,
+        category,
+      })
+      .returning({ id: emailSequences.id });
+
+    return { sequenceId: sequence!.id, reused: false };
+  });
+}
+
+// ─── AI tool definitions ──────────────────────────────────────────────────────
 
 // ─── Router ───────────────────────────────────────────────────────────────────
 
@@ -207,6 +408,205 @@ export const sequencesRouter = router({
       dns: buildEmailDnsInstructions(row.domain, row.verifyToken),
     }));
   }),
+
+  getSenderSettings: tenantProcedure.query(async ({ ctx }) => {
+    const { tenantId } = ctx.tenantCtx;
+    return resolveSenderSettings(tenantId);
+  }),
+
+  getAutomationOverview: tenantProcedure.query(async ({ ctx }) => {
+    const { tenantId } = ctx.tenantCtx;
+    const [templateCount, sequenceCount, sendCount, failedCount, suppressionCount, domainCount] =
+      await Promise.all([
+        db
+          .select({ total: count() })
+          .from(emailTemplates)
+          .where(eq(emailTemplates.tenantId, tenantId)),
+        db
+          .select({ total: count() })
+          .from(emailSequences)
+          .where(eq(emailSequences.tenantId, tenantId)),
+        db.select({ total: count() }).from(emailSends).where(eq(emailSends.tenantId, tenantId)),
+        db
+          .select({ total: count() })
+          .from(emailSends)
+          .where(and(eq(emailSends.tenantId, tenantId), eq(emailSends.status, "failed"))),
+        db
+          .select({ total: count() })
+          .from(emailSuppressions)
+          .where(eq(emailSuppressions.tenantId, tenantId)),
+        db
+          .select({ total: count() })
+          .from(emailSendingDomains)
+          .where(
+            and(
+              eq(emailSendingDomains.tenantId, tenantId),
+              eq(emailSendingDomains.status, "verified"),
+            ),
+          ),
+      ]);
+
+    const recentSends = await db
+      .select({
+        id: emailSends.id,
+        status: emailSends.status,
+        sendKind: emailSends.sendKind,
+        sentAt: emailSends.sentAt,
+        createdAt: emailSends.createdAt,
+        subject: emailTemplates.subject,
+        templateName: emailTemplates.name,
+        contactEmail: contacts.email,
+      })
+      .from(emailSends)
+      .innerJoin(
+        emailTemplates,
+        and(eq(emailTemplates.id, emailSends.templateId), eq(emailTemplates.tenantId, tenantId)),
+      )
+      .innerJoin(
+        contacts,
+        and(eq(contacts.id, emailSends.contactId), eq(contacts.tenantId, tenantId)),
+      )
+      .where(eq(emailSends.tenantId, tenantId))
+      .orderBy(desc(emailSends.createdAt))
+      .limit(12);
+
+    return {
+      templateCount: templateCount[0]?.total ?? 0,
+      sequenceCount: sequenceCount[0]?.total ?? 0,
+      sendCount: sendCount[0]?.total ?? 0,
+      failedCount: failedCount[0]?.total ?? 0,
+      suppressionCount: suppressionCount[0]?.total ?? 0,
+      verifiedSendingDomains: domainCount[0]?.total ?? 0,
+      recentSends,
+    };
+  }),
+
+  createRestaurantPreset: tenantProcedure
+    .input(z.object({ locale: z.string().default("en") }))
+    .mutation(async ({ ctx, input }) => {
+      const { tenantId } = ctx.tenantCtx;
+      const [profile] = await db
+        .select({ businessName: businessProfiles.businessName })
+        .from(businessProfiles)
+        .where(eq(businessProfiles.tenantId, tenantId));
+
+      return createAutomationFromDraft({
+        tenantId,
+        draft: restaurantReservationPreset(profile?.businessName ?? "our restaurant"),
+        presetKey: "preset:restaurant-reservation-v1",
+        locale: input.locale,
+      });
+    }),
+
+  startAutomationDraft: tenantProcedure
+    .input(
+      z.object({
+        kind: z
+          .enum(["template_draft", "sequence_suggest", "complete_automation"])
+          .default("complete_automation"),
+        purpose: z.string().min(3).max(600),
+        tone: z.string().max(120).optional(),
+        locale: z.string().default("de-CH"),
+        triggerEvent: triggerEventEnum.default("lead.captured"),
+        intent: z
+          .enum([
+            "booking",
+            "callback",
+            "quote",
+            "generic",
+            "restaurant_reservation",
+            "restaurant_event",
+          ])
+          .default("generic"),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { tenantId } = ctx.tenantCtx;
+      const userId = (ctx.session.user as { id?: string }).id;
+      const [profile] = await db
+        .select({
+          businessName: businessProfiles.businessName,
+          vertical: businessProfiles.vertical,
+          addressCity: businessProfiles.addressCity,
+        })
+        .from(businessProfiles)
+        .where(eq(businessProfiles.tenantId, tenantId));
+
+      const jobId = crypto.randomUUID();
+      const idempotencyKey = `email-automation:${tenantId}:${input.kind}:${input.intent}:${Date.now()}`;
+      const job = {
+        tenantId,
+        userId,
+        jobId,
+        idempotencyKey,
+        kind: input.kind as EmailAutomationKind,
+        locale: input.locale,
+        businessName: profile?.businessName ?? "our business",
+        vertical: profile?.vertical ?? "SME",
+        city: profile?.addressCity ?? undefined,
+        purpose: input.purpose,
+        tone: input.tone,
+        triggerEvent: input.triggerEvent,
+        intent: input.intent as EmailAutomationIntent,
+        costBudgetCents: 50,
+        promptId: "email-automation-complete-v1",
+        promptVersion: 1,
+      };
+
+      await db.insert(emailAutomationJobs).values({
+        id: jobId,
+        tenantId,
+        userId: userId ?? null,
+        jobKind: input.kind,
+        status: "queued",
+        idempotencyKey,
+        input,
+        costBudgetCents: 50,
+      });
+
+      await enqueueEmailAutomationJob(job);
+      return { jobId, status: "queued" as const };
+    }),
+
+  getAutomationJob: tenantProcedure
+    .input(z.object({ jobId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const { tenantId } = ctx.tenantCtx;
+      const [job] = await db
+        .select()
+        .from(emailAutomationJobs)
+        .where(
+          and(eq(emailAutomationJobs.tenantId, tenantId), eq(emailAutomationJobs.id, input.jobId)),
+        );
+      if (!job) throw new TRPCError({ code: "NOT_FOUND" });
+      return job;
+    }),
+
+  applyAutomationJob: tenantProcedure
+    .input(z.object({ jobId: z.string().uuid(), locale: z.string().default("de-CH") }))
+    .mutation(async ({ ctx, input }) => {
+      const { tenantId } = ctx.tenantCtx;
+      const [job] = await db
+        .select({ status: emailAutomationJobs.status, result: emailAutomationJobs.result })
+        .from(emailAutomationJobs)
+        .where(
+          and(eq(emailAutomationJobs.tenantId, tenantId), eq(emailAutomationJobs.id, input.jobId)),
+        );
+      if (!job) throw new TRPCError({ code: "NOT_FOUND" });
+      if (job.status !== "completed" || !job.result) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "The AI automation draft is not ready yet.",
+        });
+      }
+
+      return createAutomationFromDraft({
+        tenantId,
+        draft: parseAutomationDraft(job.result),
+        presetKey: `ai:${input.jobId}`,
+        locale: input.locale,
+      });
+    }),
 
   addSendingDomain: tenantProcedure
     .input(
@@ -442,6 +842,7 @@ export const sequencesRouter = router({
         bodyHtml: z.string().max(50_000),
         bodyText: z.string().max(20_000),
         locale: z.string().default("de-CH"),
+        category: z.string().max(80).optional(),
         aiDraftedAt: z.string().datetime().optional(),
       }),
     )
@@ -456,6 +857,7 @@ export const sequencesRouter = router({
           bodyHtml: input.bodyHtml,
           bodyText: input.bodyText,
           locale: input.locale,
+          category: input.category ?? "custom",
           aiDraftedAt: input.aiDraftedAt ? new Date(input.aiDraftedAt) : null,
         })
         .returning({ id: emailTemplates.id });
@@ -500,6 +902,7 @@ export const sequencesRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const { tenantId } = ctx.tenantCtx;
+      await assertProductionSenderReady(tenantId);
 
       const [template] = await db
         .select()
@@ -531,6 +934,7 @@ export const sequencesRouter = router({
       await sendViaResend({
         apiKey: env.RESEND_API_KEY,
         from: await resolveSenderAddress(tenantId),
+        replyTo: await resolveReplyToAddress(tenantId),
         to: input.toEmail,
         subject,
         html,
@@ -581,7 +985,7 @@ export const sequencesRouter = router({
         .where(and(eq(emailTemplates.tenantId, tenantId), eq(emailTemplates.id, input.templateId)));
     }),
 
-  // AI-draft a template; returns the draft without saving — user edits and calls createTemplate.
+  // Queue an AI template draft. The UI polls getAutomationJob and applies the draft after review.
   aiDraftTemplate: tenantProcedure
     .input(
       z.object({
@@ -592,7 +996,7 @@ export const sequencesRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const { tenantId } = ctx.tenantCtx;
-
+      const userId = (ctx.session.user as { id?: string }).id;
       const [profile] = await db
         .select({
           businessName: businessProfiles.businessName,
@@ -602,62 +1006,41 @@ export const sequencesRouter = router({
         .from(businessProfiles)
         .where(eq(businessProfiles.tenantId, tenantId));
 
-      const prompt = getPrompt("email-template-v1");
-      const provider = buildSonnet();
-
-      if (!provider.completionWithTools) {
-        // EchoProvider fallback: return a placeholder draft.
-        return {
-          subject: `[Draft] ${input.purpose.slice(0, 50)}`,
-          bodyHtml: `<html><body style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px"><p>Hallo {{first_name}},</p><p>${input.purpose}</p><p>Mit freundlichen Grüssen,<br>{{business_name}}</p></body></html>`,
-          bodyText: `Hallo {{first_name}},\n\n${input.purpose}\n\nMit freundlichen Grüssen,\n{{business_name}}`,
-        };
-      }
-
-      const callOpts: CallOpts = {
+      const jobId = crypto.randomUUID();
+      const idempotencyKey = `email-template:${tenantId}:${jobId}`;
+      const job = {
         tenantId,
-        jobId: crypto.randomUUID(),
-        promptId: "email-template-v1",
-        promptVersion: 1,
+        userId,
+        jobId,
+        idempotencyKey,
+        kind: "template_draft" as EmailAutomationKind,
+        locale: input.locale,
+        businessName: profile?.businessName ?? "our business",
+        vertical: profile?.vertical ?? "SME",
+        city: profile?.addressCity ?? undefined,
+        purpose: input.purpose,
+        tone: input.tone,
+        triggerEvent: "manual" as const,
+        intent: "generic" as EmailAutomationIntent,
         costBudgetCents: 30,
+        promptId: "email-automation-complete-v1",
+        promptVersion: 1,
       };
 
-      const result = await provider.completionWithTools(
-        {
-          prompt: prompt.buildUserPrompt({
-            businessName: profile?.businessName ?? "our business",
-            vertical: profile?.vertical ?? "SME",
-            city: profile?.addressCity ?? "",
-            locale: input.locale,
-            purpose: input.purpose,
-            tone: input.tone ?? "warm and professional",
-          }),
-          systemPrompt: prompt.systemPrompt,
-          maxTokens: 3000,
-          temperature: 0.7,
-        },
-        [CREATE_EMAIL_TEMPLATE_TOOL],
-        callOpts,
-      );
+      await db.insert(emailAutomationJobs).values({
+        id: jobId,
+        tenantId,
+        userId: userId ?? null,
+        jobKind: "template_draft",
+        status: "queued",
+        idempotencyKey,
+        input,
+        costBudgetCents: 30,
+      });
 
-      if (!result.toolResult) {
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "AI did not return a template draft.",
-        });
-      }
-
-      const raw = result.toolResult as { subject?: string; body_html?: string; body_text?: string };
-      return {
-        subject: raw.subject ?? "",
-        bodyHtml: raw.body_html ?? "",
-        bodyText: raw.body_text ?? "",
-        aiDraftedAt: new Date().toISOString(),
-      };
+      await enqueueEmailAutomationJob(job);
+      return { jobId, status: "queued" as const };
     }),
-
-  // ─── Sequences ───────────────────────────────────────────────────────────────
-
   listSequences: tenantProcedure.query(async ({ ctx }) => {
     const { tenantId } = ctx.tenantCtx;
     const rows = await db
@@ -665,7 +1048,10 @@ export const sequencesRouter = router({
         id: emailSequences.id,
         name: emailSequences.name,
         triggerEvent: emailSequences.triggerEvent,
+        triggerFilter: emailSequences.triggerFilter,
         status: emailSequences.status,
+        category: emailSequences.category,
+        presetKey: emailSequences.presetKey,
         steps: emailSequences.steps,
         createdAt: emailSequences.createdAt,
       })
@@ -710,13 +1096,15 @@ export const sequencesRouter = router({
       z.object({
         name: z.string().min(1).max(120),
         triggerEvent: triggerEventEnum.default("manual"),
-        triggerFilter: z.record(z.string(), z.unknown()).default({}),
+        triggerFilter: sequenceTriggerFilterSchema,
         steps: z.array(sequenceStepSchema).max(10).default([]),
+        category: z.string().max(80).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       const { tenantId } = ctx.tenantCtx;
       await assertTemplatesBelongToTenant(tenantId, input.steps);
+      const sender = await resolveSenderSettings(tenantId);
 
       const [created] = await db
         .insert(emailSequences)
@@ -726,6 +1114,8 @@ export const sequencesRouter = router({
           triggerEvent: input.triggerEvent,
           triggerFilter: input.triggerFilter,
           steps: input.steps,
+          status: sender.canSendProduction ? "active" : "paused",
+          category: input.category ?? "custom",
         })
         .returning({ id: emailSequences.id });
       return created!;
@@ -737,9 +1127,10 @@ export const sequencesRouter = router({
         sequenceId: z.string().uuid(),
         name: z.string().min(1).max(120).optional(),
         triggerEvent: triggerEventEnum.optional(),
-        triggerFilter: z.record(z.string(), z.unknown()).optional(),
+        triggerFilter: sequenceTriggerFilterSchema.optional(),
         steps: z.array(sequenceStepSchema).max(10).optional(),
         status: z.enum(["active", "paused"]).optional(),
+        category: z.string().max(80).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -750,6 +1141,7 @@ export const sequencesRouter = router({
         .where(and(eq(emailSequences.tenantId, tenantId), eq(emailSequences.id, input.sequenceId)));
       if (!existing) throw new TRPCError({ code: "NOT_FOUND" });
       if (input.steps !== undefined) await assertTemplatesBelongToTenant(tenantId, input.steps);
+      if (input.status === "active") await assertProductionSenderReady(tenantId);
 
       const patch: Record<string, unknown> = { updatedAt: new Date() };
       if (input.name !== undefined) patch.name = input.name;
@@ -757,6 +1149,7 @@ export const sequencesRouter = router({
       if (input.triggerFilter !== undefined) patch.triggerFilter = input.triggerFilter;
       if (input.steps !== undefined) patch.steps = input.steps;
       if (input.status !== undefined) patch.status = input.status;
+      if (input.category !== undefined) patch.category = input.category;
       await db
         .update(emailSequences)
         .set(patch)
@@ -786,6 +1179,36 @@ export const sequencesRouter = router({
       await db
         .delete(emailSequences)
         .where(and(eq(emailSequences.tenantId, tenantId), eq(emailSequences.id, input.sequenceId)));
+    }),
+
+  searchContacts: tenantProcedure
+    .input(z.object({ query: z.string().min(1).max(120) }))
+    .query(async ({ ctx, input }) => {
+      const { tenantId } = ctx.tenantCtx;
+      const q = `%${input.query.trim().toLowerCase()}%`;
+      return db
+        .select({
+          id: contacts.id,
+          email: contacts.email,
+          firstName: contacts.firstName,
+          lastName: contacts.lastName,
+          phone: contacts.phone,
+          lifecycleStage: contacts.lifecycleStage,
+        })
+        .from(contacts)
+        .where(
+          and(
+            eq(contacts.tenantId, tenantId),
+            sql`(
+              lower(${contacts.email}) LIKE ${q}
+              OR lower(coalesce(${contacts.firstName}, '')) LIKE ${q}
+              OR lower(coalesce(${contacts.lastName}, '')) LIKE ${q}
+              OR coalesce(${contacts.phone}, '') LIKE ${q}
+            )`,
+          ),
+        )
+        .orderBy(desc(contacts.lastSeenAt))
+        .limit(12);
     }),
 
   // Manually enroll a contact into a sequence (idempotent — no error if already enrolled).
@@ -898,18 +1321,19 @@ export const sequencesRouter = router({
       return { rows, total: totalRows[0]?.total ?? 0, page: input.page, pageSize: input.pageSize };
     }),
 
-  // AI-suggest a 3-step sequence scaffold (no templates created — user adds them).
+  // Queue an AI sequence suggestion. The UI polls getAutomationJob and applies the draft after review.
   aiSuggestSequence: tenantProcedure
     .input(
       z.object({
         triggerEvent: triggerEventEnum,
         context: z.string().max(300).optional(),
         locale: z.string().default("de-CH"),
+        intent: z.enum(["booking", "callback", "quote", "generic"]).default("generic"),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       const { tenantId } = ctx.tenantCtx;
-
+      const userId = (ctx.session.user as { id?: string }).id;
       const [profile] = await db
         .select({
           businessName: businessProfiles.businessName,
@@ -919,55 +1343,38 @@ export const sequencesRouter = router({
         .from(businessProfiles)
         .where(eq(businessProfiles.tenantId, tenantId));
 
-      const prompt = getPrompt("email-sequence-suggest-v1");
-      const provider = buildHaiku();
-
-      if (!provider.completionWithTools) {
-        return {
-          name: `${input.triggerEvent} Sequenz`,
-          steps: [
-            { delay_minutes: 0, suggested_subject: "Willkommen!" },
-            { delay_minutes: 4320, suggested_subject: "Nachfassen nach 3 Tagen" },
-            { delay_minutes: 10080, suggested_subject: "Letzte Erinnerung" },
-          ],
-        };
-      }
-
-      const callOpts: CallOpts = {
+      const jobId = crypto.randomUUID();
+      const idempotencyKey = `email-sequence:${tenantId}:${jobId}`;
+      const job = {
         tenantId,
-        jobId: crypto.randomUUID(),
-        promptId: "email-sequence-suggest-v1",
+        userId,
+        jobId,
+        idempotencyKey,
+        kind: "sequence_suggest" as EmailAutomationKind,
+        locale: input.locale,
+        businessName: profile?.businessName ?? "our business",
+        vertical: profile?.vertical ?? "SME",
+        city: profile?.addressCity ?? undefined,
+        purpose: input.context || `Create a ${input.intent} follow-up sequence`,
+        triggerEvent: input.triggerEvent,
+        intent: input.intent as EmailAutomationIntent,
+        costBudgetCents: 30,
+        promptId: "email-automation-complete-v1",
         promptVersion: 1,
-        costBudgetCents: 10,
       };
 
-      const result = await provider.completionWithTools(
-        {
-          prompt: prompt.buildUserPrompt({
-            businessName: profile?.businessName ?? "our business",
-            vertical: profile?.vertical ?? "SME",
-            city: profile?.addressCity ?? "",
-            locale: input.locale,
-            triggerEvent: input.triggerEvent,
-            context: input.context ?? "",
-          }),
-          systemPrompt: prompt.systemPrompt,
-          maxTokens: 512,
-        },
-        [SUGGEST_SEQUENCE_TOOL],
-        callOpts,
-      );
+      await db.insert(emailAutomationJobs).values({
+        id: jobId,
+        tenantId,
+        userId: userId ?? null,
+        jobKind: "sequence_suggest",
+        status: "queued",
+        idempotencyKey,
+        input,
+        costBudgetCents: 30,
+      });
 
-      if (!result.toolResult) {
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "AI did not return a sequence suggestion.",
-        });
-      }
-
-      return result.toolResult as {
-        name: string;
-        steps: Array<{ delay_minutes: number; suggested_subject: string }>;
-      };
+      await enqueueEmailAutomationJob(job);
+      return { jobId, status: "queued" as const };
     }),
 });

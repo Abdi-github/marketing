@@ -15,6 +15,7 @@
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:apply": "node scripts/apply-sql-migration.mjs",
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {

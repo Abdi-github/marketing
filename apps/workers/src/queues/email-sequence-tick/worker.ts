@@ -25,12 +25,15 @@ import {
   eventProcessed,
   leads,
   outbox,
+  tenantUsers,
+  users,
 } from "@marketing/db";
 import { sendViaResend, interpolate } from "@marketing/integrations";
 import { env, logger } from "@marketing/shared";
 import { Worker } from "bullmq";
 import { and, eq, isNull, lte, sql } from "drizzle-orm";
 import { connection, EMAIL_SEQUENCE_TICK_QUEUE_NAME, emailSequenceTickQueue } from "./queue";
+import { matchesTriggerFilter } from "./filters";
 import { buildUnsubscribeUrl, withUnsubscribeFooter } from "./unsubscribe";
 import type { EmailSequenceTickJob } from "./queue";
 import type { SequenceStep, SequenceTriggerFilter } from "@marketing/db";
@@ -59,36 +62,23 @@ async function resolveSenderAddress(tenantId: string): Promise<string> {
   return `${domain.fromName} <${domain.fromLocalPart}@${domain.domain}>`;
 }
 
-// ─── Trigger filter evaluation ────────────────────────────────────────────────
-
-function matchesTriggerFilter(
-  eventType: string,
-  payload: Record<string, unknown>,
-  filter: SequenceTriggerFilter,
-): boolean {
-  if (eventType === "lead.captured") {
-    if (filter.lifecycle_stage && payload.lifecycleStage !== filter.lifecycle_stage) return false;
-    return true;
-  }
-  if (eventType === "contact.score_changed") {
-    if (filter.min_delta !== undefined) {
-      const delta = typeof payload.delta === "number" ? payload.delta : 0;
-      if (delta < filter.min_delta) return false;
-    }
-    if (filter.min_score !== undefined) {
-      const score = typeof payload.newScore === "number" ? payload.newScore : 0;
-      if (score < filter.min_score) return false;
-    }
-    return true;
-  }
-  if (eventType === "contact.lifecycle_changed") {
-    if (filter.lifecycle_stage && payload.newStage !== filter.lifecycle_stage) return false;
-    return true;
-  }
-  return true;
+function isUsableSenderAddress(address: string): boolean {
+  const normalized = address.trim().toLowerCase();
+  const email = normalized.match(/<([^>]+)>/)?.[1] ?? normalized;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && !email.endsWith(".localhost");
 }
 
-// ─── Phase A: Process outbox events → create enrollments ─────────────────────
+async function resolveReplyToAddress(tenantId: string): Promise<string | undefined> {
+  const [owner] = await db
+    .select({ email: users.email })
+    .from(tenantUsers)
+    .innerJoin(users, eq(users.id, tenantUsers.userId))
+    .where(and(eq(tenantUsers.tenantId, tenantId), eq(tenantUsers.role, "owner")));
+
+  return owner?.email;
+}
+
+// ─── Trigger filter evaluation ────────────────────────────────────────────────
 
 const TRIGGER_EVENT_TYPES = ["lead.captured", "contact.score_changed", "contact.lifecycle_changed"];
 
@@ -359,6 +349,7 @@ async function sendDueEmails(): Promise<number> {
           enrollmentId: enrollment.id,
           contactId,
           templateId: step.template_id,
+          sendKind: "sequence_step",
           status: "queued",
         })
         .returning({ id: emailSends.id });
@@ -366,6 +357,16 @@ async function sendDueEmails(): Promise<number> {
       const unsubscribeUrl = buildUnsubscribeUrl(env.APP_URL, sendRow!.id);
       const { html, text } = withUnsubscribeFooter(baseHtml, baseText, unsubscribeUrl);
       const from = await resolveSenderAddress(tenantId);
+      const replyTo = await resolveReplyToAddress(tenantId);
+
+      if (!isUsableSenderAddress(from)) {
+        logger.warn(
+          { enrollmentId: enrollment.id, tenantId, from },
+          "[seq-tick] Email sender is not configured for production delivery",
+        );
+        await db.update(emailSends).set({ status: "failed" }).where(eq(emailSends.id, sendRow!.id));
+        continue;
+      }
 
       // 4. Send via Resend (sandbox if no API key).
       let resendMessageId: string | null = null;
@@ -375,6 +376,7 @@ async function sendDueEmails(): Promise<number> {
           const result = await sendViaResend({
             apiKey: env.RESEND_API_KEY,
             from,
+            replyTo,
             to: normalizedEmail,
             subject,
             html,

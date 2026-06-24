@@ -2,7 +2,8 @@ import type { LandingPageComposition, LandingPageSection } from "@marketing/ai-r
 import type { FormField, FormSettings, FormStep } from "@marketing/ai-router/form-schema";
 
 type SupportedLocale = "de-CH" | "fr-CH" | "it-CH" | "en";
-type LandingFormKind = "quote" | "booking" | "callback";
+type LandingFormKind = "quote" | "booking" | "callback" | "generic";
+export type LeadCaptureChannel = "email" | "phone" | "sms" | "whatsapp";
 
 type CopySet = {
   quote: {
@@ -43,6 +44,11 @@ type CopySet = {
     nameLabel: string;
     emailLabel: string;
     phoneLabel: string;
+    preferredChannelLabel: string;
+    preferredEmailLabel: string;
+    preferredPhoneLabel: string;
+    preferredSmsLabel: string;
+    preferredWhatsappLabel: string;
   };
 };
 
@@ -86,6 +92,11 @@ const COPY_BY_LOCALE: Record<SupportedLocale, CopySet> = {
       nameLabel: "Name",
       emailLabel: "E-Mail",
       phoneLabel: "Telefon",
+      preferredChannelLabel: "Bevorzugter Kontakt",
+      preferredEmailLabel: "E-Mail",
+      preferredPhoneLabel: "Telefonanruf",
+      preferredSmsLabel: "SMS",
+      preferredWhatsappLabel: "WhatsApp",
     },
   },
   "fr-CH": {
@@ -127,6 +138,11 @@ const COPY_BY_LOCALE: Record<SupportedLocale, CopySet> = {
       nameLabel: "Nom",
       emailLabel: "E-mail",
       phoneLabel: "Telephone",
+      preferredChannelLabel: "Contact prefere",
+      preferredEmailLabel: "E-mail",
+      preferredPhoneLabel: "Appel",
+      preferredSmsLabel: "SMS",
+      preferredWhatsappLabel: "WhatsApp",
     },
   },
   "it-CH": {
@@ -168,6 +184,11 @@ const COPY_BY_LOCALE: Record<SupportedLocale, CopySet> = {
       nameLabel: "Nome",
       emailLabel: "E-mail",
       phoneLabel: "Telefono",
+      preferredChannelLabel: "Contatto preferito",
+      preferredEmailLabel: "E-mail",
+      preferredPhoneLabel: "Telefonata",
+      preferredSmsLabel: "SMS",
+      preferredWhatsappLabel: "WhatsApp",
     },
   },
   en: {
@@ -209,6 +230,11 @@ const COPY_BY_LOCALE: Record<SupportedLocale, CopySet> = {
       nameLabel: "Name",
       emailLabel: "Email",
       phoneLabel: "Phone",
+      preferredChannelLabel: "Preferred contact",
+      preferredEmailLabel: "Email",
+      preferredPhoneLabel: "Phone call",
+      preferredSmsLabel: "SMS",
+      preferredWhatsappLabel: "WhatsApp",
     },
   },
 };
@@ -220,7 +246,10 @@ export type AutoLandingFormDefinition = {
   steps: FormStep[];
   schema: Record<string, unknown>;
   kind: LandingFormKind;
+  captureChannels: LeadCaptureChannel[];
 };
+
+const ALL_CAPTURE_CHANNELS: LeadCaptureChannel[] = ["email", "phone", "sms", "whatsapp"];
 
 function normalizeLocale(locale?: string | null): SupportedLocale {
   if (locale === "de-CH" || locale === "fr-CH" || locale === "it-CH" || locale === "en") {
@@ -273,6 +302,44 @@ function inferLeadFormKind(input: {
   return "quote";
 }
 
+export function normalizeLeadCaptureChannels(
+  channels: readonly string[] | null | undefined,
+  kind: LandingFormKind = "quote",
+): LeadCaptureChannel[] {
+  const normalized = Array.from(
+    new Set(
+      (channels ?? []).filter((value): value is LeadCaptureChannel =>
+        ALL_CAPTURE_CHANNELS.includes(value as LeadCaptureChannel),
+      ),
+    ),
+  );
+
+  if (normalized.length > 0) return normalized;
+  if (kind === "callback") return ["phone", "sms"];
+  if (kind === "booking") return ["email", "phone", "sms", "whatsapp"];
+  return ["email", "phone"];
+}
+
+function channelsNeedPhone(channels: LeadCaptureChannel[]): boolean {
+  return channels.some(
+    (channel) => channel === "phone" || channel === "sms" || channel === "whatsapp",
+  );
+}
+
+function preferredChannelOptions(
+  channels: LeadCaptureChannel[],
+  copy: CopySet,
+): NonNullable<FormField["options"]> {
+  return channels.map((channel) => {
+    if (channel === "email") return { value: "email", label: copy.common.preferredEmailLabel };
+    if (channel === "sms") return { value: "sms", label: copy.common.preferredSmsLabel };
+    if (channel === "whatsapp") {
+      return { value: "whatsapp", label: copy.common.preferredWhatsappLabel };
+    }
+    return { value: "phone", label: copy.common.preferredPhoneLabel };
+  });
+}
+
 function fieldSchema(field: FormField): Record<string, unknown> {
   const typeMap: Record<FormField["type"], string> = {
     text: "string",
@@ -321,10 +388,14 @@ export function buildAutoLandingFormDefinition(input: {
   vertical?: string | null;
   goal?: string | null;
   composition?: LandingPageComposition | null;
+  captureChannels?: readonly string[] | null;
 }): AutoLandingFormDefinition {
   const locale = normalizeLocale(input.locale);
   const copy = COPY_BY_LOCALE[locale];
   const kind = inferLeadFormKind(input);
+  const captureChannels = normalizeLeadCaptureChannels(input.captureChannels, kind);
+  const includeEmail = captureChannels.includes("email");
+  const includePhone = channelsNeedPhone(captureChannels);
 
   const baseContactStep: FormStep = {
     title:
@@ -340,18 +411,37 @@ export function buildAutoLandingFormDefinition(input: {
         type: "text",
         required: true,
       },
-      {
-        name: "email",
-        label: copy.common.emailLabel,
-        type: "email",
-        required: kind !== "callback",
-      },
-      {
-        name: "phone",
-        label: copy.common.phoneLabel,
-        type: "tel",
-        required: kind === "booking" || kind === "callback",
-      },
+      ...(includeEmail
+        ? [
+            {
+              name: "email",
+              label: copy.common.emailLabel,
+              type: "email" as const,
+              required: !includePhone,
+            },
+          ]
+        : []),
+      ...(includePhone
+        ? [
+            {
+              name: "phone",
+              label: copy.common.phoneLabel,
+              type: "tel" as const,
+              required: true,
+            },
+          ]
+        : []),
+      ...(captureChannels.length > 1
+        ? [
+            {
+              name: "preferred_channel",
+              label: copy.common.preferredChannelLabel,
+              type: "radio" as const,
+              required: false,
+              options: preferredChannelOptions(captureChannels, copy),
+            },
+          ]
+        : []),
     ],
   };
 
@@ -466,5 +556,6 @@ export function buildAutoLandingFormDefinition(input: {
     settings,
     steps,
     schema: schemaFromSteps(steps),
+    captureChannels,
   };
 }

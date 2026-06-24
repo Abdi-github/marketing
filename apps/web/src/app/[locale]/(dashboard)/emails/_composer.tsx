@@ -15,6 +15,15 @@ type TemplateRecord = {
   locale: string;
 };
 
+type AutomationDraftResult = {
+  steps?: Array<{
+    template_name?: string;
+    subject?: string;
+    body_html?: string;
+    body_text?: string;
+  }>;
+};
+
 // The merge tags users can insert. Matches the interpolate() helper in
 // packages/integrations/resend/client.ts — keep these two in sync.
 const VARIABLES: Array<{ key: string; label: string }> = [
@@ -144,13 +153,27 @@ export default function EmailComposer({ templateId }: { templateId?: string }) {
     setAiDrafting(true);
     setError(null);
     try {
-      const draft = await trpc.sequences.aiDraftTemplate.mutate({
+      const started = await trpc.sequences.aiDraftTemplate.mutate({
         purpose: aiPurpose.trim(),
         tone: aiTone.trim() || undefined,
         locale: localeToBcp47(locale),
       });
-      setSubject(draft.subject);
-      setBodyText(draft.bodyText);
+      let draft: AutomationDraftResult | null = null;
+      for (let i = 0; i < 30; i++) {
+        const job = await trpc.sequences.getAutomationJob.query({ jobId: started.jobId });
+        if (job.status === "completed") {
+          draft = job.result as AutomationDraftResult;
+          break;
+        }
+        if (job.status === "failed") {
+          throw new Error(job.errorMessage ?? t("aiDraftError"));
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      }
+      const first = draft?.steps?.[0];
+      if (!first) throw new Error("AI draft is still running. Try again in a moment.");
+      setSubject(first.subject ?? "");
+      setBodyText(first.body_text ?? "");
       if (!name) setName(aiPurpose.slice(0, 60));
       setShowAiDraft(false);
     } catch (e) {

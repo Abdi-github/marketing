@@ -118,10 +118,21 @@ const schema = z.object({
   WHATSAPP_TEST_TENANT_SLUG: z.string().optional(),
 
   // ─── Swiss SMS — aspsms.ch (step-29) ─────────────────────────────────────
+  SMS_PROVIDER: z.enum(["aspsms", "twilio", "sandbox"]).default("aspsms"),
   ASPSMS_USER_KEY: z.string().optional(),
   ASPSMS_PASSWORD: z.string().optional(),
   // Sender name shown on recipient handset (max 11 chars alphanumeric).
   ASPSMS_ORIGINATOR: z.string().max(11).default("Marketing"),
+  TWILIO_ACCOUNT_SID: z.string().optional(),
+  TWILIO_AUTH_TOKEN: z.string().optional(),
+  TWILIO_FROM_NUMBER: z.string().optional(),
+  TWILIO_MESSAGING_SERVICE_SID: z.string().optional(),
+  SMS_TEST_MODE_ENABLED: z.enum(["true", "false"]).default("false"),
+  SMS_TEST_TENANT_SLUG: z.string().optional(),
+  SMS_INBOUND_CALLBACK_URL: z.string().url().optional(),
+  SMS_STATUS_CALLBACK_URL: z.string().url().optional(),
+  SMS_DAILY_TENANT_CAP: z.coerce.number().int().positive().default(100),
+  SMS_DAILY_CONTACT_CAP: z.coerce.number().int().positive().default(6),
 });
 
 const _result = schema.safeParse(process.env);

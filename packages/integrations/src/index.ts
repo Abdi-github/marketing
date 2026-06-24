@@ -57,5 +57,34 @@ export type {
 } from "../whatsapp/client";
 export type { ResolvedWhatsappCredentials } from "../whatsapp/credentials";
 
-export { sendSmsViaAspSms } from "../sms-aspsms/client";
+export {
+  getSmsProviderHealth,
+  sendSmsViaConfiguredProvider,
+  SMS_MAX_RECOMMENDED_CHARS as CONFIGURED_SMS_MAX_RECOMMENDED_CHARS,
+} from "../sms/provider";
+export type {
+  ConfiguredSmsSendOptions,
+  ConfiguredSmsSendResult,
+  SmsProviderEnv,
+  SmsProviderHealth,
+  SmsProviderKey,
+} from "../sms/provider";
+
+export {
+  estimateSmsSegments,
+  sendSmsViaAspSms,
+  SMS_CONCAT_SEGMENT_LIMIT,
+  SMS_MAX_RECOMMENDED_CHARS,
+  SMS_SINGLE_SEGMENT_LIMIT,
+} from "../sms-aspsms/client";
 export type { AspSmsOptions, AspSmsSendResult } from "../sms-aspsms/client";
+export { sendSmsViaTwilio } from "../sms-twilio/client";
+export type { TwilioSmsOptions, TwilioSmsSendResult } from "../sms-twilio/client";
+export {
+  formDataToTwilioParams,
+  normalizeE164,
+  verifyTwilioWebhookSignature,
+} from "../sms-twilio/webhook";
+export type { TwilioWebhookParams } from "../sms-twilio/webhook";
+export { isSmsTestModeTenant, resolveSmsCredentials } from "../sms/credentials";
+export type { ResolvedSmsCredentials, SmsCredentialConnection } from "../sms/credentials";

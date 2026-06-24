@@ -362,6 +362,11 @@ export default function InboxPage() {
     activeThread?.channel === "whatsapp" &&
     threadContext?.serviceWindow &&
     !threadContext.serviceWindow.open;
+  const canReplyByChannel = activeThread?.channel === "whatsapp" || activeThread?.channel === "sms";
+  const smsCharacterCount = replyText.trim().length;
+  const smsSegmentCount =
+    smsCharacterCount === 0 ? 0 : smsCharacterCount <= 160 ? 1 : Math.ceil(smsCharacterCount / 153);
+  const smsTooLong = activeThread?.channel === "sms" && smsCharacterCount > 459;
 
   async function refreshActiveThread(thread = activeThread) {
     if (!thread) return;
@@ -403,11 +408,15 @@ export default function InboxPage() {
   }
 
   async function handleSend() {
-    if (!activeThread || !replyText.trim() || activeThread.channel !== "whatsapp") return;
-    if (serviceWindowClosed) {
+    if (!activeThread || !replyText.trim() || !canReplyByChannel) return;
+    if (activeThread.channel === "whatsapp" && serviceWindowClosed) {
       setSendError(
         "This thread is outside the 24-hour WhatsApp service window. Template sending is the next rollout step.",
       );
+      return;
+    }
+    if (activeThread.channel === "sms" && smsTooLong) {
+      setSendError("SMS replies are limited to 459 characters to avoid costly long messages.");
       return;
     }
 
@@ -417,11 +426,19 @@ export default function InboxPage() {
     setSending(true);
     setSendError(null);
     try {
-      await trpc.inbox.sendWhatsApp.mutate({
-        contactId: activeThread.contactId,
-        toPhone: phone,
-        text: replyText.trim(),
-      });
+      if (activeThread.channel === "whatsapp") {
+        await trpc.inbox.sendWhatsApp.mutate({
+          contactId: activeThread.contactId,
+          toPhone: phone,
+          text: replyText.trim(),
+        });
+      } else {
+        await trpc.inbox.sendSms.mutate({
+          contactId: activeThread.contactId,
+          toPhone: phone,
+          text: replyText.trim(),
+        });
+      }
       setReplyText("");
       await refreshActiveThread(activeThread);
     } catch (err) {
@@ -467,10 +484,10 @@ export default function InboxPage() {
           >
             <div>
               <h2 style={{ fontSize: "1rem", fontWeight: 700, margin: 0 }}>
-                WhatsApp automation attention
+                Messaging automation attention
               </h2>
               <p style={{ color: "#64748b", fontSize: "0.82rem", margin: "0.3rem 0 0" }}>
-                Leads waiting for confirmation, missing details, or failed replies.
+                Leads waiting for confirmation, missing details, or failed WhatsApp/SMS replies.
               </p>
             </div>
             <TinyBadge label={`${issues.length} open`} tone="#b45309" />
@@ -828,7 +845,7 @@ export default function InboxPage() {
                 <div ref={messagesEndRef} />
               </div>
 
-              {activeThread.channel === "whatsapp" ? (
+              {canReplyByChannel ? (
                 <div
                   style={{
                     padding: "0.9rem 1rem",
@@ -841,7 +858,11 @@ export default function InboxPage() {
                       value={replyText}
                       onChange={(e) => setReplyText(e.target.value)}
                       onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && void handleSend()}
-                      placeholder={t("sendPlaceholder")}
+                      placeholder={
+                        activeThread.channel === "sms"
+                          ? "Write a short SMS reply..."
+                          : t("sendPlaceholder")
+                      }
                       disabled={sending || Boolean(serviceWindowClosed)}
                       style={{
                         flex: 1,
@@ -855,26 +876,46 @@ export default function InboxPage() {
                     />
                     <button
                       onClick={() => void handleSend()}
-                      disabled={sending || !replyText.trim() || Boolean(serviceWindowClosed)}
+                      disabled={
+                        sending || !replyText.trim() || Boolean(serviceWindowClosed) || smsTooLong
+                      }
                       style={{
                         padding: "0.6rem 1rem",
                         borderRadius: 8,
-                        background: serviceWindowClosed ? "#94a3b8" : "#25D366",
+                        background: serviceWindowClosed
+                          ? "#94a3b8"
+                          : activeThread.channel === "sms"
+                            ? "#2563eb"
+                            : "#25D366",
                         color: "#fff",
                         fontWeight: 700,
                         fontSize: "0.82rem",
                         border: "none",
                         cursor:
-                          sending || !replyText.trim() || Boolean(serviceWindowClosed)
+                          sending || !replyText.trim() || Boolean(serviceWindowClosed) || smsTooLong
                             ? "not-allowed"
                             : "pointer",
                         opacity:
-                          sending || !replyText.trim() || Boolean(serviceWindowClosed) ? 0.7 : 1,
+                          sending || !replyText.trim() || Boolean(serviceWindowClosed) || smsTooLong
+                            ? 0.7
+                            : 1,
                       }}
                     >
                       {sending ? t("sending") : t("send")}
                     </button>
                   </div>
+                  {activeThread.channel === "sms" ? (
+                    <p
+                      style={{
+                        margin: "0.55rem 0 0",
+                        color: smsTooLong ? "#dc2626" : "#64748b",
+                        fontSize: "0.76rem",
+                      }}
+                    >
+                      {smsCharacterCount}/459 characters, {smsSegmentCount} SMS segment
+                      {smsSegmentCount === 1 ? "" : "s"}. Keep it short for cost and clarity.
+                    </p>
+                  ) : null}
                   {sendError ? (
                     <p style={{ margin: "0.55rem 0 0", color: "#dc2626", fontSize: "0.76rem" }}>
                       {sendError}

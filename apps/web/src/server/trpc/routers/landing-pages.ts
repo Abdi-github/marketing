@@ -6,6 +6,8 @@ import {
   getPrompt,
   landingPageCompositionSchema,
   landingPageSectionSchema,
+  leadCapturePresetSchema,
+  resolveLeadCapturePreset,
 } from "@marketing/ai-router";
 import { getPlanCaps } from "@marketing/billing";
 import { db } from "@marketing/db";
@@ -36,7 +38,10 @@ import {
   type LandingLanguagePreferences,
   type LandingPageLocale,
 } from "../../../lib/landing-language";
-import { ensureLandingPageLeadForm } from "../../../lib/landing-page-forms";
+import {
+  ensureLandingPageLeadForm,
+  updateLandingPageLeadFormDefinition,
+} from "../../../lib/landing-page-forms";
 
 function slugify(text: string): string {
   return text
@@ -73,12 +78,52 @@ const sectionTypeInput = z.enum([
   "lead_form",
   "whatsapp_cta",
 ]);
+const leadCaptureChannelInput = z.enum(["email", "phone", "sms", "whatsapp"]);
 
 const DEFAULT_MAP_ADDRESS = "Neuchatel, Switzerland";
 
 function mapEmbedUrlForAddress(address: string | null | undefined): string {
   const query = encodeURIComponent(address?.trim() || DEFAULT_MAP_ADDRESS);
   return `https://www.google.com/maps?q=${query}&output=embed`;
+}
+
+function wizardPayloadForForms(stepData: Record<string, unknown> | null | undefined): {
+  vertical?: string | null;
+  goal?: string | null;
+  captureChannels?: Array<"email" | "phone" | "sms" | "whatsapp"> | null;
+} {
+  const wizardPayload = stepData?.["wizardPayload"] as
+    | {
+        vertical?: unknown;
+        businessType?: unknown;
+        goal?: unknown;
+        goals?: unknown;
+        leadCapturePreset?: unknown;
+        captureChannels?: unknown;
+      }
+    | undefined;
+  const goals = Array.isArray(wizardPayload?.goals)
+    ? wizardPayload.goals.filter((goal): goal is string => typeof goal === "string")
+    : [];
+  const preset =
+    typeof wizardPayload?.leadCapturePreset === "string"
+      ? resolveLeadCapturePreset(wizardPayload.leadCapturePreset)
+      : null;
+  return {
+    vertical:
+      typeof wizardPayload?.vertical === "string"
+        ? wizardPayload.vertical
+        : typeof wizardPayload?.businessType === "string"
+          ? wizardPayload.businessType
+          : null,
+    goal:
+      typeof wizardPayload?.goal === "string"
+        ? wizardPayload.goal
+        : goals[0] && typeof goals[0] === "string"
+          ? goals[0]
+          : null,
+    captureChannels: preset?.captureChannels ?? null,
+  };
 }
 
 function normalizedLanguagePreferences(input: {
@@ -95,14 +140,16 @@ function normalizedLanguagePreferences(input: {
   );
 }
 
-type LandingGenerationControlState = "running" | "paused" | "cancelled" | "failed";
+type LandingGenerationControlState = "running" | "completed" | "paused" | "cancelled" | "failed";
 type LandingGenerationState = "generating" | "paused" | "ready" | "published" | "failed";
 
 function getLandingGenerationControlState(
   stepData: Record<string, unknown> | null | undefined,
 ): LandingGenerationControlState {
   const state = (stepData?.["generationControl"] as { state?: unknown } | undefined)?.state;
-  return state === "paused" || state === "cancelled" || state === "failed" ? state : "running";
+  return state === "completed" || state === "paused" || state === "cancelled" || state === "failed"
+    ? state
+    : "running";
 }
 
 function getLandingGenerationError(
@@ -587,6 +634,14 @@ export const landingPagesRouter = router({
           businessName: profile.businessName,
           vertical: profile.vertical,
           city: profile.addressCity ?? undefined,
+          businessAddress:
+            [
+              profile.addressStreet,
+              [profile.addressPostalCode, profile.addressCity].filter(Boolean).join(" "),
+              profile.addressCountry,
+            ]
+              .filter(Boolean)
+              .join(", ") || undefined,
           locale: profile.locale,
           userPrompt: effectivePrompt,
           templateKey: input.templateKey,
@@ -768,6 +823,7 @@ export const landingPagesRouter = router({
           )
           .min(1)
           .max(5),
+        leadCapturePreset: leadCapturePresetSchema.default("quote"),
         siteMode: z.enum(["website", "campaign"]).default("website"),
         // Optional: omit to let the AI design the page from scratch (no template).
         templateKey: z.string().min(1).max(120).optional(),
@@ -827,6 +883,7 @@ export const landingPagesRouter = router({
       const landingPageId = input.landingPageId ?? crypto.randomUUID();
       const baseSlug = slugify(profile.businessName);
       const primaryGoal = input.goals[0]!;
+      const leadCapture = resolveLeadCapturePreset(input.leadCapturePreset);
       const languagePreferences = normalizedLanguagePreferences({
         locales: input.locales,
         defaultLocale: input.defaultLocale ?? input.locale,
@@ -850,6 +907,9 @@ export const landingPagesRouter = router({
           brief: input.brief,
           imageStrategy: input.imageStrategy,
           siteMode: input.siteMode,
+          leadCapturePreset: leadCapture.preset,
+          captureChannels: leadCapture.captureChannels,
+          leadKind: leadCapture.leadKind,
           goal: primaryGoal,
           goals: input.goals,
           vertical: input.vertical,
@@ -883,6 +943,7 @@ export const landingPagesRouter = router({
         locale: languagePreferences.defaultLocale,
         vertical: input.vertical,
         goal: primaryGoal,
+        captureChannels: leadCapture.captureChannels,
       });
 
       try {
@@ -893,6 +954,14 @@ export const landingPagesRouter = router({
           businessName: profile.businessName,
           vertical: input.vertical,
           city: profile.addressCity ?? undefined,
+          businessAddress:
+            [
+              profile.addressStreet,
+              [profile.addressPostalCode, profile.addressCity].filter(Boolean).join(" "),
+              profile.addressCountry,
+            ]
+              .filter(Boolean)
+              .join(", ") || undefined,
           locale: languagePreferences.defaultLocale,
           languagePreferences,
           userPrompt: input.brief,
@@ -1418,27 +1487,17 @@ export const landingPagesRouter = router({
         },
       });
 
-      const vertical =
-        (
-          (page.stepData as Record<string, unknown> | null | undefined)?.["wizardPayload"] as
-            | { vertical?: string; goal?: string }
-            | undefined
-        )?.vertical ?? null;
-      const goal =
-        (
-          (page.stepData as Record<string, unknown> | null | undefined)?.["wizardPayload"] as
-            | { vertical?: string; goal?: string }
-            | undefined
-        )?.goal ?? null;
+      const formSignals = wizardPayloadForForms(page.stepData as Record<string, unknown> | null);
       await ensureLandingPageLeadForm({
         tenantId,
         landingPageId: input.pageId,
         pageTitle: page.title,
         pageSlug: page.slug,
         locale: page.locale,
-        vertical,
-        goal,
+        vertical: formSignals.vertical,
+        goal: formSignals.goal,
         composition: currentVersion.composition as LandingPageComposition,
+        captureChannels: formSignals.captureChannels ?? undefined,
       });
 
       return { versionId: newVersion.id, version: newVersion.version };
@@ -2102,6 +2161,167 @@ export const landingPagesRouter = router({
           updatedAt: new Date(),
         })
         .where(and(eq(landingPages.tenantId, tenantId), eq(landingPages.id, input.pageId)));
+
+      return { versionId: newVer.id };
+    }),
+
+  updateContactDetails: tenantProcedure
+    .input(
+      z.object({
+        pageId: z.string().uuid(),
+        sectionIndex: z.number().int().min(0),
+        address: z.string().max(300).optional(),
+        phone: z.string().max(50).optional(),
+        email: z.string().max(200).optional(),
+        openingHours: z.string().max(200).optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { tenantId, userId } = ctx.tenantCtx;
+      const [page] = await db
+        .select({
+          currentVersionId: landingPages.currentVersionId,
+          stepData: landingPages.stepData,
+        })
+        .from(landingPages)
+        .where(and(eq(landingPages.tenantId, tenantId), eq(landingPages.id, input.pageId)));
+      if (!page?.currentVersionId) throw new TRPCError({ code: "BAD_REQUEST" });
+
+      const [version] = await db
+        .select({ composition: landingPageVersions.composition })
+        .from(landingPageVersions)
+        .where(
+          and(
+            eq(landingPageVersions.tenantId, tenantId),
+            eq(landingPageVersions.id, page.currentVersionId),
+          ),
+        );
+      if (!version) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const composition = version.composition as LandingPageComposition;
+      const section = composition.sections[input.sectionIndex];
+      if (!section || section.type !== "contact") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Contact section not found." });
+      }
+
+      const details = {
+        address: input.address?.trim() || undefined,
+        phone: input.phone?.trim() || undefined,
+        email: input.email?.trim() || undefined,
+        openingHours: input.openingHours?.trim() || undefined,
+      };
+      const mapEmbedUrl = mapEmbedUrlForAddress(details.address);
+      const patchContact = (current: LandingPageSection) => ({
+        ...current,
+        extras: {
+          ...((current.extras as Record<string, unknown> | undefined) ?? {}),
+          ...details,
+          mapEmbedUrl,
+        } as never,
+      });
+      const newComposition = mapSectionByIndex(composition, input.sectionIndex, patchContact);
+      const localizedStepData = mapLocalizedCompositions(
+        (page.stepData as Record<string, unknown> | null) ?? null,
+        (localized) => mapSectionByIndex(localized, input.sectionIndex, patchContact),
+      );
+
+      const newVer = await insertDraftVersion({
+        tenantId,
+        userId,
+        pageId: input.pageId,
+        composition: newComposition,
+      });
+      await db
+        .update(landingPages)
+        .set({
+          currentVersionId: newVer.id,
+          ...(localizedStepData ? { stepData: localizedStepData } : {}),
+          updatedAt: new Date(),
+        })
+        .where(and(eq(landingPages.tenantId, tenantId), eq(landingPages.id, input.pageId)));
+
+      return { versionId: newVer.id };
+    }),
+
+  updateLeadCaptureChannels: tenantProcedure
+    .input(
+      z.object({
+        pageId: z.string().uuid(),
+        sectionIndex: z.number().int().min(0),
+        captureChannels: z.array(leadCaptureChannelInput).min(1).max(4),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { tenantId, userId } = ctx.tenantCtx;
+      const [page] = await db
+        .select({
+          title: landingPages.title,
+          slug: landingPages.slug,
+          locale: landingPages.locale,
+          currentVersionId: landingPages.currentVersionId,
+          stepData: landingPages.stepData,
+        })
+        .from(landingPages)
+        .where(and(eq(landingPages.tenantId, tenantId), eq(landingPages.id, input.pageId)));
+      if (!page?.currentVersionId) throw new TRPCError({ code: "BAD_REQUEST" });
+
+      const [version] = await db
+        .select({ composition: landingPageVersions.composition })
+        .from(landingPageVersions)
+        .where(
+          and(
+            eq(landingPageVersions.tenantId, tenantId),
+            eq(landingPageVersions.id, page.currentVersionId),
+          ),
+        );
+      if (!version) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const composition = version.composition as LandingPageComposition;
+      const section = composition.sections[input.sectionIndex];
+      if (!section || section.type !== "lead_form") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Lead form section not found." });
+      }
+
+      const patchLeadForm = (current: LandingPageSection) => ({
+        ...current,
+        extras: {
+          ...((current.extras as Record<string, unknown> | undefined) ?? {}),
+          captureChannels: input.captureChannels,
+        } as never,
+      });
+      const newComposition = mapSectionByIndex(composition, input.sectionIndex, patchLeadForm);
+      const localizedStepData = mapLocalizedCompositions(
+        (page.stepData as Record<string, unknown> | null) ?? null,
+        (localized) => mapSectionByIndex(localized, input.sectionIndex, patchLeadForm),
+      );
+
+      const newVer = await insertDraftVersion({
+        tenantId,
+        userId,
+        pageId: input.pageId,
+        composition: newComposition,
+      });
+      await db
+        .update(landingPages)
+        .set({
+          currentVersionId: newVer.id,
+          ...(localizedStepData ? { stepData: localizedStepData } : {}),
+          updatedAt: new Date(),
+        })
+        .where(and(eq(landingPages.tenantId, tenantId), eq(landingPages.id, input.pageId)));
+
+      const formSignals = wizardPayloadForForms(page.stepData as Record<string, unknown> | null);
+      await updateLandingPageLeadFormDefinition({
+        tenantId,
+        landingPageId: input.pageId,
+        pageTitle: page.title,
+        pageSlug: page.slug,
+        locale: page.locale,
+        vertical: formSignals.vertical,
+        goal: formSignals.goal,
+        composition: newComposition,
+        captureChannels: input.captureChannels,
+      });
 
       return { versionId: newVer.id };
     }),

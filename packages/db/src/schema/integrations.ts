@@ -21,6 +21,7 @@ export const integrationProviderEnum = pgEnum("integration_provider", [
   "meta",
   "google_business",
   "resend",
+  "twilio",
 ]);
 
 export const integrationSyncStatusEnum = pgEnum("integration_sync_status", [

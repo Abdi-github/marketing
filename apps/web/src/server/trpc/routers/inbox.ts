@@ -1,11 +1,17 @@
 // Unified inbox router (step-29).
 // Threads = grouped messages per contact per channel.
 import { db } from "@marketing/db";
-import { contacts, crmTasks, leads, messages, tenants } from "@marketing/db";
-import { computeWhatsappConversationState } from "@marketing/shared";
+import { contacts, crmTasks, leads, messages, outbox, tenants } from "@marketing/db";
+import {
+  computeWhatsappConversationState,
+  normalizeSmsPhone,
+  reservationStatusChangedV1,
+} from "@marketing/shared";
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import { enqueueSmsSendJob, enqueueSmsSequenceTriggerJob } from "../../queues/sms";
 import { tenantProcedure, router } from "../trpc";
 
 export const inboxRouter = router({
@@ -244,6 +250,7 @@ export const inboxRouter = router({
         db
           .select({
             contactId: messages.contactId,
+            channel: messages.channel,
             contactFirstName: contacts.firstName,
             contactLastName: contacts.lastName,
             contactPhone: contacts.phone,
@@ -259,7 +266,7 @@ export const inboxRouter = router({
           .where(
             and(
               eq(messages.tenantId, tenantId),
-              eq(messages.channel, "whatsapp"),
+              inArray(messages.channel, ["whatsapp", "sms"]),
               eq(messages.direction, "outbound"),
               eq(messages.status, "failed"),
             ),
@@ -313,7 +320,7 @@ export const inboxRouter = router({
         contactPhone: row.contactPhone,
         workflowKind: null,
         workflowState: "reply_failed",
-        detail: row.errorMessage ?? "WhatsApp send failed.",
+        detail: row.errorMessage ?? `${row.channel === "sms" ? "SMS" : "WhatsApp"} send failed.`,
         summary: row.body,
       }));
 
@@ -379,6 +386,7 @@ export const inboxRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
       }
 
+      const eventId = randomUUID();
       await db.transaction(async (tx) => {
         await tx
           .update(leads)
@@ -400,7 +408,36 @@ export const inboxRouter = router({
               ),
             );
         }
+
+        const eventPayload = reservationStatusChangedV1.parse({
+          leadId: lead.id,
+          contactId: lead.contactId,
+          leadKind: lead.workflowKind,
+          workflowState: input.workflowState,
+          status: input.status,
+        });
+        await tx.insert(outbox).values({
+          eventId,
+          tenantId,
+          type: "reservation.status_changed",
+          payload: eventPayload,
+        });
       });
+
+      if (lead.contactId) {
+        await enqueueSmsSequenceTriggerJob({
+          tenantId,
+          eventId,
+          eventType: "reservation.status_changed",
+          contactId: lead.contactId,
+          leadId: lead.id,
+          payload: {
+            leadKind: lead.workflowKind ?? "generic",
+            workflowState: input.workflowState,
+            status: input.status,
+          },
+        });
+      }
 
       return {
         leadId: lead.id,
@@ -568,5 +605,86 @@ export const inboxRouter = router({
               : errorMessage,
         });
       }
+    }),
+
+  /**
+   * Send an SMS reply from the dashboard through aspsms.ch.
+   */
+  sendSms: tenantProcedure
+    .input(
+      z.object({
+        contactId: z.string().uuid(),
+        toPhone: z.string().min(5).max(20),
+        text: z.string().min(1).max(459),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { tenantId } = ctx.tenantCtx;
+      const { SMS_MAX_RECOMMENDED_CHARS, getSmsProviderHealth } =
+        await import("@marketing/integrations");
+      const { env } = await import("@marketing/shared");
+      const providerHealth = getSmsProviderHealth(env);
+
+      if (input.text.trim().length > SMS_MAX_RECOMMENDED_CHARS) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `SMS replies are limited to ${SMS_MAX_RECOMMENDED_CHARS} characters.`,
+        });
+      }
+
+      const [contact] = await db
+        .select({ id: contacts.id, phone: contacts.phone })
+        .from(contacts)
+        .where(and(eq(contacts.tenantId, tenantId), eq(contacts.id, input.contactId)));
+
+      if (!contact) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Contact not found." });
+      }
+
+      let normalizedContactPhone: string;
+      let normalizedInputPhone: string;
+      try {
+        normalizedContactPhone = normalizeSmsPhone(contact.phone ?? "");
+        normalizedInputPhone = normalizeSmsPhone(input.toPhone);
+      } catch {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Use an international phone number, for example +41761234567.",
+        });
+      }
+      if (normalizedContactPhone !== normalizedInputPhone) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Phone number does not belong to this contact.",
+        });
+      }
+
+      const text = input.text.trim();
+      const [message] = await db
+        .insert(messages)
+        .values({
+          tenantId,
+          contactId: input.contactId,
+          channel: "sms",
+          direction: "outbound",
+          fromAddress: providerHealth.senderLabel,
+          toAddress: normalizedInputPhone,
+          body: text,
+          messageType: "text",
+          status: "queued",
+          meta: {
+            provider: providerHealth.provider,
+            providerLabel: providerHealth.providerLabel,
+            purpose: "manual_reply",
+          },
+        })
+        .returning({ id: messages.id });
+      if (!message) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      await enqueueSmsSendJob({ tenantId, messageId: message.id });
+      return {
+        messageId: message.id,
+        segmentCount: text.length <= 160 ? 1 : Math.ceil(text.length / 153),
+        queued: true,
+      };
     }),
 });

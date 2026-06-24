@@ -126,6 +126,13 @@ export function FloatingChat() {
   const [sending, setSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const starterPrompts = [
+    "Check if my setup is ready for launch",
+    "Show my recent leads",
+    "Check my email automation health",
+    "Show my forms and captured leads",
+    "Check recent social post graphics",
+  ];
 
   // Load thread messages when threadId is available.
   const loadThread = useCallback(async (tid: string) => {
@@ -188,7 +195,11 @@ export function FloatingChat() {
     ]);
 
     try {
-      const data = await trpc.copilot.sendMessage.mutate({ threadId, message: text });
+      const data = await trpc.copilot.sendMessage.mutate({
+        threadId,
+        message: text,
+        currentPath: window.location.pathname,
+      });
       setThreadId(data.threadId);
       // Reload full thread to get proper server-assigned IDs + assistant reply.
       await loadThread(data.threadId);
@@ -286,6 +297,21 @@ export function FloatingChat() {
                 </svg>
                 <p className="text-sm">{t("emptyState")}</p>
                 <p className="mt-1 text-xs opacity-70">{t("emptyStateHint")}</p>
+                <div className="mt-4 grid w-full gap-2">
+                  {starterPrompts.map((prompt) => (
+                    <button
+                      key={prompt}
+                      type="button"
+                      onClick={() => {
+                        setInput(prompt);
+                        setTimeout(() => inputRef.current?.focus(), 0);
+                      }}
+                      className="rounded-lg border border-purple-100 bg-white px-3 py-2 text-left text-xs font-medium text-gray-600 shadow-sm transition-colors hover:border-purple-200 hover:bg-purple-50 hover:text-purple-700"
+                    >
+                      {prompt}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
             {messages.map((msg) => (

@@ -7,11 +7,14 @@ import {
   leads,
   messages,
   forms,
+  tenantUsers,
   tenants,
+  users,
 } from "@marketing/db";
 import {
+  getSmsProviderHealth,
+  resolveSmsCredentials,
   resolveWhatsappCredentials,
-  sendSmsViaAspSms,
   sendViaResend,
   sendWhatsAppText,
 } from "@marketing/integrations";
@@ -29,6 +32,7 @@ import {
 import { Worker, UnrecoverableError, type Job } from "bullmq";
 import { and, desc, eq } from "drizzle-orm";
 import { connection, LEAD_FOLLOW_UP_QUEUE_NAME, type LeadFollowUpJob } from "./queue";
+import { smsSendQueue } from "../sms-send/queue";
 
 type LeadFollowUpContext = {
   tenantId: string;
@@ -67,6 +71,8 @@ type SendAttemptResult =
       externalId: string | null;
       policyState?: string | null;
       sandbox?: boolean;
+      provider?: string;
+      persistedMessageId?: string;
     }
   | {
       ok: false;
@@ -77,6 +83,7 @@ type SendAttemptResult =
       error: string;
       policyState?: string | null;
       templateRequired?: boolean;
+      provider?: string;
     };
 
 function asPayloadRecord(value: unknown): Record<string, unknown> {
@@ -103,6 +110,22 @@ async function resolveSenderAddress(tenantId: string): Promise<string> {
 
   if (!domain) return env.EMAIL_FROM_ADDRESS;
   return `${domain.fromName} <${domain.fromLocalPart}@${domain.domain}>`;
+}
+
+function isUsableSenderAddress(address: string): boolean {
+  const normalized = address.trim().toLowerCase();
+  const email = normalized.match(/<([^>]+)>/)?.[1] ?? normalized;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && !email.endsWith(".localhost");
+}
+
+async function resolveReplyToAddress(tenantId: string): Promise<string | undefined> {
+  const [owner] = await db
+    .select({ email: users.email })
+    .from(tenantUsers)
+    .innerJoin(users, eq(users.id, tenantUsers.userId))
+    .where(and(eq(tenantUsers.tenantId, tenantId), eq(tenantUsers.role, "owner")));
+
+  return owner?.email;
 }
 
 async function loadLeadFollowUpContext(
@@ -235,7 +258,19 @@ async function trySendEmail(
     return null;
   }
   const from = await resolveSenderAddress(ctx.tenantId);
+  const replyTo = await resolveReplyToAddress(ctx.tenantId);
   const bodyHtml = `<p>${copy.body}</p>`;
+
+  if (!isUsableSenderAddress(from)) {
+    return {
+      ok: false,
+      channel: "email",
+      fromAddress: from,
+      toAddress: ctx.contact.email,
+      body: copy.body,
+      error: "Email sender is not configured for production delivery.",
+    };
+  }
 
   if (!env.RESEND_API_KEY) {
     return {
@@ -253,6 +288,7 @@ async function trySendEmail(
     const result = await sendViaResend({
       apiKey: env.RESEND_API_KEY,
       from,
+      replyTo,
       to: ctx.contact.email,
       subject: copy.subject,
       html: bodyHtml,
@@ -353,39 +389,78 @@ async function trySendSms(
   ctx: LeadFollowUpContext,
   copy: ReturnType<typeof buildLeadConfirmationCopy>,
 ): Promise<SendAttemptResult | null> {
-  if (!ctx.contact.phone || !env.ASPSMS_USER_KEY || !env.ASPSMS_PASSWORD) {
-    return null;
-  }
+  if (!ctx.contact.phone || !ctx.tenantSlug) return null;
+  const [connection] = await db
+    .select({
+      oauthTokens: integrationConnections.oauthTokens,
+      meta: integrationConnections.meta,
+    })
+    .from(integrationConnections)
+    .where(
+      and(
+        eq(integrationConnections.tenantId, ctx.tenantId),
+        eq(integrationConnections.provider, "twilio"),
+        eq(integrationConnections.status, "connected"),
+      ),
+    )
+    .limit(1);
+  const credentials = resolveSmsCredentials({
+    tenantSlug: ctx.tenantSlug,
+    connection: connection
+      ? {
+          oauthTokens: connection.oauthTokens,
+          meta:
+            connection.meta && typeof connection.meta === "object"
+              ? (connection.meta as Record<string, unknown>)
+              : null,
+        }
+      : null,
+    env,
+  });
+  if (!credentials) return null;
+  const providerHealth = getSmsProviderHealth(credentials);
 
-  try {
-    await sendSmsViaAspSms({
-      userKey: env.ASPSMS_USER_KEY,
-      password: env.ASPSMS_PASSWORD,
-      originator: env.ASPSMS_ORIGINATOR,
-      to: ctx.contact.phone,
-      text: copy.shortBody,
-    });
-    return {
-      ok: true,
+  const [message] = await db
+    .insert(messages)
+    .values({
+      tenantId: ctx.tenantId,
+      contactId: ctx.contactId,
       channel: "sms",
-      fromAddress: env.ASPSMS_ORIGINATOR,
+      direction: "outbound",
+      fromAddress: credentials.senderAddress,
       toAddress: ctx.contact.phone,
       body: copy.shortBody,
-      externalId: null,
-    };
-  } catch (err) {
-    return {
-      ok: false,
-      channel: "sms",
-      fromAddress: env.ASPSMS_ORIGINATOR,
-      toAddress: ctx.contact.phone,
-      body: copy.shortBody,
-      error: String(err),
-    };
-  }
+      messageType: "acknowledgement",
+      status: "queued",
+      meta: {
+        automated: true,
+        leadId: ctx.leadId,
+        purpose: "transactional_acknowledgement",
+        provider: providerHealth.provider,
+      },
+    })
+    .returning({ id: messages.id });
+  if (!message) return null;
+
+  await smsSendQueue.add(
+    "send",
+    { tenantId: ctx.tenantId, messageId: message.id },
+    { jobId: `sms-send-${message.id}` },
+  );
+  return {
+    ok: true,
+    channel: "sms",
+    fromAddress: credentials.senderAddress,
+    toAddress: ctx.contact.phone,
+    body: copy.shortBody,
+    externalId: null,
+    provider: providerHealth.provider,
+    persistedMessageId: message.id,
+  };
 }
 
 async function recordAttempt(ctx: LeadFollowUpContext, attempt: SendAttemptResult): Promise<void> {
+  if (attempt.ok && attempt.persistedMessageId) return;
   await db.insert(messages).values({
     tenantId: ctx.tenantId,
     contactId: ctx.contactId,
@@ -400,6 +475,7 @@ async function recordAttempt(ctx: LeadFollowUpContext, attempt: SendAttemptResul
     meta: {
       automated: true,
       leadId: ctx.leadId,
+      provider: attempt.provider ?? null,
       templateRequired: attempt.ok ? false : attempt.templateRequired === true,
       sandbox: attempt.ok ? attempt.sandbox === true : false,
     },

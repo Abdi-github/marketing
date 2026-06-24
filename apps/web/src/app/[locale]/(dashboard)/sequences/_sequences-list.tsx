@@ -33,9 +33,11 @@ const TRIGGER_LABELS: Record<string, string> = {
 export function SequencesList({
   initialSequences,
   locale,
+  senderReady,
 }: {
   initialSequences: Sequence[];
   locale: string;
+  senderReady: boolean;
 }) {
   const t = useTranslations("Sequences");
   const router = useRouter();
@@ -43,11 +45,17 @@ export function SequencesList({
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   async function toggleStatus(seq: Sequence) {
+    if (seq.status !== "active" && !senderReady) {
+      alert("Configure a production sender before resuming this sequence.");
+      return;
+    }
     setTogglingId(seq.id);
     try {
       const newStatus = seq.status === "active" ? "paused" : "active";
       await trpc().sequences.updateSequence.mutate({ sequenceId: seq.id, status: newStatus });
       router.refresh(); // re-runs the server component to get fresh data
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Could not update sequence status.");
     } finally {
       setTogglingId(null);
     }
@@ -134,7 +142,12 @@ export function SequencesList({
                 <div className="flex items-center justify-end gap-2">
                   <button
                     onClick={() => toggleStatus(seq)}
-                    disabled={togglingId === seq.id}
+                    disabled={togglingId === seq.id || (seq.status !== "active" && !senderReady)}
+                    title={
+                      seq.status !== "active" && !senderReady
+                        ? "Configure a production sender before resuming."
+                        : undefined
+                    }
                     className="text-xs text-gray-500 hover:text-gray-800 disabled:opacity-40"
                   >
                     {seq.status === "active" ? t("pause") : t("resume")}

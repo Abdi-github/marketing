@@ -5,6 +5,8 @@ import type { FormSettings, FormStep, LandingPageComposition } from "@marketing/
 import {
   buildAutoLandingFormDefinition,
   compositionHasLeadCapture,
+  normalizeLeadCaptureChannels,
+  type LeadCaptureChannel,
 } from "./landing-page-form-definition";
 
 function slugify(text: string): string {
@@ -62,6 +64,7 @@ export async function ensureLandingPageLeadForm(input: {
   vertical?: string | null;
   goal?: string | null;
   composition?: LandingPageComposition | null;
+  captureChannels?: readonly string[] | null;
 }): Promise<LandingPageLeadFormRecord | null> {
   if (input.composition && !compositionHasLeadCapture(input.composition)) {
     return null;
@@ -84,6 +87,7 @@ export async function ensureLandingPageLeadForm(input: {
     vertical: input.vertical,
     goal: input.goal,
     composition: input.composition,
+    captureChannels: input.captureChannels ?? captureChannelsFromComposition(input.composition),
   });
   const slugStem = slugify(input.pageSlug || input.pageTitle || "landing-page");
   const slug = `${slugStem || "landing-page"}-lead-${input.landingPageId.slice(0, 8)}`;
@@ -107,3 +111,65 @@ export async function ensureLandingPageLeadForm(input: {
 }
 
 export { compositionHasLeadCapture } from "./landing-page-form-definition";
+
+export function captureChannelsFromComposition(
+  composition?: LandingPageComposition | null,
+): LeadCaptureChannel[] | null {
+  if (!composition) return null;
+  const sections = [
+    ...composition.sections,
+    ...(composition.site?.pages?.flatMap((page) => page.sections) ?? []),
+  ];
+  const channels = sections
+    .filter((section) => section.type === "lead_form")
+    .flatMap((section) => {
+      const extras = (section.extras as Record<string, unknown> | undefined) ?? {};
+      return Array.isArray(extras["captureChannels"]) ? extras["captureChannels"] : [];
+    })
+    .filter((value): value is string => typeof value === "string");
+  return channels.length > 0 ? normalizeLeadCaptureChannels(channels) : null;
+}
+
+export async function updateLandingPageLeadFormDefinition(input: {
+  tenantId: string;
+  landingPageId: string;
+  pageTitle: string;
+  pageSlug: string;
+  locale?: string | null;
+  vertical?: string | null;
+  goal?: string | null;
+  composition?: LandingPageComposition | null;
+  captureChannels?: readonly string[] | null;
+}): Promise<LandingPageLeadFormRecord | null> {
+  if (input.composition && !compositionHasLeadCapture(input.composition)) {
+    return null;
+  }
+
+  const autoForm = buildAutoLandingFormDefinition({
+    locale: input.locale,
+    vertical: input.vertical,
+    goal: input.goal,
+    composition: input.composition,
+    captureChannels: input.captureChannels ?? captureChannelsFromComposition(input.composition),
+  });
+  const existing = await getLandingPageLeadForm(input.tenantId, input.landingPageId);
+  if (!existing) {
+    return ensureLandingPageLeadForm(input);
+  }
+
+  const [updated] = await db
+    .update(forms)
+    .set({
+      name: `${input.pageTitle} - ${autoForm.name}`.slice(0, 120),
+      schema: autoForm.schema,
+      steps: autoForm.steps,
+      settings: autoForm.settings,
+      submitLabel: autoForm.submitLabel,
+      isActive: true,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(forms.tenantId, input.tenantId), eq(forms.id, existing.id)))
+    .returning(LANDING_PAGE_FORM_SELECT);
+
+  return (updated as LandingPageLeadFormRecord | undefined) ?? null;
+}

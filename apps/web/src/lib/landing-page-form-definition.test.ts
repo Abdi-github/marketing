@@ -73,8 +73,37 @@ describe("landing-page-form-definition", () => {
     expect(definition.steps[0]?.fields.find((field) => field.name === "phone")?.required).toBe(
       true,
     );
-    expect(definition.steps[0]?.fields.find((field) => field.name === "email")?.required).toBe(
-      false,
+    expect(definition.steps[0]?.fields.some((field) => field.name === "email")).toBe(false);
+  });
+
+  it("adds phone and preferred channel fields for SMS and WhatsApp capture", () => {
+    const definition = buildAutoLandingFormDefinition({
+      locale: "en",
+      vertical: "restaurant",
+      captureChannels: ["sms", "whatsapp"],
+    });
+
+    expect(definition.captureChannels).toEqual(["sms", "whatsapp"]);
+    expect(definition.steps[0]?.fields.find((field) => field.name === "phone")?.required).toBe(
+      true,
     );
+    expect(definition.steps[0]?.fields.some((field) => field.name === "email")).toBe(false);
+    expect(
+      definition.steps[0]?.fields.find((field) => field.name === "preferred_channel"),
+    ).toBeTruthy();
+  });
+
+  it("supports email-only capture without requiring phone", () => {
+    const definition = buildAutoLandingFormDefinition({
+      locale: "en",
+      vertical: "consulting",
+      captureChannels: ["email"],
+    });
+
+    expect(definition.captureChannels).toEqual(["email"]);
+    expect(definition.steps[0]?.fields.find((field) => field.name === "email")?.required).toBe(
+      true,
+    );
+    expect(definition.steps[0]?.fields.some((field) => field.name === "phone")).toBe(false);
   });
 });

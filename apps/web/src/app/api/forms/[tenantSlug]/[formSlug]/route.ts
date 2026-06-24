@@ -3,7 +3,17 @@
 // Rate-limited at the middleware layer (IP-based).
 // See docs/WORKFLOWS.md §Lead capture.
 import { db } from "@marketing/db";
-import { forms, leads, tenants, outbox, contacts, crmTasks, events } from "@marketing/db";
+import {
+  forms,
+  leads,
+  tenants,
+  outbox,
+  contacts,
+  crmTasks,
+  events,
+  emailPreferences,
+  smsPreferences,
+} from "@marketing/db";
 import {
   buildLeadTaskDueAt,
   buildLeadWorkflowPlan,
@@ -12,10 +22,12 @@ import {
   splitContactName,
 } from "@marketing/shared";
 import { and, eq, isNull } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { validateAndSanitizeFormPayload } from "../../../../../lib/form-validation";
 import { enqueueLeadFollowUpJob } from "../../../../../server/queues/lead-followup";
+import { enqueueSmsSequenceTriggerJob } from "../../../../../server/queues/sms";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +63,44 @@ function buildStructuredLeadData(payload: Record<string, unknown>): Record<strin
     reservationTime: firstStringValue(payload, ["time", "reservation_time"]),
     partySize: firstStringValue(payload, ["party_size", "guest_count", "guests"]),
   };
+}
+
+function readMarketingConsent(payload: Record<string, unknown>): boolean | null {
+  const value =
+    payload["marketing_consent"] ??
+    payload["marketingOptIn"] ??
+    payload["newsletter"] ??
+    payload["email_opt_in"];
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["yes", "true", "1", "on", "checked", "accept", "accepted"].includes(normalized)) {
+      return true;
+    }
+    if (["no", "false", "0", "off", "unchecked", "decline", "declined"].includes(normalized)) {
+      return false;
+    }
+  }
+  return null;
+}
+
+function readSmsConsent(payload: Record<string, unknown>): boolean | null {
+  const value =
+    payload["sms_marketing_consent"] ??
+    payload["smsOptIn"] ??
+    payload["sms_opt_in"] ??
+    payload["marketing_consent"];
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["yes", "true", "1", "on", "checked", "accept", "accepted"].includes(normalized)) {
+      return true;
+    }
+    if (["no", "false", "0", "off", "unchecked", "decline", "declined"].includes(normalized)) {
+      return false;
+    }
+  }
+  return null;
 }
 
 // ─── Turnstile verification ────────────────────────────────────────────────────
@@ -157,7 +207,11 @@ export async function POST(
   const anonymousId = req.cookies.get("__tid")?.value ?? null;
   const workflowPlan = buildLeadWorkflowPlan(form, sanitizedPayload, sourceUrl);
   const contactName = splitContactName(sanitizedPayload);
+  const sourceChannel = form.landingPageId ? "landing_page_form" : "form";
+  const workflowState = parseWorkflowState(workflowPlan.kind, sanitizedPayload);
   let createdLeadId: string | null = null;
+  let createdContactId: string | null = null;
+  const leadCapturedEventId = randomUUID();
 
   try {
     await db.transaction(async (tx) => {
@@ -168,8 +222,8 @@ export async function POST(
           formId: form.id,
           payload: sanitizedPayload,
           workflowKind: workflowPlan.kind,
-          workflowState: parseWorkflowState(workflowPlan.kind, sanitizedPayload),
-          sourceChannel: form.landingPageId ? "landing_page_form" : "form",
+          workflowState,
+          sourceChannel,
           structuredData: buildStructuredLeadData(sanitizedPayload),
           sourceUrl,
         })
@@ -257,6 +311,7 @@ export async function POST(
             .where(and(eq(leads.tenantId, tenant.id), eq(leads.id, lead!.id)));
 
           capturedContactId = contactId;
+          createdContactId = contactId;
 
           await tx.insert(crmTasks).values({
             tenantId: tenant.id,
@@ -264,15 +319,93 @@ export async function POST(
             title: workflowPlan.title,
             body: workflowPlan.body,
             meta: {
-              sourceChannel: form.landingPageId ? "landing_page_form" : "form",
+              sourceChannel,
               workflowKind: workflowPlan.kind,
-              workflowState: parseWorkflowState(workflowPlan.kind, sanitizedPayload),
+              workflowState,
               leadId: lead!.id,
               structuredData: buildStructuredLeadData(sanitizedPayload),
             },
             dueAt: buildLeadTaskDueAt(workflowPlan),
             priority: workflowPlan.priority,
           });
+
+          const marketingConsent = email ? readMarketingConsent(sanitizedPayload) : null;
+          if (email && marketingConsent !== null) {
+            await tx
+              .insert(emailPreferences)
+              .values({
+                tenantId: tenant.id,
+                contactId,
+                email,
+                marketingOptIn: marketingConsent,
+                source: "lead_capture_form",
+                consentSourceUrl: sourceUrl ?? null,
+                consentCapturedAt: new Date(),
+                consentMeta: {
+                  formId: form.id,
+                  formSlug,
+                  leadId: lead!.id,
+                  sourceChannel,
+                },
+              })
+              .onConflictDoUpdate({
+                target: [emailPreferences.tenantId, emailPreferences.email],
+                set: {
+                  contactId,
+                  marketingOptIn: marketingConsent,
+                  source: "lead_capture_form",
+                  consentSourceUrl: sourceUrl ?? null,
+                  consentCapturedAt: new Date(),
+                  consentMeta: {
+                    formId: form.id,
+                    formSlug,
+                    leadId: lead!.id,
+                    sourceChannel,
+                  },
+                  updatedAt: new Date(),
+                },
+              });
+          }
+
+          const smsConsent = rawPhone ? readSmsConsent(sanitizedPayload) : null;
+          if (rawPhone && smsConsent !== null) {
+            await tx
+              .insert(smsPreferences)
+              .values({
+                tenantId: tenant.id,
+                contactId,
+                phone: rawPhone,
+                marketingOptIn: smsConsent,
+                status: "active",
+                source: "lead_capture_form",
+                consentSourceUrl: sourceUrl ?? null,
+                consentCapturedAt: new Date(),
+                consentMeta: {
+                  formId: form.id,
+                  formSlug,
+                  leadId: lead!.id,
+                  sourceChannel,
+                },
+              })
+              .onConflictDoUpdate({
+                target: [smsPreferences.tenantId, smsPreferences.phone],
+                set: {
+                  contactId,
+                  marketingOptIn: smsConsent,
+                  status: "active",
+                  source: "lead_capture_form",
+                  consentSourceUrl: sourceUrl ?? null,
+                  consentCapturedAt: new Date(),
+                  consentMeta: {
+                    formId: form.id,
+                    formSlug,
+                    leadId: lead!.id,
+                    sourceChannel,
+                  },
+                  updatedAt: new Date(),
+                },
+              });
+          }
 
           if (anonymousId) {
             await tx
@@ -290,6 +423,7 @@ export async function POST(
       }
 
       await tx.insert(outbox).values({
+        eventId: leadCapturedEventId,
         tenantId: tenant.id,
         type: "lead.captured",
         payload: {
@@ -300,6 +434,12 @@ export async function POST(
           contactId: capturedContactId,
           phone: rawPhone,
           leadKind: workflowPlan.kind,
+          sourceChannel,
+          sourceUrl,
+          landingPageId: form.landingPageId,
+          workflowState,
+          marketingConsent: readMarketingConsent(sanitizedPayload),
+          smsConsent: readSmsConsent(sanitizedPayload),
           lifecycleStage: "lead",
         },
       });
@@ -314,6 +454,28 @@ export async function POST(
       logger.warn(
         { err: String(err), tenantId: tenant.id, leadId: createdLeadId },
         "[form] follow-up job enqueue failed",
+      );
+    });
+  }
+  if (createdLeadId && createdContactId) {
+    await enqueueSmsSequenceTriggerJob({
+      tenantId: tenant.id,
+      eventId: leadCapturedEventId,
+      eventType: "lead.captured",
+      contactId: createdContactId,
+      leadId: createdLeadId,
+      payload: {
+        leadKind: workflowPlan.kind,
+        sourceChannel,
+        formId: form.id,
+        landingPageId: form.landingPageId,
+        workflowState,
+        smsConsent: readSmsConsent(sanitizedPayload),
+      },
+    }).catch((err) => {
+      logger.warn(
+        { err: String(err), tenantId: tenant.id, leadId: createdLeadId },
+        "[form] SMS sequence trigger enqueue failed",
       );
     });
   }

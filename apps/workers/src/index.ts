@@ -13,6 +13,11 @@ import "./queues/email-sequence-tick/worker";
 import "./queues/deal-summarize/worker";
 import "./queues/whatsapp-inbound/worker";
 import "./queues/lead-followup/worker";
+import "./queues/email-automation/worker";
+import "./queues/sms-send/worker";
+import "./queues/sms-sequence/worker";
+import "./queues/sms-webhook/worker";
+import "./queues/sms-automation/worker";
 
 initOtel("marketing-workers");
 logger.info("Workers started — listening for jobs");

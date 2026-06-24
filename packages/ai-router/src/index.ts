@@ -77,6 +77,19 @@ export {
   landingPageNavStyleSchema,
   LANDING_PAGE_QUEUE_NAME,
 } from "./queues/landing-page.schema";
+export {
+  leadCapturePresetSchema,
+  leadCaptureChannelSchema,
+  leadKindSchema,
+  LEAD_CAPTURE_PRESETS,
+  resolveLeadCapturePreset,
+} from "./queues/lead-capture-presets";
+export type {
+  LeadCapturePreset,
+  LeadCaptureChannel,
+  LeadKind,
+  LeadCapturePresetConfig,
+} from "./queues/lead-capture-presets";
 export { enhanceCompositionWithWebsite, hasValidWebsiteShell } from "./queues/website-plan";
 export {
   SECTION_VARIANTS,
@@ -172,3 +185,31 @@ export type {
   ConditionalShowIf,
   AIBuildFormOutput,
 } from "./queues/form.schema";
+export {
+  emailAutomationJobSchema,
+  emailAutomationKindSchema,
+  emailAutomationIntentSchema,
+  EMAIL_AUTOMATION_QUEUE_NAME,
+} from "./queues/email-automation.schema";
+export type {
+  EmailAutomationJob,
+  EmailAutomationKind,
+  EmailAutomationIntent,
+} from "./queues/email-automation.schema";
+export {
+  smsAutomationJobSchema,
+  smsSendJobSchema,
+  smsSendPurposeSchema,
+  smsSequenceTriggerJobSchema,
+  SMS_AUTOMATION_QUEUE_NAME,
+  SMS_SEND_QUEUE_NAME,
+  SMS_SEQUENCE_TICK_QUEUE_NAME,
+  SMS_SEQUENCE_TRIGGER_QUEUE_NAME,
+  SMS_WEBHOOK_QUEUE_NAME,
+} from "./queues/sms-automation.schema";
+export type {
+  SmsAutomationJob,
+  SmsSendJob,
+  SmsSendPurpose,
+  SmsSequenceTriggerJob,
+} from "./queues/sms-automation.schema";

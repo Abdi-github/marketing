@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { trpc } from "../../../../../lib/trpc";
 
 type SendingDomain = Awaited<ReturnType<typeof trpc.sequences.listSendingDomains.query>>[number];
+type SenderSettings = Awaited<ReturnType<typeof trpc.sequences.getSenderSettings.query>>;
 
 function statusLabel(status: string): string {
   if (status === "verified") return "Verified";
@@ -29,10 +30,15 @@ export default function EmailSettingsPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [senderSettings, setSenderSettings] = useState<SenderSettings | null>(null);
 
   async function loadDomains() {
-    const rows = await trpc.sequences.listSendingDomains.query();
+    const [rows, settings] = await Promise.all([
+      trpc.sequences.listSendingDomains.query(),
+      trpc.sequences.getSenderSettings.query(),
+    ]);
     setDomains(rows);
+    setSenderSettings(settings);
   }
 
   useEffect(() => {
@@ -95,10 +101,49 @@ export default function EmailSettingsPage() {
         </div>
       )}
 
+      <section className="mb-6 rounded-xl border border-blue-100 bg-blue-50 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-blue-950">Current sending mode</h2>
+            <p className="mt-1 max-w-3xl text-sm text-blue-800">
+              {senderSettings?.mode === "tenant_domain"
+                ? "Emails are sent from your verified business domain."
+                : "Emails are sent from the platform sender. Customer replies go to your account email when available."}
+            </p>
+          </div>
+          <span
+            className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+              senderSettings?.mode === "tenant_domain"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                : "border-blue-200 bg-white text-blue-700"
+            }`}
+          >
+            {senderSettings?.mode === "tenant_domain" ? "Business sender" : "Platform sender"}
+          </span>
+        </div>
+        <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
+          <div className="rounded-lg bg-white px-4 py-3">
+            <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">From</div>
+            <div className="mt-1 break-all font-medium text-gray-900">
+              {senderSettings?.sender ?? "Loading..."}
+            </div>
+          </div>
+          <div className="rounded-lg bg-white px-4 py-3">
+            <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+              Reply-to
+            </div>
+            <div className="mt-1 break-all font-medium text-gray-900">
+              {senderSettings ? (senderSettings.replyTo ?? "Not available") : "Loading..."}
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5">
         <h2 className="text-lg font-semibold text-gray-900">Add sending domain</h2>
         <p className="mt-1 text-sm text-gray-500">
-          Use a domain you control. We will ask you to add a TXT record before it can send.
+          Optional for SMEs. Use this only if you own a domain and want emails to come directly from
+          your business address instead of the platform sender.
         </p>
         <div className="mt-5 grid gap-4 md:grid-cols-[1.3fr_1fr_0.7fr_auto]">
           <label className="grid gap-1 text-sm font-medium text-gray-700">
@@ -142,7 +187,8 @@ export default function EmailSettingsPage() {
         <div className="border-b border-gray-200 px-5 py-4">
           <h2 className="text-lg font-semibold text-gray-900">Sending domains</h2>
           <p className="mt-1 text-sm text-gray-500">
-            Verified primary domains are used as the sender for real email delivery.
+            Verified primary domains replace the platform sender. Without one, email automation
+            still works through the platform sender with replies routed to the account owner.
           </p>
         </div>
 

@@ -8,6 +8,7 @@ import { trpc } from "../../../../lib/trpc";
 type Connection = Awaited<ReturnType<typeof trpc.integrations.list.query>>[number];
 type SyncRun = Awaited<ReturnType<typeof trpc.integrations.listSyncRuns.query>>[number];
 type MetaWhatsappHealth = Awaited<ReturnType<typeof trpc.integrations.getMetaWhatsappHealth.query>>;
+type SmsHealth = Awaited<ReturnType<typeof trpc.integrations.getSmsHealth.query>>;
 
 const PROVIDER_META: Record<
   string,
@@ -79,6 +80,7 @@ function IntegrationsPageContent() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [syncRuns, setSyncRuns] = useState<SyncRun[]>([]);
   const [metaWhatsappHealth, setMetaWhatsappHealth] = useState<MetaWhatsappHealth | null>(null);
+  const [smsHealth, setSmsHealth] = useState<SmsHealth | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(
     metaParam === "denied"
@@ -101,17 +103,26 @@ function IntegrationsPageContent() {
   const [whatsappTestPhone, setWhatsappTestPhone] = useState("");
   const [whatsappTesting, setWhatsappTesting] = useState(false);
   const [whatsappTestResult, setWhatsappTestResult] = useState<string | null>(null);
+  const [smsTestPhone, setSmsTestPhone] = useState("");
+  const [smsTesting, setSmsTesting] = useState(false);
+  const [smsTestResult, setSmsTestResult] = useState<string | null>(null);
+  const [twilioAccountSid, setTwilioAccountSid] = useState("");
+  const [twilioAuthToken, setTwilioAuthToken] = useState("");
+  const [twilioFromNumber, setTwilioFromNumber] = useState("");
+  const [twilioConnecting, setTwilioConnecting] = useState(false);
 
   const loadConnections = useCallback(async () => {
     try {
-      const [data, runs, metaHealth] = await Promise.allSettled([
+      const [data, runs, metaHealth, sms] = await Promise.allSettled([
         trpc.integrations.list.query(),
         trpc.integrations.listSyncRuns.query({ limit: 20 }),
         trpc.integrations.getMetaWhatsappHealth.query(),
+        trpc.integrations.getSmsHealth.query(),
       ]);
       setConnections(data.status === "fulfilled" ? data.value : []);
       setSyncRuns(runs.status === "fulfilled" ? runs.value : []);
       setMetaWhatsappHealth(metaHealth.status === "fulfilled" ? metaHealth.value : null);
+      setSmsHealth(sms.status === "fulfilled" ? sms.value : null);
     } catch (err) {
       setError(err instanceof Error ? friendlyIntegrationError(err.message) : "Fehler beim Laden.");
     } finally {
@@ -214,6 +225,52 @@ function IntegrationsPageContent() {
       );
     } finally {
       setWhatsappTesting(false);
+    }
+  }
+
+  async function handleSmsTest(e: React.FormEvent) {
+    e.preventDefault();
+    if (!smsTestPhone.trim()) return;
+    setSmsTesting(true);
+    setSmsTestResult(null);
+    setError(null);
+    try {
+      const result = await trpc.integrations.sendSmsTestMessage.mutate({
+        toPhone: smsTestPhone.trim(),
+      });
+      setSmsTestResult(
+        result.sandbox
+          ? `Sandbox test recorded for ${result.toPhone}.`
+          : `Test SMS queued for ${result.toPhone} through ${result.provider}. Delivery will update shortly.`,
+      );
+      await loadConnections();
+    } catch (err) {
+      setSmsTestResult(null);
+      setError(err instanceof Error ? friendlyIntegrationError(err.message) : "SMS test failed.");
+      await loadConnections();
+    } finally {
+      setSmsTesting(false);
+    }
+  }
+
+  async function handleTwilioConnect(e: React.FormEvent) {
+    e.preventDefault();
+    setTwilioConnecting(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const result = await trpc.integrations.connectTwilio.mutate({
+        accountSid: twilioAccountSid.trim(),
+        authToken: twilioAuthToken.trim(),
+        fromNumber: twilioFromNumber.trim(),
+      });
+      setTwilioAuthToken("");
+      setSuccess(`Twilio connected with sender ${result.fromNumber}.`);
+      await loadConnections();
+    } catch (err) {
+      setError(err instanceof Error ? friendlyIntegrationError(err.message) : "Twilio failed.");
+    } finally {
+      setTwilioConnecting(false);
     }
   }
 
@@ -580,6 +637,311 @@ function IntegrationsPageContent() {
         ) : null}
       </section>
 
+      <section
+        style={{
+          border: "1px solid #e5e7eb",
+          borderRadius: 10,
+          background: "#fff",
+          padding: "1.25rem",
+          marginBottom: "1.5rem",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: "1rem",
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "0.55rem" }}>
+            <span
+              aria-hidden="true"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 34,
+                height: 34,
+                borderRadius: 8,
+                background: "#eff6ff",
+                color: "#2563eb",
+                fontWeight: 900,
+                fontSize: "0.9rem",
+              }}
+            >
+              SMS
+            </span>
+            <div>
+              <h2 style={{ fontSize: "1rem", fontWeight: 700, margin: 0 }}>SMS automation</h2>
+              <p style={{ color: "#6b7280", fontSize: "0.82rem", margin: "0.2rem 0 0" }}>
+                Send short lead acknowledgements and staff replies through the selected SMS
+                provider.
+              </p>
+            </div>
+          </div>
+          <span style={smsStatusBadgeStyle(smsHealth)}>{formatSmsStatus(smsHealth)}</span>
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            gap: "1rem",
+            marginTop: "1rem",
+          }}
+        >
+          <div
+            style={{
+              border: "1px solid #e2e8f0",
+              borderRadius: 8,
+              background: "#f8fafc",
+              padding: "1rem",
+            }}
+          >
+            <div style={{ color: "#0f172a", fontSize: "0.85rem", fontWeight: 750 }}>
+              Tenant workflow
+            </div>
+            <div style={{ display: "grid", gap: "0.45rem", marginTop: "0.7rem" }}>
+              <WhatsAppCapability
+                label="Phone-only leads can receive acknowledgement"
+                enabled={smsHealth?.configured === true}
+              />
+              <WhatsAppCapability
+                label="Staff can reply by SMS from CRM Inbox"
+                enabled={smsHealth?.configured === true}
+              />
+              <WhatsAppCapability
+                label="Failed SMS sends appear in automation attention"
+                enabled={true}
+              />
+              <WhatsAppCapability
+                label="Long messages are capped to avoid costly multi-part sends"
+                enabled={true}
+              />
+            </div>
+          </div>
+
+          <div
+            style={{
+              border: "1px solid #e2e8f0",
+              borderRadius: 8,
+              background: "#fff",
+              padding: "1rem",
+            }}
+          >
+            <div style={{ color: "#0f172a", fontSize: "0.85rem", fontWeight: 750 }}>
+              Operational summary
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+                gap: "0.65rem",
+                marginTop: "0.75rem",
+              }}
+            >
+              <MiniMetric label="Provider" value={smsHealth?.provider ?? "Not selected"} />
+              <MiniMetric label="Sender" value={smsHealth?.originator ?? "Marketing"} />
+              <MiniMetric label="Sent" value={String(smsHealth?.sentSends ?? 0)} />
+              <MiniMetric label="Failed" value={String(smsHealth?.failedSends ?? 0)} />
+            </div>
+            <p style={{ color: "#64748b", fontSize: "0.8rem", lineHeight: 1.45 }}>
+              {getSmsNextAction(smsHealth)}
+            </p>
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              <a href={`/${locale}/crm/inbox`} style={linkButtonStyle("#2563eb")}>
+                Open SMS inbox
+              </a>
+              <a href={`/${locale}/dashboard/setup`} style={linkButtonStyle("#475569")}>
+                Channel preference
+              </a>
+            </div>
+          </div>
+        </div>
+
+        <form
+          onSubmit={(event) => void handleSmsTest(event)}
+          style={{
+            marginTop: "1rem",
+            border: "1px solid #e2e8f0",
+            borderRadius: 8,
+            background: "#fff",
+            padding: "1rem",
+          }}
+        >
+          <label
+            style={{
+              display: "grid",
+              gap: "0.35rem",
+              color: "#0f172a",
+              fontSize: "0.85rem",
+              fontWeight: 750,
+            }}
+          >
+            Send a test SMS
+            <span style={{ color: "#64748b", fontSize: "0.78rem", fontWeight: 500 }}>
+              Use a verified Twilio trial recipient in international format, for example
+              +41761234567. This sends one real SMS and may use provider credit.
+            </span>
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              <input
+                value={smsTestPhone}
+                onChange={(event) => setSmsTestPhone(event.target.value)}
+                placeholder="+41761234567"
+                inputMode="tel"
+                style={{ ...inputStyle, maxWidth: 260 }}
+              />
+              <button
+                type="submit"
+                disabled={smsTesting || !smsTestPhone.trim() || smsHealth?.configured !== true}
+                style={btnStyle(
+                  smsTesting || !smsTestPhone.trim() || smsHealth?.configured !== true
+                    ? "#9ca3af"
+                    : "#2563eb",
+                )}
+              >
+                {smsTesting ? "Sending..." : "Send test"}
+              </button>
+            </div>
+          </label>
+          {smsTestResult ? (
+            <p style={{ color: "#15803d", fontSize: "0.8rem", margin: "0.65rem 0 0" }}>
+              {smsTestResult}
+            </p>
+          ) : null}
+        </form>
+
+        {smsHealth?.lastFailureMessage ? (
+          <div
+            style={{
+              marginTop: "0.9rem",
+              border: "1px solid #fecaca",
+              borderRadius: 8,
+              background: "#fef2f2",
+              color: "#991b1b",
+              padding: "0.75rem 0.85rem",
+              fontSize: "0.8rem",
+              lineHeight: 1.45,
+            }}
+          >
+            Last SMS problem: {smsHealth.lastFailureMessage}
+          </div>
+        ) : null}
+
+        <details
+          style={{
+            marginTop: "0.9rem",
+            borderTop: "1px solid #e2e8f0",
+            paddingTop: "0.9rem",
+          }}
+        >
+          <summary
+            style={{
+              cursor: "pointer",
+              color: "#475569",
+              fontSize: "0.8rem",
+              fontWeight: 700,
+            }}
+          >
+            Advanced SMS details
+          </summary>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              gap: "0.75rem",
+              marginTop: "0.8rem",
+            }}
+          >
+            <HealthCard
+              label="Credentials"
+              value={smsHealth?.configured ? "Configured" : "Missing"}
+              tone={smsHealth?.configured ? "#16a34a" : "#dc2626"}
+            />
+            <HealthCard
+              label="Last outbound"
+              value={
+                smsHealth?.lastOutboundAt ? formatDate(smsHealth.lastOutboundAt) : "No SMS yet"
+              }
+              tone="#2563eb"
+            />
+            <HealthCard
+              label="Last status"
+              value={smsHealth?.lastOutboundStatus ?? "No status yet"}
+              tone={smsHealth?.lastOutboundStatus === "failed" ? "#dc2626" : "#475569"}
+            />
+            <HealthCard
+              label="Last recipient"
+              value={smsHealth?.lastRecipient ?? "None"}
+              tone="#475569"
+            />
+          </div>
+          <form
+            onSubmit={(event) => void handleTwilioConnect(event)}
+            style={{
+              marginTop: "1rem",
+              borderTop: "1px solid #e2e8f0",
+              paddingTop: "1rem",
+            }}
+          >
+            <div style={{ color: "#0f172a", fontSize: "0.85rem", fontWeight: 750 }}>
+              Connect this tenant's Twilio account
+            </div>
+            <p style={{ color: "#64748b", fontSize: "0.78rem", lineHeight: 1.45 }}>
+              Tenant credentials take priority over platform demo credentials and are encrypted at
+              rest. The auth token is never displayed again.
+            </p>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
+                gap: "0.65rem",
+              }}
+            >
+              <input
+                value={twilioAccountSid}
+                onChange={(event) => setTwilioAccountSid(event.target.value)}
+                placeholder="Account SID (AC...)"
+                autoComplete="off"
+                style={inputStyle}
+              />
+              <input
+                type="password"
+                value={twilioAuthToken}
+                onChange={(event) => setTwilioAuthToken(event.target.value)}
+                placeholder="Auth token"
+                autoComplete="new-password"
+                style={inputStyle}
+              />
+              <input
+                value={twilioFromNumber}
+                onChange={(event) => setTwilioFromNumber(event.target.value)}
+                placeholder="Sender number (+1...)"
+                inputMode="tel"
+                style={inputStyle}
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={
+                twilioConnecting ||
+                !twilioAccountSid.trim() ||
+                !twilioAuthToken.trim() ||
+                !twilioFromNumber.trim()
+              }
+              style={{
+                ...btnStyle(twilioConnecting ? "#9ca3af" : "#0f172a"),
+                marginTop: "0.75rem",
+              }}
+            >
+              {twilioConnecting ? "Connecting..." : "Save Twilio connection"}
+            </button>
+          </form>
+        </details>
+      </section>
+
       {success && (
         <p
           style={{
@@ -913,6 +1275,34 @@ function HealthCard({ label, value, tone }: { label: string; value: string; tone
   );
 }
 
+function MiniMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div
+      style={{
+        border: "1px solid #f1f5f9",
+        borderRadius: 8,
+        padding: "0.65rem",
+        background: "#fafafa",
+      }}
+    >
+      <div style={{ color: "#64748b", fontSize: "0.72rem", fontWeight: 700 }}>{label}</div>
+      <div
+        style={{
+          color: "#111827",
+          fontSize: "0.9rem",
+          fontWeight: 800,
+          marginTop: "0.2rem",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
 function WhatsAppCapability({ label, enabled }: { label: string; enabled: boolean }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.82rem" }}>
@@ -996,6 +1386,44 @@ function whatsappStatusBadgeStyle(health: MetaWhatsappHealth | null): React.CSSP
         : health.status === "token_expired" || health.status === "error"
           ? "#dc2626"
           : "#64748b";
+
+  return {
+    borderRadius: 999,
+    background: `${color}18`,
+    color,
+    fontSize: "0.75rem",
+    fontWeight: 800,
+    padding: "0.25rem 0.6rem",
+    whiteSpace: "nowrap",
+  };
+}
+
+function formatSmsStatus(health: SmsHealth | null): string {
+  if (!health) return "Setup needed";
+  if (health.status === "ready") return "Ready";
+  if (health.status === "attention") return "Needs attention";
+  return "Not configured";
+}
+
+function getSmsNextAction(health: SmsHealth | null): string {
+  if (!health || !health.configured) {
+    const missing = health?.missing?.length ? ` Missing: ${health.missing.join(", ")}.` : "";
+    return `Configure the selected SMS provider to enable acknowledgements and manual SMS replies.${missing}`;
+  }
+  if (health.status === "attention") {
+    return "Review the failed SMS in the Inbox, then confirm the recipient number and selected provider account state.";
+  }
+  return "SMS is ready. Use it for phone-only leads, fallback confirmations, and short staff replies from the Inbox.";
+}
+
+function smsStatusBadgeStyle(health: SmsHealth | null): React.CSSProperties {
+  const color = !health
+    ? "#64748b"
+    : health.status === "ready"
+      ? "#16a34a"
+      : health.status === "attention"
+        ? "#dc2626"
+        : "#64748b";
 
   return {
     borderRadius: 999,

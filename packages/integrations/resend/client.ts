@@ -5,6 +5,7 @@
 export interface ResendEmailOptions {
   apiKey: string;
   from: string;
+  replyTo?: string;
   to: string;
   subject: string;
   html: string;
@@ -25,6 +26,7 @@ export async function sendViaResend(opts: ResendEmailOptions): Promise<ResendSen
     },
     body: JSON.stringify({
       from: opts.from,
+      reply_to: opts.replyTo,
       to: [opts.to],
       subject: opts.subject,
       html: opts.html,
