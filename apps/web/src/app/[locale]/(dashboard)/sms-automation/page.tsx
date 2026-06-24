@@ -4,6 +4,7 @@ import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { trpc } from "../../../../lib/trpc";
 
 type Overview = Awaited<ReturnType<typeof trpc.smsAutomation.overview.query>>;
+type BusinessSmsSettings = Awaited<ReturnType<typeof trpc.sms.getBusinessSmsSettings.query>>;
 type SequenceStepDraft = {
   templateId: string;
   delayMinutes: number;
@@ -12,6 +13,7 @@ type SequenceStepDraft = {
 
 export default function SmsAutomationPage() {
   const [overview, setOverview] = useState<Overview | null>(null);
+  const [smsSettings, setSmsSettings] = useState<BusinessSmsSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -35,7 +37,12 @@ export default function SmsAutomationPage() {
 
   async function load() {
     try {
-      setOverview(await trpc.smsAutomation.overview.query());
+      const [nextOverview, nextSmsSettings] = await Promise.all([
+        trpc.smsAutomation.overview.query(),
+        trpc.sms.getBusinessSmsSettings.query(),
+      ]);
+      setOverview(nextOverview);
+      setSmsSettings(nextSmsSettings);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not load SMS automation.");
     }
@@ -165,6 +172,41 @@ export default function SmsAutomationPage() {
           Install restaurant presets
         </button>
       </div>
+
+      <section className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-lg border border-gray-200 bg-white p-4">
+          <div className="text-xs font-semibold uppercase text-gray-500">Plan</div>
+          <div className="mt-1 text-lg font-bold capitalize text-gray-950">
+            {smsSettings?.plan ?? "trial"}
+          </div>
+        </div>
+        <div className="rounded-lg border border-gray-200 bg-white p-4">
+          <div className="text-xs font-semibold uppercase text-gray-500">Monthly SMS</div>
+          <div className="mt-1 text-lg font-bold text-gray-950">
+            {smsSettings?.entitlement.monthlyUsed ?? 0}/{smsSettings?.entitlement.monthlyLimit ?? 0}
+          </div>
+        </div>
+        <div className="rounded-lg border border-gray-200 bg-white p-4">
+          <div className="text-xs font-semibold uppercase text-gray-500">Remaining</div>
+          <div className="mt-1 text-lg font-bold text-gray-950">
+            {smsSettings?.entitlement.remainingMonthly ?? 0}
+          </div>
+        </div>
+        <div className="rounded-lg border border-gray-200 bg-white p-4">
+          <div className="text-xs font-semibold uppercase text-gray-500">Business phone</div>
+          <div className="mt-1 truncate text-lg font-bold text-gray-950">
+            {smsSettings?.businessPhone ?? "Not verified"}
+          </div>
+        </div>
+      </section>
+
+      {smsSettings && !smsSettings.entitlement.allowed ? (
+        <p className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          {smsSettings.entitlement.reason === "monthly_limit_reached"
+            ? "The monthly SMS limit is reached. Pause non-essential sequences or upgrade the plan."
+            : "Real SMS automation is available on Starter and Growth plans. You can still prepare templates before upgrading."}
+        </p>
+      ) : null}
 
       {notice ? (
         <p className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">

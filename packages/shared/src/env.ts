@@ -1,5 +1,14 @@
 import { z } from "zod";
 
+const optionalUrl = z.preprocess((value) => {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}, z.string().url().optional());
+
 const schema = z.object({
   // ─── Runtime ───────────────────────────────────────────────────────────────
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -129,8 +138,8 @@ const schema = z.object({
   TWILIO_MESSAGING_SERVICE_SID: z.string().optional(),
   SMS_TEST_MODE_ENABLED: z.enum(["true", "false"]).default("false"),
   SMS_TEST_TENANT_SLUG: z.string().optional(),
-  SMS_INBOUND_CALLBACK_URL: z.string().url().optional(),
-  SMS_STATUS_CALLBACK_URL: z.string().url().optional(),
+  SMS_INBOUND_CALLBACK_URL: optionalUrl,
+  SMS_STATUS_CALLBACK_URL: optionalUrl,
   SMS_DAILY_TENANT_CAP: z.coerce.number().int().positive().default(100),
   SMS_DAILY_CONTACT_CAP: z.coerce.number().int().positive().default(6),
 });

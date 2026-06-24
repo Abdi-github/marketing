@@ -5,18 +5,21 @@ describe("getPlanCaps", () => {
   it("returns trial caps for 'trial'", () => {
     const caps = getPlanCaps("trial");
     expect(caps.monthlyAiBudgetUsd).toBe(1.0);
+    expect(caps.monthlySmsLimit).toBe(0);
     expect(caps.perJobBudgetCents).toBe(50);
   });
 
   it("returns starter caps for 'starter'", () => {
     const caps = getPlanCaps("starter");
     expect(caps.monthlyAiBudgetUsd).toBe(10.0);
+    expect(caps.monthlySmsLimit).toBe(50);
     expect(caps.perJobBudgetCents).toBe(50);
   });
 
   it("returns growth caps for 'growth'", () => {
     const caps = getPlanCaps("growth");
     expect(caps.monthlyAiBudgetUsd).toBe(40.0);
+    expect(caps.monthlySmsLimit).toBe(500);
     expect(caps.perJobBudgetCents).toBe(50);
   });
 

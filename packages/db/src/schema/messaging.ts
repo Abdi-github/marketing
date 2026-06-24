@@ -32,6 +32,12 @@ export const waTemplateStatusEnum = pgEnum("wa_template_status", [
   "approved",
   "rejected",
 ]);
+export const smsPhoneVerificationStatusEnum = pgEnum("sms_phone_verification_status", [
+  "pending",
+  "verified",
+  "expired",
+  "failed",
+]);
 
 // ─── whatsapp_templates ────────────────────────────────────────────────────────
 
@@ -214,11 +220,35 @@ export const smsAutomationJobs = pgTable(
   ],
 );
 
+export const smsPhoneVerifications = pgTable(
+  "sms_phone_verifications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    phone: text("phone").notNull(),
+    codeHash: text("code_hash").notNull(),
+    status: smsPhoneVerificationStatusEnum("status").notNull().default("pending"),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    resendCount: integer("resend_count").notNull().default(0),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("sms_phone_verifications_tenant_idx").on(t.tenantId, t.createdAt),
+    index("sms_phone_verifications_phone_idx").on(t.tenantId, t.phone),
+  ],
+);
+
 export type SmsTemplate = typeof smsTemplates.$inferSelect;
 export type SmsSequence = typeof smsSequences.$inferSelect;
 export type SmsSequenceEnrollment = typeof smsSequenceEnrollments.$inferSelect;
 export type SmsPreference = typeof smsPreferences.$inferSelect;
 export type SmsAutomationJob = typeof smsAutomationJobs.$inferSelect;
+export type SmsPhoneVerification = typeof smsPhoneVerifications.$inferSelect;
 
 export interface SmsSequenceStep {
   delay_minutes: number;

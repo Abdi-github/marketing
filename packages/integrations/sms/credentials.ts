@@ -8,7 +8,7 @@ export type SmsCredentialConnection = {
 
 export type ResolvedSmsCredentials = SmsProviderEnv & {
   provider: SmsProviderKey;
-  mode: "tenant_connection" | "platform_test";
+  mode: "tenant_connection" | "platform_test" | "platform_managed";
   senderAddress: string;
 };
 
@@ -27,6 +27,7 @@ export function resolveSmsCredentials(input: {
   tenantSlug: string | null;
   connection: SmsCredentialConnection | null;
   env: SmsCredentialEnv;
+  allowPlatformManaged?: boolean;
 }): ResolvedSmsCredentials | null {
   if (input.connection && input.env.INTEGRATION_ENCRYPTION_KEY) {
     try {
@@ -60,13 +61,50 @@ export function resolveSmsCredentials(input: {
     }
   }
 
+  const provider = input.env.SMS_PROVIDER ?? "aspsms";
+  if (input.allowPlatformManaged) {
+    if (provider === "twilio") {
+      if (
+        !input.env.TWILIO_ACCOUNT_SID ||
+        !input.env.TWILIO_AUTH_TOKEN ||
+        (!input.env.TWILIO_FROM_NUMBER && !input.env.TWILIO_MESSAGING_SERVICE_SID)
+      ) {
+        return null;
+      }
+      return {
+        ...input.env,
+        provider,
+        mode: "platform_managed",
+        senderAddress:
+          input.env.TWILIO_MESSAGING_SERVICE_SID ?? input.env.TWILIO_FROM_NUMBER ?? "Twilio",
+      };
+    }
+
+    if (provider === "sandbox") {
+      return {
+        ...input.env,
+        provider,
+        mode: "platform_managed",
+        senderAddress: "SMS Sandbox",
+      };
+    }
+
+    if (input.env.ASPSMS_USER_KEY && input.env.ASPSMS_PASSWORD) {
+      return {
+        ...input.env,
+        provider,
+        mode: "platform_managed",
+        senderAddress: input.env.ASPSMS_ORIGINATOR ?? "Marketing",
+      };
+    }
+  }
+
   const isTestTenant =
     input.env.SMS_TEST_MODE_ENABLED === "true" &&
     Boolean(input.env.SMS_TEST_TENANT_SLUG) &&
     input.tenantSlug === input.env.SMS_TEST_TENANT_SLUG;
   if (!isTestTenant) return null;
 
-  const provider = input.env.SMS_PROVIDER ?? "aspsms";
   if (provider === "twilio") {
     if (
       !input.env.TWILIO_ACCOUNT_SID ||

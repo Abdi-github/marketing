@@ -9,6 +9,7 @@ type Connection = Awaited<ReturnType<typeof trpc.integrations.list.query>>[numbe
 type SyncRun = Awaited<ReturnType<typeof trpc.integrations.listSyncRuns.query>>[number];
 type MetaWhatsappHealth = Awaited<ReturnType<typeof trpc.integrations.getMetaWhatsappHealth.query>>;
 type SmsHealth = Awaited<ReturnType<typeof trpc.integrations.getSmsHealth.query>>;
+type BusinessSmsSettings = Awaited<ReturnType<typeof trpc.sms.getBusinessSmsSettings.query>>;
 
 const PROVIDER_META: Record<
   string,
@@ -81,6 +82,7 @@ function IntegrationsPageContent() {
   const [syncRuns, setSyncRuns] = useState<SyncRun[]>([]);
   const [metaWhatsappHealth, setMetaWhatsappHealth] = useState<MetaWhatsappHealth | null>(null);
   const [smsHealth, setSmsHealth] = useState<SmsHealth | null>(null);
+  const [businessSmsSettings, setBusinessSmsSettings] = useState<BusinessSmsSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(
     metaParam === "denied"
@@ -106,23 +108,24 @@ function IntegrationsPageContent() {
   const [smsTestPhone, setSmsTestPhone] = useState("");
   const [smsTesting, setSmsTesting] = useState(false);
   const [smsTestResult, setSmsTestResult] = useState<string | null>(null);
-  const [twilioAccountSid, setTwilioAccountSid] = useState("");
-  const [twilioAuthToken, setTwilioAuthToken] = useState("");
-  const [twilioFromNumber, setTwilioFromNumber] = useState("");
-  const [twilioConnecting, setTwilioConnecting] = useState(false);
+  const [businessPhoneInput, setBusinessPhoneInput] = useState("");
+  const [verificationCode, setVerificationCode] = useState("");
+  const [phoneVerificationBusy, setPhoneVerificationBusy] = useState(false);
 
   const loadConnections = useCallback(async () => {
     try {
-      const [data, runs, metaHealth, sms] = await Promise.allSettled([
+      const [data, runs, metaHealth, sms, smsSettings] = await Promise.allSettled([
         trpc.integrations.list.query(),
         trpc.integrations.listSyncRuns.query({ limit: 20 }),
         trpc.integrations.getMetaWhatsappHealth.query(),
         trpc.integrations.getSmsHealth.query(),
+        trpc.sms.getBusinessSmsSettings.query(),
       ]);
       setConnections(data.status === "fulfilled" ? data.value : []);
       setSyncRuns(runs.status === "fulfilled" ? runs.value : []);
       setMetaWhatsappHealth(metaHealth.status === "fulfilled" ? metaHealth.value : null);
       setSmsHealth(sms.status === "fulfilled" ? sms.value : null);
+      setBusinessSmsSettings(smsSettings.status === "fulfilled" ? smsSettings.value : null);
     } catch (err) {
       setError(err instanceof Error ? friendlyIntegrationError(err.message) : "Fehler beim Laden.");
     } finally {
@@ -253,24 +256,47 @@ function IntegrationsPageContent() {
     }
   }
 
-  async function handleTwilioConnect(e: React.FormEvent) {
+  async function handleStartPhoneVerification(e: React.FormEvent) {
     e.preventDefault();
-    setTwilioConnecting(true);
+    if (!businessPhoneInput.trim()) return;
+    setPhoneVerificationBusy(true);
     setError(null);
     setSuccess(null);
     try {
-      const result = await trpc.integrations.connectTwilio.mutate({
-        accountSid: twilioAccountSid.trim(),
-        authToken: twilioAuthToken.trim(),
-        fromNumber: twilioFromNumber.trim(),
+      const result = await trpc.sms.startBusinessPhoneVerification.mutate({
+        phone: businessPhoneInput.trim(),
       });
-      setTwilioAuthToken("");
-      setSuccess(`Twilio connected with sender ${result.fromNumber}.`);
+      setSuccess(`Verification code sent to ${result.phone}.`);
       await loadConnections();
     } catch (err) {
-      setError(err instanceof Error ? friendlyIntegrationError(err.message) : "Twilio failed.");
+      setError(
+        err instanceof Error ? friendlyIntegrationError(err.message) : "Phone verification failed.",
+      );
     } finally {
-      setTwilioConnecting(false);
+      setPhoneVerificationBusy(false);
+    }
+  }
+
+  async function handleConfirmPhoneVerification(e: React.FormEvent) {
+    e.preventDefault();
+    if (!verificationCode.trim()) return;
+    setPhoneVerificationBusy(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const result = await trpc.sms.confirmBusinessPhoneVerification.mutate({
+        code: verificationCode.trim(),
+      });
+      setVerificationCode("");
+      setBusinessPhoneInput("");
+      setSuccess(`Business phone ${result.phone} verified.`);
+      await loadConnections();
+    } catch (err) {
+      setError(
+        err instanceof Error ? friendlyIntegrationError(err.message) : "Phone confirmation failed.",
+      );
+    } finally {
+      setPhoneVerificationBusy(false);
     }
   }
 
@@ -676,8 +702,8 @@ function IntegrationsPageContent() {
             <div>
               <h2 style={{ fontSize: "1rem", fontWeight: 700, margin: 0 }}>SMS automation</h2>
               <p style={{ color: "#6b7280", fontSize: "0.82rem", margin: "0.2rem 0 0" }}>
-                Send short lead acknowledgements and staff replies through the selected SMS
-                provider.
+                Send short lead acknowledgements and staff replies through the platform-managed SMS
+                sender.
               </p>
             </div>
           </div>
@@ -713,6 +739,10 @@ function IntegrationsPageContent() {
                 enabled={smsHealth?.configured === true}
               />
               <WhatsAppCapability
+                label="Business phone is verified for trust and contact details"
+                enabled={Boolean(smsHealth?.verifiedBusinessPhone)}
+              />
+              <WhatsAppCapability
                 label="Failed SMS sends appear in automation attention"
                 enabled={true}
               />
@@ -742,9 +772,24 @@ function IntegrationsPageContent() {
                 marginTop: "0.75rem",
               }}
             >
-              <MiniMetric label="Provider" value={smsHealth?.provider ?? "Not selected"} />
-              <MiniMetric label="Sender" value={smsHealth?.originator ?? "Marketing"} />
-              <MiniMetric label="Sent" value={String(smsHealth?.sentSends ?? 0)} />
+              <MiniMetric label="Plan" value={smsHealth?.plan ?? "trial"} />
+              <MiniMetric
+                label="Automation"
+                value={businessSmsSettings?.enabled === false ? "Paused" : "Enabled"}
+              />
+              <MiniMetric
+                label="Monthly limit"
+                value={String(smsHealth?.entitlement.monthlyLimit ?? 0)}
+              />
+              <MiniMetric
+                label="Remaining"
+                value={String(smsHealth?.entitlement.remainingMonthly ?? 0)}
+              />
+              <MiniMetric
+                label="Business phone"
+                value={smsHealth?.verifiedBusinessPhone ?? "Not verified"}
+              />
+              <MiniMetric label="Sender" value={smsHealth?.originator ?? "Platform sender"} />
               <MiniMetric label="Failed" value={String(smsHealth?.failedSends ?? 0)} />
             </div>
             <p style={{ color: "#64748b", fontSize: "0.8rem", lineHeight: 1.45 }}>
@@ -759,6 +804,92 @@ function IntegrationsPageContent() {
               </a>
             </div>
           </div>
+        </div>
+
+        <div
+          style={{
+            marginTop: "1rem",
+            border: "1px solid #e2e8f0",
+            borderRadius: 8,
+            background: "#fff",
+            padding: "1rem",
+          }}
+        >
+          <div style={{ color: "#0f172a", fontSize: "0.85rem", fontWeight: 750 }}>
+            Verify your business phone
+          </div>
+          <p style={{ color: "#64748b", fontSize: "0.78rem", lineHeight: 1.45 }}>
+            This proves the phone number belongs to your business. SMS messages still come from the
+            platform sender, but your verified phone is used for contact details, trust, and staff
+            workflow.
+          </p>
+          {smsHealth?.verifiedBusinessPhone ? (
+            <p style={{ color: "#15803d", fontSize: "0.85rem", fontWeight: 750 }}>
+              Verified: {smsHealth.verifiedBusinessPhone}
+            </p>
+          ) : (
+            <div style={{ display: "grid", gap: "0.75rem" }}>
+              <form
+                onSubmit={(event) => void handleStartPhoneVerification(event)}
+                style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}
+              >
+                <input
+                  value={businessPhoneInput}
+                  onChange={(event) => setBusinessPhoneInput(event.target.value)}
+                  placeholder="+41761234567"
+                  inputMode="tel"
+                  style={{ ...inputStyle, maxWidth: 260 }}
+                />
+                <button
+                  type="submit"
+                  disabled={
+                    phoneVerificationBusy ||
+                    !businessPhoneInput.trim() ||
+                    smsHealth?.configured !== true
+                  }
+                  style={btnStyle(
+                    phoneVerificationBusy ||
+                      !businessPhoneInput.trim() ||
+                      smsHealth?.configured !== true
+                      ? "#9ca3af"
+                      : "#2563eb",
+                  )}
+                >
+                  {phoneVerificationBusy ? "Sending..." : "Send code"}
+                </button>
+              </form>
+              <form
+                onSubmit={(event) => void handleConfirmPhoneVerification(event)}
+                style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}
+              >
+                <input
+                  value={verificationCode}
+                  onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, ""))}
+                  placeholder="6-digit code"
+                  inputMode="numeric"
+                  maxLength={6}
+                  style={{ ...inputStyle, maxWidth: 180 }}
+                />
+                <button
+                  type="submit"
+                  disabled={
+                    phoneVerificationBusy ||
+                    !verificationCode.trim() ||
+                    smsHealth?.phoneVerificationStatus !== "pending"
+                  }
+                  style={btnStyle(
+                    phoneVerificationBusy ||
+                      !verificationCode.trim() ||
+                      smsHealth?.phoneVerificationStatus !== "pending"
+                      ? "#9ca3af"
+                      : "#0f172a",
+                  )}
+                >
+                  Confirm code
+                </button>
+              </form>
+            </div>
+          )}
         </div>
 
         <form
@@ -782,8 +913,8 @@ function IntegrationsPageContent() {
           >
             Send a test SMS
             <span style={{ color: "#64748b", fontSize: "0.78rem", fontWeight: 500 }}>
-              Use a verified Twilio trial recipient in international format, for example
-              +41761234567. This sends one real SMS and may use provider credit.
+              Use an international number, for example +41761234567. This sends one real SMS from
+              the platform sender and counts toward the monthly plan limit.
             </span>
             <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
               <input
@@ -830,23 +961,23 @@ function IntegrationsPageContent() {
           </div>
         ) : null}
 
-        <details
+        <div
           style={{
             marginTop: "0.9rem",
             borderTop: "1px solid #e2e8f0",
             paddingTop: "0.9rem",
           }}
         >
-          <summary
+          <h3
             style={{
-              cursor: "pointer",
               color: "#475569",
               fontSize: "0.8rem",
               fontWeight: 700,
+              margin: 0,
             }}
           >
-            Advanced SMS details
-          </summary>
+            SMS delivery health
+          </h3>
           <div
             style={{
               display: "grid",
@@ -856,12 +987,12 @@ function IntegrationsPageContent() {
             }}
           >
             <HealthCard
-              label="Credentials"
-              value={smsHealth?.configured ? "Configured" : "Missing"}
+              label="Automation"
+              value={smsHealth?.configured ? "Available" : "Needs attention"}
               tone={smsHealth?.configured ? "#16a34a" : "#dc2626"}
             />
             <HealthCard
-              label="Last outbound"
+              label="Last message"
               value={
                 smsHealth?.lastOutboundAt ? formatDate(smsHealth.lastOutboundAt) : "No SMS yet"
               }
@@ -873,73 +1004,16 @@ function IntegrationsPageContent() {
               tone={smsHealth?.lastOutboundStatus === "failed" ? "#dc2626" : "#475569"}
             />
             <HealthCard
-              label="Last recipient"
+              label="Last customer"
               value={smsHealth?.lastRecipient ?? "None"}
               tone="#475569"
             />
           </div>
-          <form
-            onSubmit={(event) => void handleTwilioConnect(event)}
-            style={{
-              marginTop: "1rem",
-              borderTop: "1px solid #e2e8f0",
-              paddingTop: "1rem",
-            }}
-          >
-            <div style={{ color: "#0f172a", fontSize: "0.85rem", fontWeight: 750 }}>
-              Connect this tenant's Twilio account
-            </div>
-            <p style={{ color: "#64748b", fontSize: "0.78rem", lineHeight: 1.45 }}>
-              Tenant credentials take priority over platform demo credentials and are encrypted at
-              rest. The auth token is never displayed again.
-            </p>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
-                gap: "0.65rem",
-              }}
-            >
-              <input
-                value={twilioAccountSid}
-                onChange={(event) => setTwilioAccountSid(event.target.value)}
-                placeholder="Account SID (AC...)"
-                autoComplete="off"
-                style={inputStyle}
-              />
-              <input
-                type="password"
-                value={twilioAuthToken}
-                onChange={(event) => setTwilioAuthToken(event.target.value)}
-                placeholder="Auth token"
-                autoComplete="new-password"
-                style={inputStyle}
-              />
-              <input
-                value={twilioFromNumber}
-                onChange={(event) => setTwilioFromNumber(event.target.value)}
-                placeholder="Sender number (+1...)"
-                inputMode="tel"
-                style={inputStyle}
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={
-                twilioConnecting ||
-                !twilioAccountSid.trim() ||
-                !twilioAuthToken.trim() ||
-                !twilioFromNumber.trim()
-              }
-              style={{
-                ...btnStyle(twilioConnecting ? "#9ca3af" : "#0f172a"),
-                marginTop: "0.75rem",
-              }}
-            >
-              {twilioConnecting ? "Connecting..." : "Save Twilio connection"}
-            </button>
-          </form>
-        </details>
+          <p style={{ color: "#64748b", fontSize: "0.78rem", lineHeight: 1.45 }}>
+            SMS is handled by the platform. Verify the business phone, keep an eye on monthly usage,
+            and review failed messages here when customer follow-up needs attention.
+          </p>
+        </div>
       </section>
 
       {success && (
@@ -1400,20 +1474,31 @@ function whatsappStatusBadgeStyle(health: MetaWhatsappHealth | null): React.CSSP
 
 function formatSmsStatus(health: SmsHealth | null): string {
   if (!health) return "Setup needed";
+  if (health.status === "upgrade_required") return "Upgrade required";
+  if (health.configured && !health.verifiedBusinessPhone) return "Verify phone";
   if (health.status === "ready") return "Ready";
   if (health.status === "attention") return "Needs attention";
   return "Not configured";
 }
 
 function getSmsNextAction(health: SmsHealth | null): string {
+  if (health?.status === "upgrade_required") {
+    if (health.entitlement.reason === "monthly_limit_reached") {
+      return "The monthly SMS limit is reached. Upgrade the plan or wait until the next billing month.";
+    }
+    return "SMS automation is available on paid plans. Upgrade to Starter or Growth to enable real SMS.";
+  }
   if (!health || !health.configured) {
     const missing = health?.missing?.length ? ` Missing: ${health.missing.join(", ")}.` : "";
-    return `Configure the selected SMS provider to enable acknowledgements and manual SMS replies.${missing}`;
+    return `The platform SMS provider is not ready yet.${missing}`;
+  }
+  if (!health.verifiedBusinessPhone) {
+    return "Verify your business phone number so customers and staff can trust the SMS workflow.";
   }
   if (health.status === "attention") {
-    return "Review the failed SMS in the Inbox, then confirm the recipient number and selected provider account state.";
+    return "Review the failed SMS in the Inbox, then confirm the recipient number and platform sender state.";
   }
-  return "SMS is ready. Use it for phone-only leads, fallback confirmations, and short staff replies from the Inbox.";
+  return "SMS is ready. Use it for phone-only leads, reservation confirmations, and short staff replies from the Inbox.";
 }
 
 function smsStatusBadgeStyle(health: SmsHealth | null): React.CSSProperties {

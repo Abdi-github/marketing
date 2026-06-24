@@ -19,6 +19,7 @@ import { sequencesRouter } from "./sequences";
 import { tenancyRouter } from "./tenancy";
 import { uploadsRouter } from "./uploads";
 import { smsAutomationRouter } from "./sms-automation";
+import { smsRouter } from "./sms";
 
 export const appRouter = router({
   auth: authRouter,
@@ -39,6 +40,7 @@ export const appRouter = router({
   segments: segmentsRouter,
   sequences: sequencesRouter,
   smsAutomation: smsAutomationRouter,
+  sms: smsRouter,
   tenancy: tenancyRouter,
   uploads: uploadsRouter,
 });

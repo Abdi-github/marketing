@@ -6,6 +6,8 @@ export type PlanTier = "trial" | "starter" | "growth";
 export type PlanCaps = {
   /** Monthly AI spend cap in USD (hard limit, enforced via Redis counter). */
   monthlyAiBudgetUsd: number;
+  /** Monthly platform-managed SMS cap. 0 means SMS automation is not included. */
+  monthlySmsLimit: number;
   /** Per-job spend cap in US cents (hard limit per adapter call). */
   perJobBudgetCents: number;
   /** Human-readable display name. */
@@ -15,16 +17,19 @@ export type PlanCaps = {
 export const PLAN_CAPS: Record<PlanTier, PlanCaps> = {
   trial: {
     monthlyAiBudgetUsd: 1.0,
+    monthlySmsLimit: 0,
     perJobBudgetCents: 50,
     displayName: "Trial",
   },
   starter: {
     monthlyAiBudgetUsd: 10.0,
+    monthlySmsLimit: 50,
     perJobBudgetCents: 50,
     displayName: "Starter",
   },
   growth: {
     monthlyAiBudgetUsd: 40.0,
+    monthlySmsLimit: 500,
     perJobBudgetCents: 50,
     displayName: "Growth",
   },

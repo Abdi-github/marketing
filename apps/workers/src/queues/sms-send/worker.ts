@@ -6,9 +6,17 @@ import {
   smsPreferences,
   smsSequenceEnrollments,
   tenants,
+  usageRecords,
 } from "@marketing/db";
-import { resolveSmsCredentials, sendSmsViaConfiguredProvider } from "@marketing/integrations";
 import {
+  getSmsProviderHealth,
+  isSmsTestModeTenant,
+  resolveSmsCredentials,
+  sendSmsViaConfiguredProvider,
+} from "@marketing/integrations";
+import { getPlanCaps, smsUsageMonthStart } from "@marketing/billing";
+import {
+  evaluateSmsEntitlement,
   env,
   isSmsMarketingPurpose,
   logger,
@@ -40,7 +48,11 @@ async function processSmsSend(rawJob: Job<SmsSendJob>): Promise<void> {
 
   const [[tenant], [connectionRow], [preference], [tenantCount], [contactCount]] =
     await Promise.all([
-      db.select({ slug: tenants.slug }).from(tenants).where(eq(tenants.id, job.tenantId)).limit(1),
+      db
+        .select({ slug: tenants.slug, plan: tenants.plan })
+        .from(tenants)
+        .where(eq(tenants.id, job.tenantId))
+        .limit(1),
       db
         .select({
           oauthTokens: integrationConnections.oauthTokens,
@@ -96,6 +108,40 @@ async function processSmsSend(rawJob: Job<SmsSendJob>): Promise<void> {
     ]);
 
   if (!tenant) throw new Error("SMS tenant not found.");
+  const [monthlyUsage] = await db
+    .select({ total: sql<number>`coalesce(sum(${usageRecords.quantity}), 0)::int` })
+    .from(usageRecords)
+    .where(
+      and(
+        eq(usageRecords.tenantId, job.tenantId),
+        eq(usageRecords.metric, "sms_sent"),
+        gte(usageRecords.recordedAt, smsUsageMonthStart()),
+      ),
+    );
+  const demoModeAllowed = isSmsTestModeTenant(env, tenant.slug);
+  const providerConfigured = Boolean(connectionRow) || getSmsProviderHealth(env).configured;
+  const entitlement = evaluateSmsEntitlement({
+    monthlyLimit: getPlanCaps(tenant.plan).monthlySmsLimit,
+    monthlyUsed: Number(monthlyUsage?.total ?? 0),
+    providerConfigured,
+    demoModeAllowed,
+  });
+  if (!entitlement.allowed) {
+    await db
+      .update(messages)
+      .set({
+        status: "failed",
+        errorMessage:
+          entitlement.reason === "monthly_limit_reached"
+            ? "Monthly SMS limit reached. Upgrade or wait until next month."
+            : entitlement.reason === "plan_not_included"
+              ? "SMS automation is not included in this plan."
+              : "Platform SMS provider is not configured.",
+      })
+      .where(and(eq(messages.tenantId, job.tenantId), eq(messages.id, job.messageId)));
+    return;
+  }
+
   if (preference?.status === "opted_out" && isSmsMarketingPurpose(purpose)) {
     await db
       .update(messages)
@@ -126,6 +172,7 @@ async function processSmsSend(rawJob: Job<SmsSendJob>): Promise<void> {
         }
       : null,
     env,
+    allowPlatformManaged: entitlement.allowed,
   });
   if (!credentials) throw new Error("SMS credentials are not available for this tenant.");
 
@@ -154,6 +201,20 @@ async function processSmsSend(rawJob: Job<SmsSendJob>): Promise<void> {
         },
       })
       .where(and(eq(messages.tenantId, job.tenantId), eq(messages.id, job.messageId)));
+    if (!result.sandbox) {
+      await db.insert(usageRecords).values([
+        {
+          tenantId: job.tenantId,
+          metric: "sms_sent",
+          quantity: 1,
+        },
+        {
+          tenantId: job.tenantId,
+          metric: "sms_segments",
+          quantity: Math.max(1, result.segmentCount),
+        },
+      ]);
+    }
   } catch (error) {
     const finalAttempt = rawJob.attemptsMade + 1 >= Number(rawJob.opts.attempts ?? 1);
     if (finalAttempt) {

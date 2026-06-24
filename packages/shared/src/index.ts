@@ -49,6 +49,8 @@ export {
   normalizeSmsPhone,
 } from "./sms-automation";
 export type { SmsPurpose, SmsTriggerFilter } from "./sms-automation";
+export { evaluateSmsEntitlement } from "./sms-entitlements";
+export type { SmsEntitlement, SmsEntitlementInput, SmsEntitlementReason } from "./sms-entitlements";
 export {
   TENANT_LIFECYCLE_EVENTS,
   tenantFirstPostEmittedPayloadSchema,

@@ -1,13 +1,17 @@
 import { db } from "@marketing/db";
 import {
+  businessProfiles,
   integrationConnections,
   integrationSyncRuns,
   messages,
   outbox,
+  smsPhoneVerifications,
   socialPosts,
   tenants,
+  usageRecords,
 } from "@marketing/db";
 import { eq, and, desc, inArray, sql } from "drizzle-orm";
+import { getPlanCaps, smsUsageMonthStart } from "@marketing/billing";
 import {
   GastrofixAdapter,
   LightspeedChAdapter,
@@ -21,10 +25,16 @@ import {
   resolveWhatsappCredentials,
   getSmsProviderHealth,
   resolveSmsCredentials,
+  isSmsTestModeTenant,
   sendWhatsAppText,
   WhatsAppApiError,
 } from "@marketing/integrations";
-import { env, normalizeSmsPhone, summarizeWhatsappConnectionHealth } from "@marketing/shared";
+import {
+  env,
+  evaluateSmsEntitlement,
+  normalizeSmsPhone,
+  summarizeWhatsappConnectionHealth,
+} from "@marketing/shared";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
@@ -76,8 +86,12 @@ function getMetaAdapter(): MetaAdapter {
 }
 
 async function resolveSmsForTenant(tenantId: string) {
-  const [[tenant], [connection]] = await Promise.all([
-    db.select({ slug: tenants.slug }).from(tenants).where(eq(tenants.id, tenantId)).limit(1),
+  const [[tenant], [connection], [monthlyUsage]] = await Promise.all([
+    db
+      .select({ slug: tenants.slug, plan: tenants.plan })
+      .from(tenants)
+      .where(eq(tenants.id, tenantId))
+      .limit(1),
     db
       .select({
         oauthTokens: integrationConnections.oauthTokens,
@@ -92,9 +106,27 @@ async function resolveSmsForTenant(tenantId: string) {
         ),
       )
       .limit(1),
+    db
+      .select({ total: sql<number>`coalesce(sum(${usageRecords.quantity}), 0)::int` })
+      .from(usageRecords)
+      .where(
+        and(
+          eq(usageRecords.tenantId, tenantId),
+          eq(usageRecords.metric, "sms_sent"),
+          sql`${usageRecords.recordedAt} >= ${smsUsageMonthStart()}`,
+        ),
+      ),
   ]);
   if (!tenant) return null;
-  return resolveSmsCredentials({
+  const demoModeAllowed = isSmsTestModeTenant(env, tenant.slug);
+  const providerConfigured = Boolean(connection) || getSmsProviderHealth(env).configured;
+  const entitlement = evaluateSmsEntitlement({
+    monthlyLimit: getPlanCaps(tenant.plan).monthlySmsLimit,
+    monthlyUsed: Number(monthlyUsage?.total ?? 0),
+    providerConfigured,
+    demoModeAllowed,
+  });
+  const credentials = resolveSmsCredentials({
     tenantSlug: tenant.slug,
     connection: connection
       ? {
@@ -106,7 +138,9 @@ async function resolveSmsForTenant(tenantId: string) {
         }
       : null,
     env,
+    allowPlatformManaged: entitlement.allowed,
   });
+  return { credentials, entitlement, tenant, demoModeAllowed };
 }
 
 // ─── Router ───────────────────────────────────────────────────────────────────
@@ -230,57 +264,96 @@ export const integrationsRouter = router({
 
   getSmsHealth: tenantProcedure.query(async ({ ctx }) => {
     const { tenantId } = ctx.tenantCtx;
-    const credentials = await resolveSmsForTenant(tenantId);
-    const providerHealth = getSmsProviderHealth(credentials ?? { SMS_PROVIDER: env.SMS_PROVIDER });
+    const resolved = await resolveSmsForTenant(tenantId);
+    const credentials = resolved?.credentials ?? null;
+    const entitlement =
+      resolved?.entitlement ??
+      evaluateSmsEntitlement({
+        monthlyLimit: 0,
+        monthlyUsed: 0,
+        providerConfigured: getSmsProviderHealth(env).configured,
+      });
+    const providerHealth = getSmsProviderHealth(credentials ?? env);
 
-    const [[lastOutbound], [failedCount], [sentCount]] = await Promise.all([
-      db
-        .select({
-          occurredAt: messages.occurredAt,
-          status: messages.status,
-          errorMessage: messages.errorMessage,
-          toAddress: messages.toAddress,
-        })
-        .from(messages)
-        .where(
-          and(
-            eq(messages.tenantId, tenantId),
-            eq(messages.channel, "sms"),
-            eq(messages.direction, "outbound"),
+    const [[lastOutbound], [failedCount], [sentCount], [verification], [businessProfile]] =
+      await Promise.all([
+        db
+          .select({
+            occurredAt: messages.occurredAt,
+            status: messages.status,
+            errorMessage: messages.errorMessage,
+            toAddress: messages.toAddress,
+          })
+          .from(messages)
+          .where(
+            and(
+              eq(messages.tenantId, tenantId),
+              eq(messages.channel, "sms"),
+              eq(messages.direction, "outbound"),
+            ),
+          )
+          .orderBy(desc(messages.occurredAt))
+          .limit(1),
+        db
+          .select({ total: sql<number>`count(*)::int` })
+          .from(messages)
+          .where(
+            and(
+              eq(messages.tenantId, tenantId),
+              eq(messages.channel, "sms"),
+              eq(messages.direction, "outbound"),
+              eq(messages.status, "failed"),
+            ),
           ),
-        )
-        .orderBy(desc(messages.occurredAt))
-        .limit(1),
-      db
-        .select({ total: sql<number>`count(*)::int` })
-        .from(messages)
-        .where(
-          and(
-            eq(messages.tenantId, tenantId),
-            eq(messages.channel, "sms"),
-            eq(messages.direction, "outbound"),
-            eq(messages.status, "failed"),
+        db
+          .select({ total: sql<number>`count(*)::int` })
+          .from(messages)
+          .where(
+            and(
+              eq(messages.tenantId, tenantId),
+              eq(messages.channel, "sms"),
+              eq(messages.direction, "outbound"),
+              inArray(messages.status, ["sent", "delivered", "read"]),
+            ),
           ),
-        ),
-      db
-        .select({ total: sql<number>`count(*)::int` })
-        .from(messages)
-        .where(
-          and(
-            eq(messages.tenantId, tenantId),
-            eq(messages.channel, "sms"),
-            eq(messages.direction, "outbound"),
-            inArray(messages.status, ["sent", "delivered", "read"]),
-          ),
-        ),
-    ]);
+        db
+          .select({
+            phone: smsPhoneVerifications.phone,
+            status: smsPhoneVerifications.status,
+            verifiedAt: smsPhoneVerifications.verifiedAt,
+          })
+          .from(smsPhoneVerifications)
+          .where(eq(smsPhoneVerifications.tenantId, tenantId))
+          .orderBy(desc(smsPhoneVerifications.createdAt))
+          .limit(1),
+        db
+          .select({ leadCaptureSettings: businessProfiles.leadCaptureSettings })
+          .from(businessProfiles)
+          .where(eq(businessProfiles.tenantId, tenantId))
+          .limit(1),
+      ]);
 
     const failedSends = Number(failedCount?.total ?? 0);
+    const smsSettings =
+      businessProfile?.leadCaptureSettings &&
+      typeof businessProfile.leadCaptureSettings === "object" &&
+      !Array.isArray(businessProfile.leadCaptureSettings)
+        ? ((businessProfile.leadCaptureSettings as Record<string, unknown>)["sms"] as
+            | Record<string, unknown>
+            | undefined)
+        : undefined;
     return {
-      status: providerHealth.configured ? (failedSends > 0 ? "attention" : "ready") : "missing",
+      status: entitlement.allowed
+        ? failedSends > 0
+          ? "attention"
+          : "ready"
+        : entitlement.reason === "plan_not_included" ||
+            entitlement.reason === "monthly_limit_reached"
+          ? "upgrade_required"
+          : "missing",
       provider: providerHealth.providerLabel,
       providerKey: providerHealth.provider,
-      configured: providerHealth.configured,
+      configured: entitlement.allowed,
       originator: providerHealth.senderLabel,
       missing: providerHealth.missing,
       hasUserKey: providerHealth.configured,
@@ -293,6 +366,17 @@ export const integrationsRouter = router({
       sentSends: Number(sentCount?.total ?? 0),
       maxRecommendedChars: providerHealth.maxRecommendedChars,
       credentialMode: credentials?.mode ?? null,
+      entitlement,
+      plan: resolved?.tenant.plan ?? "trial",
+      demoModeAllowed: resolved?.demoModeAllowed ?? false,
+      verifiedBusinessPhone:
+        verification?.status === "verified"
+          ? verification.phone
+          : typeof smsSettings?.["businessPhone"] === "string"
+            ? (smsSettings["businessPhone"] as string)
+            : null,
+      phoneVerificationStatus: verification?.status ?? "not_started",
+      phoneVerifiedAt: verification?.verifiedAt ?? null,
     };
   }),
 
@@ -357,11 +441,17 @@ export const integrationsRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const { tenantId } = ctx.tenantCtx;
-      const credentials = await resolveSmsForTenant(tenantId);
+      const resolved = await resolveSmsForTenant(tenantId);
+      const credentials = resolved?.credentials ?? null;
       if (!credentials) {
         throw new TRPCError({
           code: "PRECONDITION_FAILED",
-          message: "SMS is not configured for this tenant.",
+          message:
+            resolved?.entitlement.reason === "plan_not_included"
+              ? "SMS automation is not included in this plan."
+              : resolved?.entitlement.reason === "monthly_limit_reached"
+                ? "Monthly SMS limit reached."
+                : "SMS is not configured for this tenant.",
         });
       }
 

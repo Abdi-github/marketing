@@ -19,9 +19,7 @@ export const stripeCustomers = pgTable("stripe_customers", {
     .primaryKey()
     .references(() => tenants.id, { onDelete: "cascade" }),
   stripeCustomerId: text("stripe_customer_id").notNull().unique(),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 // ─── subscription_status enum ─────────────────────────────────────────────────
@@ -53,12 +51,8 @@ export const subscriptions = pgTable(
       withTimezone: true,
     }).notNull(),
     cancelAt: timestamp("cancel_at", { withTimezone: true }),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("subscriptions_tenant_id_idx").on(t.tenantId)],
 );
@@ -70,6 +64,8 @@ export const usageMetricEnum = pgEnum("usage_metric", [
   "ai_tokens_out",
   "ai_cost_cents",
   "storage_bytes",
+  "sms_sent",
+  "sms_segments",
 ]);
 
 export const usageRecords = pgTable(
@@ -81,9 +77,7 @@ export const usageRecords = pgTable(
       .references(() => tenants.id, { onDelete: "cascade" }),
     metric: usageMetricEnum("metric").notNull(),
     quantity: integer("quantity").notNull(),
-    recordedAt: timestamp("recorded_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
     pushedToStripeAt: timestamp("pushed_to_stripe_at", { withTimezone: true }),
   },
   (t) => [index("usage_records_tenant_id_idx").on(t.tenantId)],
@@ -105,9 +99,7 @@ export const invoices = pgTable(
     pdfUrl: text("pdf_url"),
     dueAt: timestamp("due_at", { withTimezone: true }),
     paidAt: timestamp("paid_at", { withTimezone: true }),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("invoices_tenant_id_idx").on(t.tenantId)],
 );
@@ -128,16 +120,11 @@ export const webhookEvents = pgTable(
     payload: jsonb("payload").notNull(),
     /** HMAC signature header value from the provider (stored for audit). Added in migration 0005. */
     signature: text("signature"),
-    receivedAt: timestamp("received_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
     processedAt: timestamp("processed_at", { withTimezone: true }),
   },
   (t) => [
-    uniqueIndex("webhook_events_provider_event_id_unique").on(
-      t.provider,
-      t.eventId,
-    ),
+    uniqueIndex("webhook_events_provider_event_id_unique").on(t.provider, t.eventId),
     index("webhook_events_tenant_id_idx").on(t.tenantId),
   ],
 );
@@ -147,8 +134,7 @@ export type StripeCustomer = typeof stripeCustomers.$inferSelect;
 export type NewStripeCustomer = typeof stripeCustomers.$inferInsert;
 export type Subscription = typeof subscriptions.$inferSelect;
 export type NewSubscription = typeof subscriptions.$inferInsert;
-export type SubscriptionStatus =
-  (typeof subscriptionStatusEnum.enumValues)[number];
+export type SubscriptionStatus = (typeof subscriptionStatusEnum.enumValues)[number];
 export type UsageRecord = typeof usageRecords.$inferSelect;
 export type NewUsageRecord = typeof usageRecords.$inferInsert;
 export type Invoice = typeof invoices.$inferSelect;

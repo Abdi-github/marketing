@@ -112,4 +112,21 @@ describe("Twilio tenant credential resolution", () => {
       resolveSmsCredentials({ tenantSlug: "another-tenant", connection: null, env }),
     ).toBeNull();
   });
+
+  it("allows platform-managed credentials when entitlement has approved platform SMS", () => {
+    const resolved = resolveSmsCredentials({
+      tenantSlug: "paid-restaurant",
+      connection: null,
+      allowPlatformManaged: true,
+      env: {
+        SMS_PROVIDER: "twilio",
+        TWILIO_ACCOUNT_SID: `AC${"2".repeat(32)}`,
+        TWILIO_AUTH_TOKEN: "platform-auth-token",
+        TWILIO_FROM_NUMBER: "+15557654321",
+      },
+    });
+
+    expect(resolved?.mode).toBe("platform_managed");
+    expect(resolved?.senderAddress).toBe("+15557654321");
+  });
 });
