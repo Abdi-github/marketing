@@ -27,8 +27,11 @@ export default function LoginPage() {
         credentials: "include",
       });
 
-      if (!res.ok) {
+      if (res.status === 401 || res.status === 403) {
         throw new Error("invalid");
+      }
+      if (!res.ok) {
+        throw new Error("server");
       }
 
       window.location.href = `/${locale}/dashboard`;

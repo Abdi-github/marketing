@@ -18,6 +18,7 @@ const schema = z.object({
     .string()
     .url()
     .default("postgres://postgres:postgres@localhost:5432/marketing_dev"),
+  DATABASE_POOL_MAX: z.coerce.number().int().positive().optional(),
 
   // ─── Redis / Queue ────────────────────────────────────────────────────────
   REDIS_URL: z.string().url().default("redis://localhost:6379"),
