@@ -211,6 +211,7 @@ export const smsRouter = router({
       }
 
       const code = generateCode();
+      const verificationText = `${tenant.name}: Your verification code is ${code}. Use it to confirm your business phone number. It expires in 10 minutes.`;
       const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
       const [verification] = await db
         .insert(smsPhoneVerifications)
@@ -229,7 +230,7 @@ export const smsRouter = router({
           direction: "outbound",
           fromAddress: credentials.senderAddress,
           toAddress: phone,
-          body: `${tenant.name}: Your SMS verification code is ${code}. It expires in 10 minutes.`,
+          body: verificationText,
           messageType: "verification",
           status: "queued",
           meta: {
@@ -243,7 +244,7 @@ export const smsRouter = router({
       try {
         const result = await sendSmsViaConfiguredProvider(credentials, {
           to: phone,
-          text: `${tenant.name}: Your SMS verification code is ${code}. It expires in 10 minutes.`,
+          text: verificationText,
         });
         await db
           .update(messages)

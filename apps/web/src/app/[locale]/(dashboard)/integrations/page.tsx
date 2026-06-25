@@ -111,6 +111,7 @@ function IntegrationsPageContent() {
   const [businessPhoneInput, setBusinessPhoneInput] = useState("");
   const [verificationCode, setVerificationCode] = useState("");
   const [phoneVerificationBusy, setPhoneVerificationBusy] = useState(false);
+  const [phoneVerificationSent, setPhoneVerificationSent] = useState(false);
 
   const loadConnections = useCallback(async () => {
     try {
@@ -266,6 +267,7 @@ function IntegrationsPageContent() {
       const result = await trpc.sms.startBusinessPhoneVerification.mutate({
         phone: businessPhoneInput.trim(),
       });
+      setPhoneVerificationSent(true);
       setSuccess(`Verification code sent to ${result.phone}.`);
       await loadConnections();
     } catch (err) {
@@ -289,6 +291,7 @@ function IntegrationsPageContent() {
       });
       setVerificationCode("");
       setBusinessPhoneInput("");
+      setPhoneVerificationSent(false);
       setSuccess(`Business phone ${result.phone} verified.`);
       await loadConnections();
     } catch (err) {
@@ -307,6 +310,10 @@ function IntegrationsPageContent() {
   const smsPlan = smsHealth?.plan ?? businessSmsSettings?.plan ?? "trial";
   const smsVerifiedBusinessPhone =
     smsHealth?.verifiedBusinessPhone ?? businessSmsSettings?.businessPhone ?? null;
+  const smsPhoneVerificationPending =
+    phoneVerificationSent ||
+    smsHealth?.phoneVerificationStatus === "pending" ||
+    businessSmsSettings?.phoneVerificationStatus === "pending";
   const activeSyncConnectionIds = new Set(
     syncRuns
       .filter((run) => run.status === "queued" || run.status === "running")
@@ -872,13 +879,13 @@ function IntegrationsPageContent() {
                   type="submit"
                   disabled={
                     phoneVerificationBusy ||
-                    !verificationCode.trim() ||
-                    smsHealth?.phoneVerificationStatus !== "pending"
+                    verificationCode.trim().length !== 6 ||
+                    !smsPhoneVerificationPending
                   }
                   style={btnStyle(
                     phoneVerificationBusy ||
-                      !verificationCode.trim() ||
-                      smsHealth?.phoneVerificationStatus !== "pending"
+                      verificationCode.trim().length !== 6 ||
+                      !smsPhoneVerificationPending
                       ? "#9ca3af"
                       : "#0f172a",
                   )}
