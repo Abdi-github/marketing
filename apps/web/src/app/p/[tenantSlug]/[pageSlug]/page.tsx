@@ -34,7 +34,6 @@ import {
 import { selectLocalizedComposition } from "../../../../lib/landing-localization";
 import {
   compositionHasLeadCapture,
-  ensureLandingPageLeadForm,
   getLandingPageLeadForm,
 } from "../../../../lib/landing-page-forms";
 import { LANDING_THEME_GLOBAL_CSS, resolveLandingTheme } from "../../../../lib/landing-theme";
@@ -58,48 +57,52 @@ type Props = {
 // ─── SEO metadata ─────────────────────────────────────────────────────────────
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { tenantSlug, pageSlug } = await params;
+  try {
+    const { tenantSlug, pageSlug } = await params;
 
-  const [tenant] = await db
-    .select({ id: tenants.id })
-    .from(tenants)
-    .where(eq(tenants.slug, tenantSlug));
+    const [tenant] = await db
+      .select({ id: tenants.id })
+      .from(tenants)
+      .where(eq(tenants.slug, tenantSlug));
 
-  if (!tenant) return {};
+    if (!tenant) return {};
 
-  const [page] = await db
-    .select({
-      title: landingPages.title,
-      metaTitle: landingPages.metaTitle,
-      metaDescription: landingPages.metaDescription,
-      ogImageUrl: landingPages.ogImageUrl,
-      noindex: landingPages.noindex,
-      status: landingPages.status,
-    })
-    .from(landingPages)
-    .where(
-      and(
-        eq(landingPages.tenantId, tenant.id),
-        eq(landingPages.slug, pageSlug),
-        eq(landingPages.status, "published"),
-      ),
-    );
+    const [page] = await db
+      .select({
+        title: landingPages.title,
+        metaTitle: landingPages.metaTitle,
+        metaDescription: landingPages.metaDescription,
+        ogImageUrl: landingPages.ogImageUrl,
+        noindex: landingPages.noindex,
+        status: landingPages.status,
+      })
+      .from(landingPages)
+      .where(
+        and(
+          eq(landingPages.tenantId, tenant.id),
+          eq(landingPages.slug, pageSlug),
+          eq(landingPages.status, "published"),
+        ),
+      );
 
-  if (!page) return {};
+    if (!page) return {};
 
-  const title = page.metaTitle ?? page.title;
-  const description = page.metaDescription ?? undefined;
+    const title = page.metaTitle ?? page.title;
+    const description = page.metaDescription ?? undefined;
 
-  return {
-    title,
-    description,
-    robots: page.noindex ? { index: false, follow: false } : undefined,
-    openGraph: {
+    return {
       title,
       description,
-      images: page.ogImageUrl ? [{ url: page.ogImageUrl }] : undefined,
-    },
-  };
+      robots: page.noindex ? { index: false, follow: false } : undefined,
+      openGraph: {
+        title,
+        description,
+        images: page.ogImageUrl ? [{ url: page.ogImageUrl }] : undefined,
+      },
+    };
+  } catch {
+    return {};
+  }
 }
 
 // ─── Page render ──────────────────────────────────────────────────────────────
@@ -218,28 +221,10 @@ export default async function PublicLandingPage({ params, searchParams }: Props)
     renderComposition.sections.slice().sort((a, b) => a.order - b.order);
   const basePath = `/p/${tenantSlug}/${pageSlug}`;
 
-  const vertical =
-    ((stepData?.["wizardPayload"] as { vertical?: unknown } | undefined)?.vertical as
-      | string
-      | undefined) ?? undefined;
-  const goal =
-    ((stepData?.["wizardPayload"] as { goal?: unknown } | undefined)?.goal as string | undefined) ??
-    undefined;
-  let form = compositionHasLeadCapture(renderComposition)
-    ? await getLandingPageLeadForm(tenant.id, page.id)
+  const hasLeadCapture = compositionHasLeadCapture(renderComposition);
+  const form = hasLeadCapture
+    ? await getLandingPageLeadForm(tenant.id, page.id).catch(() => null)
     : null;
-  if (!form && compositionHasLeadCapture(renderComposition)) {
-    form = await ensureLandingPageLeadForm({
-      tenantId: tenant.id,
-      landingPageId: page.id,
-      pageTitle: page.title,
-      pageSlug,
-      locale: activeLocale,
-      vertical,
-      goal,
-      composition: renderComposition,
-    });
-  }
 
   const [brand] = await db.select().from(brandAssets).where(eq(brandAssets.tenantId, tenant.id));
 
