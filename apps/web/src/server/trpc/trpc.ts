@@ -1,4 +1,5 @@
 import { auth } from "@marketing/auth";
+import { logger } from "@marketing/shared";
 import { assertRole, buildTenantContext } from "@marketing/tenancy";
 import type { TenantContext } from "@marketing/tenancy";
 import type { TenantRole } from "@marketing/db";
@@ -15,7 +16,20 @@ export type Context = {
 
 export async function createContext(opts: FetchCreateContextFnOptions): Promise<Context> {
   const requestOrigin = new URL(opts.req.url).origin;
-  const session = await auth.api.getSession({ headers: opts.req.headers });
+  let session: Context["session"] = null;
+
+  try {
+    session = await auth.api.getSession({ headers: opts.req.headers });
+  } catch (error) {
+    logger.warn(
+      {
+        err: error instanceof Error ? error.message : String(error),
+        requestOrigin,
+      },
+      "[trpc] Failed to resolve auth session",
+    );
+    return { session: null, tenantCtx: null, requestOrigin };
+  }
 
   if (!session) {
     return { session: null, tenantCtx: null, requestOrigin };

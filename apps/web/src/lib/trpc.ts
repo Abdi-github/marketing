@@ -7,6 +7,12 @@ export const trpc = createTRPCClient<AppRouter>({
   links: [
     httpBatchLink({
       url: "/api/trpc",
+      fetch(url, options) {
+        return fetch(url, {
+          ...options,
+          credentials: "include",
+        });
+      },
     }),
   ],
 });
