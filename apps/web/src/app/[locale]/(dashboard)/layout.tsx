@@ -1,11 +1,10 @@
 import type { ReactNode } from "react";
-import { auth } from "@marketing/auth";
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { FloatingChat } from "@/components/copilot/floating-chat";
 import { isPlatformRole } from "@/lib/platform-access";
+import { getSafeServerSession } from "@/server/auth/safe-session";
 
 type Props = {
   children: ReactNode;
@@ -15,7 +14,11 @@ type Props = {
 export default async function DashboardLayout({ children, params }: Props) {
   const { locale } = await params;
   const t = await getTranslations({ locale, namespace: "Dashboard" });
-  const session = await auth.api.getSession({ headers: await headers() });
+  const session = await getSafeServerSession("dashboard-layout");
+
+  if (!session) {
+    redirect(`/${locale}/login`);
+  }
 
   if (isPlatformRole(session?.user.platformRole)) {
     redirect(`/${locale}/admins`);
