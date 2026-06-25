@@ -119,6 +119,10 @@ export default async function DuplicatesPage({ params }: Props) {
         </Link>
         <h1 className="mt-2 text-2xl font-bold text-gray-900">{t("title")}</h1>
         <p className="mt-1 text-sm text-gray-500">{t("subtitle")}</p>
+        <p className="mt-2 max-w-3xl text-sm leading-relaxed text-gray-500">
+          Duplicates happen when the same customer submits more than one form or uses different
+          contact details. Review carefully before merging so the customer history stays clean.
+        </p>
       </div>
 
       {groups.length === 0 ? (

@@ -1,0 +1,33 @@
+{
+  "generatedAt": "2026-06-25T22:52:01.247Z",
+  "baseUrl": "http://localhost:3000",
+  "reservation": {
+    "lead_id": "15dfadc6-4fba-4690-ad38-8b9d2ebc8589",
+    "workflow_kind": "booking",
+    "workflow_state": "awaiting_confirmation",
+    "status": "new",
+    "submitted_at": "2026-06-25T21:13:23.414Z",
+    "contact_id": "35405558-f993-42c0-9905-993898852d60",
+    "first_name": "Abdi",
+    "last_name": "Dupont",
+    "email": "wa***@noreply.whatsapp",
+    "phone": "+417***690"
+  },
+  "before": {
+    "lead_id": "15dfadc6-4fba-4690-ad38-8b9d2ebc8589",
+    "workflow_state": "awaiting_confirmation",
+    "status": "new",
+    "open_tasks": "1",
+    "done_tasks": "0"
+  },
+  "after": null,
+  "steps": [
+    {
+      "step": "reservation-contact-before-confirm",
+      "screenshot": "screenshots/21-reservation-contact-before-confirm.png",
+      "visibleText": "M Marketing AI OVERVIEW Home CONTENT Social posts Landing pages Forms CRM Contacts Deals Segments Inbox Duplicates AUTOMATION Email templates Email settings Sequences SMS automation CHANNELS Integrations ACCOUNT Account Brand Domains Billing Settings EN DE FR IT Log out Contacts Use this daily workspace to see who contacted your business, what staff should do next, and which conversations or reservations need attention. 4 contacts All stages Subscriber Lead Marketing-qualified Sales-qualified Customer Evangelist Export CSV Add contact Follow-up queue Open CRM tasks grouped by when they need attention. 2 open tasks Overdue 2 Confirm restaurant reservation Abdi Dupont 06/21/2026 4 similar requests High Low Normal High Tomorrow Next week Confirm reservation request Abdi Dupont 06/25/2026 3 similar requests High Low Normal High Tomorrow Next week Today 0 Nothing here. Upcoming 0 Nothing here. NAME / EMAIL ▼ TAGS SOURCE FIRST SEEN ▼ LAST ACTIVE ▼ LEADS Abdi Dupont wa-+41762147690@noreply.whatsapp Email active — Whatsapp 06/21/2026 06/25/2026 9 Jean Dupont wa-+41791234567@noreply.whatsapp Email active — Whatsapp 06/21/2026 06/21/2026 3 Marco Rossi marco.rossi@test.ch Email active — Form 06/16/2026 06/16/2026 1 sophie.martin@test.ch Email active — Form 06/16/2026 06/16/2026 1 2",
+      "explanation": "Staff opens the customer record. The latest reservation lead is waiting for confirmation."
+    }
+  ],
+  "issues": ["Confirm reservation button was not visible."]
+}

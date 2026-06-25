@@ -463,6 +463,21 @@ export default function InboxPage() {
       <p style={{ color: "#6b7280", fontSize: "0.875rem", marginBottom: "1.25rem" }}>
         {t("subtitle")}
       </p>
+      <div
+        style={{
+          border: "1px solid #dbeafe",
+          borderRadius: 10,
+          background: "#eff6ff",
+          color: "#1e3a8a",
+          fontSize: "0.85rem",
+          lineHeight: 1.55,
+          marginBottom: "1rem",
+          padding: "0.85rem 1rem",
+        }}
+      >
+        The Inbox is where customer replies become staff work. Use it to answer SMS and WhatsApp
+        messages, complete missing reservation details, and move a request toward confirmation.
+      </div>
 
       {issues.length > 0 ? (
         <section

@@ -1,0 +1,315 @@
+{
+  "generatedAt": "2026-06-25T21:12:16.301Z",
+  "baseUrl": "http://localhost:3000",
+  "publicPath": "/p/geneva-restaurant-e2e-jz3bc/abdi-restaurant-d5edaf2d",
+  "customer": {
+    "name": "Abdi CRM Demo Guest",
+    "phone": "+417***690",
+    "email": "cr***@example.test"
+  },
+  "steps": [
+    {
+      "step": "customer-open-page",
+      "screenshot": "screenshots/10-live-customer-open-page.png",
+      "visibleText": "Abdi Restaurant Home About Menu Contact Reserve a table ★ TRUSTED QUALITY Neuchatel's Finest Table Abdi Restaurant is where great food and warm hospitality meet. Every visit is a moment worth savouring — whether it's a quiet weeknight dinner or a celebration with the people you love. Come hungry. Leave happy. Book now 🍽️ MENU Dishes Crafted With Intention Our kitchen works with the finest seasonal ingredients to bring bold, honest flavours to your plate. From hearty classics to refined specialities, every dish tells a story of care and craft. Explore our menu and find your next favourite. GALLERY A Feast for the Eyes, Too Golden light, beautifully plated dishes, and a dining room that feels like a second home. Take a look inside Abdi Restaurant and picture yourself at the table. OUR TEAM Rooted in Neuchatel, Passionate About Food Abdi Restaurant was born from a simple belief: everyone d"
+    },
+    {
+      "step": "customer-filled-form",
+      "screenshot": "screenshots/11-live-customer-filled-form.png",
+      "visibleText": "Abdi Restaurant Home About Menu Contact Reserve a table ★ TRUSTED QUALITY Neuchatel's Finest Table Abdi Restaurant is where great food and warm hospitality meet. Every visit is a moment worth savouring — whether it's a quiet weeknight dinner or a celebration with the people you love. Come hungry. Leave happy. Book now 🍽️ MENU Dishes Crafted With Intention Our kitchen works with the finest seasonal ingredients to bring bold, honest flavours to your plate. From hearty classics to refined specialities, every dish tells a story of care and craft. Explore our menu and find your next favourite. GALLERY A Feast for the Eyes, Too Golden light, beautifully plated dishes, and a dining room that feels like a second home. Take a look inside Abdi Restaurant and picture yourself at the table. OUR TEAM Rooted in Neuchatel, Passionate About Food Abdi Restaurant was born from a simple belief: everyone d"
+    },
+    {
+      "step": "customer-filled-second-step",
+      "screenshot": "screenshots/12-live-customer-filled-second-step.png",
+      "visibleText": "Abdi Restaurant Home About Menu Contact Reserve a table ★ TRUSTED QUALITY Neuchatel's Finest Table Abdi Restaurant is where great food and warm hospitality meet. Every visit is a moment worth savouring — whether it's a quiet weeknight dinner or a celebration with the people you love. Come hungry. Leave happy. Book now 🍽️ MENU Dishes Crafted With Intention Our kitchen works with the finest seasonal ingredients to bring bold, honest flavours to your plate. From hearty classics to refined specialities, every dish tells a story of care and craft. Explore our menu and find your next favourite. GALLERY A Feast for the Eyes, Too Golden light, beautifully plated dishes, and a dining room that feels like a second home. Take a look inside Abdi Restaurant and picture yourself at the table. OUR TEAM Rooted in Neuchatel, Passionate About Food Abdi Restaurant was born from a simple belief: everyone d"
+    },
+    {
+      "step": "customer-submit-result",
+      "screenshot": "screenshots/13-live-customer-submit-result.png",
+      "visibleText": "Abdi Restaurant Home About Menu Contact Reserve a table ★ TRUSTED QUALITY Neuchatel's Finest Table Abdi Restaurant is where great food and warm hospitality meet. Every visit is a moment worth savouring — whether it's a quiet weeknight dinner or a celebration with the people you love. Come hungry. Leave happy. Book now 🍽️ MENU Dishes Crafted With Intention Our kitchen works with the finest seasonal ingredients to bring bold, honest flavours to your plate. From hearty classics to refined specialities, every dish tells a story of care and craft. Explore our menu and find your next favourite. GALLERY A Feast for the Eyes, Too Golden light, beautifully plated dishes, and a dining room that feels like a second home. Take a look inside Abdi Restaurant and picture yourself at the table. OUR TEAM Rooted in Neuchatel, Passionate About Food Abdi Restaurant was born from a simple belief: everyone d"
+    },
+    {
+      "step": "14-live-tenant-dashboard",
+      "screenshot": "screenshots/14-live-tenant-dashboard.png",
+      "visibleText": "M Marketing AI OVERVIEW Home CONTENT Social posts Landing pages Forms CRM Contacts Deals Segments Inbox Duplicates AUTOMATION Email templates Email settings Sequences SMS automation CHANNELS Integrations ACCOUNT Account Brand Domains Billing Settings EN DE FR IT Log out Hi, Abdi Restaurant Here's your marketing at a glance. CONTACTS 4 LEADS (MONTH) 14 POSTS (MONTH) 0 LIVE PAGES 3 OPEN PIPELINE CHF 0 ✍️ New social post Let AI draft an Instagram or Facebook post in seconds. Create post → 🚀 New landing page Describe your offer — AI builds the full page with lead form. Create page → 👥 Add a contact Manage leads, notes, and AI follow-ups in one place. Go to CRM → 2",
+      "url": "http://localhost:3000/en/dashboard"
+    },
+    {
+      "step": "15-live-tenant-crm",
+      "screenshot": "screenshots/15-live-tenant-crm.png",
+      "visibleText": "M Marketing AI OVERVIEW Home CONTENT Social posts Landing pages Forms CRM Contacts Deals Segments Inbox Duplicates AUTOMATION Email templates Email settings Sequences SMS automation CHANNELS Integrations ACCOUNT Account Brand Domains Billing Settings EN DE FR IT Log out Contacts Use this daily workspace to see who contacted your business, what staff should do next, and which conversations or reservations need attention. All stages Subscriber Lead Marketing-qualified Sales-qualified Customer Evangelist Export CSV Add contact Follow-up queue Open CRM tasks grouped by when they need attention. 0 open tasks Loading tasks… Loading contacts…",
+      "url": "http://localhost:3000/en/crm"
+    },
+    {
+      "step": "16-live-tenant-inbox",
+      "screenshot": "screenshots/16-live-tenant-inbox.png",
+      "visibleText": "M Marketing AI OVERVIEW Home CONTENT Social posts Landing pages Forms CRM Contacts Deals Segments Inbox Duplicates AUTOMATION Email templates Email settings Sequences SMS automation CHANNELS Integrations ACCOUNT Account Brand Domains Billing Settings EN DE FR IT Log out Inbox Unified message inbox — WhatsApp, SMS and email threads The Inbox is where customer replies become staff work. Use it to answer SMS and WhatsApp messages, complete missing reservation details, and move a request toward confirmation. All channels WhatsApp SMS Email Loading messages… Select a conversation to view messages",
+      "url": "http://localhost:3000/en/crm/inbox"
+    }
+  ],
+  "filled": {
+    "name": "input[name=\"name\"]",
+    "email": "input[name=\"email\"]",
+    "phone": "input[name=\"phone\"]",
+    "date": null,
+    "time": null,
+    "partySize": null,
+    "message": null,
+    "smsPreference": "input[value=\"sms\"]",
+    "smsConsent": null,
+    "dateAfterNext": "input[name=\"date\"]",
+    "timeAfterNext": "input[name=\"time\"]",
+    "partySizeAfterNext": "input[name=\"party_size\"]",
+    "messageAfterNext": "textarea[name=\"message\"]"
+  },
+  "controls": [
+    {
+      "tag": "input",
+      "type": "text",
+      "name": "__hp",
+      "placeholder": null,
+      "ariaLabel": null,
+      "text": "",
+      "required": false,
+      "visible": true
+    },
+    {
+      "tag": "input",
+      "type": "text",
+      "name": "name",
+      "placeholder": null,
+      "ariaLabel": null,
+      "text": "",
+      "required": true,
+      "visible": true
+    },
+    {
+      "tag": "input",
+      "type": "email",
+      "name": "email",
+      "placeholder": null,
+      "ariaLabel": null,
+      "text": "",
+      "required": false,
+      "visible": true
+    },
+    {
+      "tag": "input",
+      "type": "tel",
+      "name": "phone",
+      "placeholder": null,
+      "ariaLabel": null,
+      "text": "",
+      "required": true,
+      "visible": true
+    },
+    {
+      "tag": "input",
+      "type": "radio",
+      "name": "preferred_channel",
+      "placeholder": null,
+      "ariaLabel": null,
+      "text": "",
+      "required": false,
+      "visible": true
+    },
+    {
+      "tag": "input",
+      "type": "radio",
+      "name": "preferred_channel",
+      "placeholder": null,
+      "ariaLabel": null,
+      "text": "",
+      "required": false,
+      "visible": true
+    },
+    {
+      "tag": "input",
+      "type": "radio",
+      "name": "preferred_channel",
+      "placeholder": null,
+      "ariaLabel": null,
+      "text": "",
+      "required": false,
+      "visible": true
+    },
+    {
+      "tag": "input",
+      "type": "radio",
+      "name": "preferred_channel",
+      "placeholder": null,
+      "ariaLabel": null,
+      "text": "",
+      "required": false,
+      "visible": true
+    },
+    {
+      "tag": "button",
+      "type": "submit",
+      "name": null,
+      "placeholder": null,
+      "ariaLabel": null,
+      "text": "Next",
+      "required": false,
+      "visible": true
+    },
+    {
+      "tag": "button",
+      "type": null,
+      "name": null,
+      "placeholder": null,
+      "ariaLabel": null,
+      "text": "Decline",
+      "required": false,
+      "visible": true
+    },
+    {
+      "tag": "button",
+      "type": null,
+      "name": null,
+      "placeholder": null,
+      "ariaLabel": null,
+      "text": "Accept",
+      "required": false,
+      "visible": true
+    },
+    {
+      "tag": "button",
+      "type": null,
+      "name": null,
+      "placeholder": null,
+      "ariaLabel": "Open Next.js Dev Tools",
+      "text": "",
+      "required": false,
+      "visible": true
+    }
+  ],
+  "database": {
+    "afterSubmission": [
+      {
+        "lead_id": "15dfadc6-4fba-4690-ad38-8b9d2ebc8589",
+        "workflow_kind": "booking",
+        "workflow_state": "awaiting_confirmation",
+        "lead_submitted_at": "2026-06-25T21:13:23.414Z",
+        "contact_id": "35405558-f993-42c0-9905-993898852d60",
+        "first_name": "Abdi",
+        "last_name": "Dupont",
+        "email": "wa***@noreply.whatsapp",
+        "phone": "+417***690",
+        "notification_id": "d75edc81-5ba2-4a2b-8cf6-d69345bec8fb",
+        "notification_title": "New reservation request",
+        "notification_status": "unread",
+        "notification_created_at": "2026-06-25T21:13:24.288Z"
+      }
+    ]
+  },
+  "issues": [],
+  "controlsAfterNext": [
+    {
+      "tag": "input",
+      "type": "text",
+      "name": "__hp",
+      "placeholder": null,
+      "ariaLabel": null,
+      "text": "",
+      "required": false,
+      "visible": true
+    },
+    {
+      "tag": "input",
+      "type": "text",
+      "name": "date",
+      "placeholder": null,
+      "ariaLabel": null,
+      "text": "",
+      "required": true,
+      "visible": true
+    },
+    {
+      "tag": "input",
+      "type": "text",
+      "name": "time",
+      "placeholder": null,
+      "ariaLabel": null,
+      "text": "",
+      "required": false,
+      "visible": true
+    },
+    {
+      "tag": "input",
+      "type": "number",
+      "name": "party_size",
+      "placeholder": null,
+      "ariaLabel": null,
+      "text": "",
+      "required": false,
+      "visible": true
+    },
+    {
+      "tag": "textarea",
+      "type": null,
+      "name": "message",
+      "placeholder": "Special requests or anything we should know.",
+      "ariaLabel": null,
+      "text": "",
+      "required": false,
+      "visible": true
+    },
+    {
+      "tag": "button",
+      "type": "button",
+      "name": null,
+      "placeholder": null,
+      "ariaLabel": null,
+      "text": "Back",
+      "required": false,
+      "visible": true
+    },
+    {
+      "tag": "button",
+      "type": "submit",
+      "name": null,
+      "placeholder": null,
+      "ariaLabel": null,
+      "text": "Request booking",
+      "required": false,
+      "visible": true
+    },
+    {
+      "tag": "button",
+      "type": null,
+      "name": null,
+      "placeholder": null,
+      "ariaLabel": null,
+      "text": "Decline",
+      "required": false,
+      "visible": true
+    },
+    {
+      "tag": "button",
+      "type": null,
+      "name": null,
+      "placeholder": null,
+      "ariaLabel": null,
+      "text": "Accept",
+      "required": false,
+      "visible": true
+    },
+    {
+      "tag": "button",
+      "type": null,
+      "name": null,
+      "placeholder": null,
+      "ariaLabel": "Open Next.js Dev Tools",
+      "text": "",
+      "required": false,
+      "visible": true
+    }
+  ],
+  "formResponse": {
+    "status": 200,
+    "ok": true,
+    "url": "http://localhost:3000/api/forms/geneva-restaurant-e2e-jz3bc/abdi-restaurant-d5edaf2d-lead-d5edaf2d",
+    "body": "{\"ok\":true}"
+  }
+}

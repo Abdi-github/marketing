@@ -1,0 +1,48 @@
+{
+  "generatedAt": "2026-06-25T21:42:54.600Z",
+  "baseUrl": "http://localhost:3000",
+  "latest": {
+    "lead_id": "15dfadc6-4fba-4690-ad38-8b9d2ebc8589",
+    "workflow_kind": "booking",
+    "workflow_state": "awaiting_confirmation",
+    "submitted_at": "2026-06-25T21:13:23.414Z",
+    "contact_id": "35405558-f993-42c0-9905-993898852d60",
+    "first_name": "Abdi",
+    "last_name": "Dupont",
+    "email": "wa***@noreply.whatsapp",
+    "phone": "+417***690",
+    "notification_id": "d75edc81-5ba2-4a2b-8cf6-d69345bec8fb",
+    "notification_title": "New reservation request",
+    "notification_status": "unread",
+    "action_url": "/en/crm?contactId=35405558-f993-42c0-9905-993898852d60"
+  },
+  "steps": [
+    {
+      "step": "staff-dashboard-start",
+      "screenshot": "screenshots/17-staff-dashboard-start.png",
+      "visibleText": "M Marketing AI OVERVIEW Home CONTENT Social posts Landing pages Forms CRM Contacts Deals Segments Inbox Duplicates AUTOMATION Email templates Email settings Sequences SMS automation CHANNELS Integrations ACCOUNT Account Brand Domains Billing Settings EN DE FR IT Log out Hi, Abdi Restaurant Here's your marketing at a glance. CONTACTS 4 LEADS (MONTH) 14 POSTS (MONTH) 0 LIVE PAGES 3 OPEN PIPELINE CHF 0 ✍️ New social post Let AI draft an Instagram or Facebook post in seconds. Create post → 🚀 New landing page Describe your offer — AI builds the full page with lead form. Create page → 👥 Add a contact Manage leads, notes, and AI follow-ups in one place. Go to CRM → 2",
+      "explanation": "Staff start here. The dashboard is the daily overview before opening CRM details."
+    },
+    {
+      "step": "staff-notification-bell-open",
+      "screenshot": "screenshots/18-staff-notification-bell-open.png",
+      "visibleText": "M Marketing AI OVERVIEW Home CONTENT Social posts Landing pages Forms CRM Contacts Deals Segments Inbox Duplicates AUTOMATION Email templates Email settings Sequences SMS automation CHANNELS Integrations ACCOUNT Account Brand Domains Billing Settings EN DE FR IT Log out Hi, Abdi Restaurant Here's your marketing at a glance. CONTACTS 4 LEADS (MONTH) 14 POSTS (MONTH) 0 LIVE PAGES 3 OPEN PIPELINE CHF 0 ✍️ New social post Let AI draft an Instagram or Facebook post in seconds. Create post → 🚀 New landing page Describe your offer — AI builds the full page with lead form. Create page → 👥 Add a contact Manage leads, notes, and AI follow-ups in one place. Go to CRM → 2 Staff notifications New leads and follow-up work appear here. Refresh Alert settings New reservation request A customer submitted a restaurant request from your website. Open CRM to review and confirm. Jun 25, 11:13 PM NEW Open Mark read Dismiss New reservation request A customer submitted a restaurant request from your website. Open CRM to review and confirm. Jun 25, 09:38 PM NEW Open Mark read Dismiss",
+      "explanation": "The notification bell shows new work. A reservation alert means staff should open the customer and confirm or ask for missing details."
+    },
+    {
+      "step": "staff-open-contact-from-alert",
+      "screenshot": "screenshots/19-staff-open-contact-from-alert.png",
+      "visibleText": "M Marketing AI OVERVIEW Home CONTENT Social posts Landing pages Forms CRM Contacts Deals Segments Inbox Duplicates AUTOMATION Email templates Email settings Sequences SMS automation CHANNELS Integrations ACCOUNT Account Brand Domains Billing Settings EN DE FR IT Log out Contacts Use this daily workspace to see who contacted your business, what staff should do next, and which conversations or reservations need attention. 4 contacts All stages Subscriber Lead Marketing-qualified Sales-qualified Customer Evangelist Export CSV Add contact Follow-up queue Open CRM tasks grouped by when they need attention. 2 open tasks Overdue 1 Confirm restaurant reservation Abdi Dupont 06/21/2026 4 similar requests High Low Normal High Tomorrow Next week Today 1 Confirm reservation request Abdi Dupont 06/25/2026 3 similar requests High Low Normal High Tomorrow Next week Upcoming 0 Nothing here. Customer details are open on the right. Review the latest lead, reservation task, notes, and timeline before replying or marking the follow-up complete. NAME / EMAIL ▼ TAGS SOURCE FIRST SEEN ▼ LAST ACTIVE ▼ LEADS Abdi Dupont wa-+41762147690@noreply.whatsapp Email active — Whatsapp 06/21/2026 06/25/2026 9 Jean D",
+      "url": "http://localhost:3000/en/crm?contactId=35405558-f993-42c0-9905-993898852d60",
+      "explanation": "Opening the alert should take staff to the customer record. This is where they review the reservation request, customer history, and follow-up tasks."
+    },
+    {
+      "step": "staff-open-inbox",
+      "screenshot": "screenshots/20-staff-open-inbox.png",
+      "visibleText": "M Marketing AI OVERVIEW Home CONTENT Social posts Landing pages Forms CRM Contacts Deals Segments Inbox Duplicates AUTOMATION Email templates Email settings Sequences SMS automation CHANNELS Integrations ACCOUNT Account Brand Domains Billing Settings EN DE FR IT Log out Inbox Unified message inbox — WhatsApp, SMS and email threads The Inbox is where customer replies become staff work. Use it to answer SMS and WhatsApp messages, complete missing reservation details, and move a request toward confirmation. Messaging automation attention Leads waiting for confirmation, missing details, or failed WhatsApp/SMS replies. 8 Open Awaiting Confirmation Reservation Abdi Dupont This request is waiting for staff confirmation. 21.06.26, 22:30 Send Failed Abdi Dupont WhatsAppApiError: WhatsApp authentication failed. The access token is invalid or expired. 21.06.26, 19:02 Missing Details Reservation Abdi Dupont This request is waiting for more details. 21.06.26, 13:36 Send Failed Abdi Dupont WhatsAppApiError: WhatsApp authentication failed. The access token is invalid or expired. 21.06.26, 13:34 Missing Details Reservation Abdi Dupont This request is waiting for more details. 21.06.26, 13:34 Send ",
+      "url": "http://localhost:3000/en/crm/inbox",
+      "explanation": "Inbox is where SMS, WhatsApp, and email replies become staff conversations."
+    }
+  ],
+  "issues": []
+}

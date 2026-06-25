@@ -695,6 +695,10 @@ export default function SegmentsPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{t("title")}</h1>
           <p className="mt-0.5 text-sm text-gray-500">{t("subtitle")}</p>
+          <p className="mt-1 max-w-2xl text-xs leading-relaxed text-gray-500">
+            Segments are saved customer groups. For example, a restaurant can keep a list of
+            reservation leads, private dining enquiries, or customers who agreed to SMS updates.
+          </p>
         </div>
         <button
           onClick={() => setView("create")}

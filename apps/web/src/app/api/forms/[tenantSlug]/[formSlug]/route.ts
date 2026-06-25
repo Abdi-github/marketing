@@ -21,13 +21,14 @@ import {
   logger,
   splitContactName,
 } from "@marketing/shared";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { validateAndSanitizeFormPayload } from "../../../../../lib/form-validation";
 import { enqueueLeadFollowUpJob } from "../../../../../server/queues/lead-followup";
 import { enqueueSmsSequenceTriggerJob } from "../../../../../server/queues/sms";
+import { createTenantNotification } from "../../../../../server/notifications/service";
 
 export const dynamic = "force-dynamic";
 
@@ -103,6 +104,19 @@ function readSmsConsent(payload: Record<string, unknown>): boolean | null {
   return null;
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function appendLeadId(meta: Record<string, unknown>, leadId: string): string[] {
+  const existing = Array.isArray(meta["leadIds"])
+    ? meta["leadIds"].filter((value): value is string => typeof value === "string")
+    : [];
+  return Array.from(new Set([...existing, leadId]));
+}
+
 // ─── Turnstile verification ────────────────────────────────────────────────────
 
 const TURNSTILE_VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
@@ -136,7 +150,7 @@ export async function POST(
 
   // 1. Resolve tenant by slug.
   const [tenant] = await db
-    .select({ id: tenants.id })
+    .select({ id: tenants.id, name: tenants.name })
     .from(tenants)
     .where(eq(tenants.slug, tenantSlug));
 
@@ -313,21 +327,60 @@ export async function POST(
           capturedContactId = contactId;
           createdContactId = contactId;
 
-          await tx.insert(crmTasks).values({
-            tenantId: tenant.id,
-            contactId,
-            title: workflowPlan.title,
-            body: workflowPlan.body,
-            meta: {
-              sourceChannel,
-              workflowKind: workflowPlan.kind,
-              workflowState,
-              leadId: lead!.id,
-              structuredData: buildStructuredLeadData(sanitizedPayload),
-            },
-            dueAt: buildLeadTaskDueAt(workflowPlan),
-            priority: workflowPlan.priority,
-          });
+          const taskMeta = {
+            sourceChannel,
+            workflowKind: workflowPlan.kind,
+            workflowState,
+            leadId: lead!.id,
+            latestLeadId: lead!.id,
+            structuredData: buildStructuredLeadData(sanitizedPayload),
+          };
+          const [existingOpenWorkflowTask] = await tx
+            .select({
+              id: crmTasks.id,
+              meta: crmTasks.meta,
+            })
+            .from(crmTasks)
+            .where(
+              and(
+                eq(crmTasks.tenantId, tenant.id),
+                eq(crmTasks.contactId, contactId),
+                eq(crmTasks.status, "open"),
+                eq(crmTasks.title, workflowPlan.title),
+              ),
+            )
+            .orderBy(desc(crmTasks.createdAt))
+            .limit(1);
+
+          if (existingOpenWorkflowTask) {
+            const existingMeta = asRecord(existingOpenWorkflowTask.meta);
+            await tx
+              .update(crmTasks)
+              .set({
+                body: workflowPlan.body,
+                meta: {
+                  ...existingMeta,
+                  ...taskMeta,
+                  leadIds: appendLeadId(existingMeta, lead!.id),
+                },
+                dueAt: buildLeadTaskDueAt(workflowPlan),
+                priority: workflowPlan.priority,
+                updatedAt: new Date(),
+              })
+              .where(
+                and(eq(crmTasks.tenantId, tenant.id), eq(crmTasks.id, existingOpenWorkflowTask.id)),
+              );
+          } else {
+            await tx.insert(crmTasks).values({
+              tenantId: tenant.id,
+              contactId,
+              title: workflowPlan.title,
+              body: workflowPlan.body,
+              meta: { ...taskMeta, leadIds: [lead!.id] },
+              dueAt: buildLeadTaskDueAt(workflowPlan),
+              priority: workflowPlan.priority,
+            });
+          }
 
           const marketingConsent = email ? readMarketingConsent(sanitizedPayload) : null;
           if (email && marketingConsent !== null) {
@@ -450,6 +503,51 @@ export async function POST(
   }
 
   if (createdLeadId) {
+    const notificationTitle =
+      workflowPlan.kind === "booking"
+        ? workflowState === "missing_details"
+          ? "Reservation request needs details"
+          : "New reservation request"
+        : workflowPlan.kind === "callback"
+          ? "New callback request"
+          : workflowPlan.kind === "quote"
+            ? "New quote request"
+            : "New website lead";
+    const notificationBody =
+      workflowPlan.kind === "booking"
+        ? "A customer submitted a restaurant request from your website. Open CRM to review and confirm."
+        : "A customer submitted a form from your website. Open CRM to follow up.";
+    await createTenantNotification({
+      tenantId: tenant.id,
+      type: "lead.captured",
+      title: notificationTitle,
+      body: notificationBody,
+      priority:
+        workflowPlan.kind === "booking" || workflowPlan.kind === "quote" ? "high" : "normal",
+      actionUrl: createdContactId ? `/en/crm?contactId=${createdContactId}` : "/en/crm",
+      entityType: "lead",
+      entityId: createdLeadId,
+      idempotencyKey: `lead-captured:${createdLeadId}`,
+      metadata: {
+        formId: form.id,
+        formSlug,
+        workflowKind: workflowPlan.kind,
+        workflowState,
+        sourceChannel,
+      },
+      staffSms:
+        workflowPlan.kind === "booking"
+          ? {
+              text: `${tenant.name}: New reservation request received from your website. Open CRM to review and confirm.`,
+            }
+          : undefined,
+    }).catch((err) => {
+      logger.warn(
+        { err: String(err), tenantId: tenant.id, leadId: createdLeadId },
+        "[form] notification creation failed",
+      );
+    });
+
     await enqueueLeadFollowUpJob({ tenantId: tenant.id, leadId: createdLeadId }).catch((err) => {
       logger.warn(
         { err: String(err), tenantId: tenant.id, leadId: createdLeadId },

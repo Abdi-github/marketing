@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslations } from "next-intl";
+import { useSearchParams } from "next/navigation";
 import { trpc } from "../../../../lib/trpc";
 
 type LifecycleStage = "subscriber" | "lead" | "mql" | "sql" | "customer" | "evangelist";
@@ -37,6 +38,20 @@ type LeadEntry = {
   submittedAt: Date | string;
   sourceUrl: string | null;
   payload: unknown;
+  status: "new" | "contacted" | "confirmed" | "qualified" | "archived" | null;
+  workflowKind: "booking" | "callback" | "quote" | "generic" | null;
+  workflowState:
+    | "received"
+    | "missing_details"
+    | "awaiting_confirmation"
+    | "contacted"
+    | "confirmed"
+    | "declined"
+    | "cancelled"
+    | "manual_review"
+    | null;
+  sourceChannel: string | null;
+  structuredData: Record<string, unknown> | null;
 };
 
 type ContactDetail = ContactRow & {
@@ -280,6 +295,8 @@ type OpenTaskRow = TaskRow & {
   contactEmail: string;
   contactFirstName: string | null;
   contactLastName: string | null;
+  meta: Record<string, unknown> | null;
+  duplicateCount?: number;
 };
 
 function startOfLocalDay(d: Date) {
@@ -314,6 +331,21 @@ function taskContactName(task: OpenTaskRow) {
   return (
     [task.contactFirstName, task.contactLastName].filter(Boolean).join(" ") || task.contactEmail
   );
+}
+
+function taskMetaValue(task: OpenTaskRow, key: string) {
+  const value = task.meta?.[key];
+  return typeof value === "string" ? value : null;
+}
+
+function taskLeadId(task: OpenTaskRow) {
+  return taskMetaValue(task, "latestLeadId") ?? taskMetaValue(task, "leadId");
+}
+
+function taskCanConfirmReservation(task: OpenTaskRow) {
+  if (taskMetaValue(task, "workflowKind") !== "booking") return false;
+  const state = taskMetaValue(task, "workflowState");
+  return state === "awaiting_confirmation" || state === "contacted" || state === "missing_details";
 }
 
 function ScoreSparkline({ history }: { history: ScoreHistoryRow[] }) {
@@ -399,6 +431,7 @@ function DetailPanel({
   const [taskDueAt, setTaskDueAt] = useState("");
   const [taskPriority, setTaskPriority] = useState<"low" | "normal" | "high">("normal");
   const [savingTask, setSavingTask] = useState(false);
+  const [updatingLeadId, setUpdatingLeadId] = useState<string | null>(null);
 
   const [draft, setDraft] = useState<string | null>(null);
   const [draftingFollowUp, setDraftingFollowUp] = useState(false);
@@ -537,6 +570,33 @@ function DetailPanel({
 
   async function handleDeleteTask(taskId: string) {
     await trpc.contacts.deleteTask.mutate({ taskId }).catch(() => null);
+    load();
+    onUpdated();
+  }
+
+  async function handleLeadWorkflowStatus(
+    lead: LeadEntry,
+    input: {
+      status: "new" | "contacted" | "confirmed" | "qualified" | "archived";
+      workflowState:
+        | "received"
+        | "missing_details"
+        | "awaiting_confirmation"
+        | "contacted"
+        | "confirmed"
+        | "declined"
+        | "cancelled"
+        | "manual_review";
+    },
+  ) {
+    setUpdatingLeadId(lead.id);
+    await trpc.inbox.updateLeadWorkflowStatus
+      .mutate({
+        leadId: lead.id,
+        ...input,
+      })
+      .catch(() => null);
+    setUpdatingLeadId(null);
     load();
     onUpdated();
   }
@@ -805,11 +865,75 @@ function DetailPanel({
               <div className="space-y-3">
                 {detail.leads.map((lead) => (
                   <div key={lead.id} className="rounded border bg-gray-50 p-3 text-sm">
-                    <div className="mb-1.5 text-xs text-gray-500">
-                      {t("leadFrom", {
-                        date: formatDate(lead.submittedAt),
-                        source: lead.sourceUrl ?? "landing page",
-                      })}
+                    <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <div className="text-xs text-gray-500">
+                          {t("leadFrom", {
+                            date: formatDate(lead.submittedAt),
+                            source: lead.sourceUrl ?? "landing page",
+                          })}
+                        </div>
+                        <div className="mt-1 flex flex-wrap gap-1.5">
+                          {lead.workflowKind && (
+                            <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-semibold capitalize text-violet-700">
+                              {lead.workflowKind === "booking" ? "reservation" : lead.workflowKind}
+                            </span>
+                          )}
+                          {lead.workflowState && (
+                            <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold capitalize text-amber-700">
+                              {lead.workflowState.replaceAll("_", " ")}
+                            </span>
+                          )}
+                          {lead.status && (
+                            <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold capitalize text-blue-700">
+                              {lead.status}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {lead.workflowKind === "booking" && lead.workflowState !== "confirmed" && (
+                        <div className="flex flex-wrap gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void handleLeadWorkflowStatus(lead, {
+                                status: "contacted",
+                                workflowState: "contacted",
+                              })
+                            }
+                            disabled={updatingLeadId === lead.id}
+                            className="rounded bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50"
+                          >
+                            Mark contacted
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void handleLeadWorkflowStatus(lead, {
+                                status: "confirmed",
+                                workflowState: "confirmed",
+                              })
+                            }
+                            disabled={updatingLeadId === lead.id}
+                            className="rounded bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50"
+                          >
+                            Confirm reservation
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void handleLeadWorkflowStatus(lead, {
+                                status: "archived",
+                                workflowState: "declined",
+                              })
+                            }
+                            disabled={updatingLeadId === lead.id}
+                            className="rounded bg-amber-600 px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50"
+                          >
+                            Decline
+                          </button>
+                        </div>
+                      )}
                     </div>
                     <pre className="overflow-x-auto whitespace-pre-wrap rounded border bg-white p-2 text-xs text-gray-700">
                       {JSON.stringify(lead.payload, null, 2)}
@@ -947,11 +1071,13 @@ function TaskQueuePanel({
   onOpenContact,
   onMarkDone,
   onUpdateTask,
+  onConfirmReservation,
 }: {
   tasks: OpenTaskRow[];
   loading: boolean;
   onOpenContact: (contactId: string) => void;
   onMarkDone: (taskId: string) => void;
+  onConfirmReservation: (task: OpenTaskRow) => void;
   onUpdateTask: (
     taskId: string,
     patch: { dueAt?: string | null; priority?: "low" | "normal" | "high" },
@@ -1043,6 +1169,11 @@ function TaskQueuePanel({
                           <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-gray-400">
                             <span className="truncate">{taskContactName(task)}</span>
                             <span>{task.dueAt ? formatDate(task.dueAt) : t("tasksNoDue")}</span>
+                            {task.duplicateCount && task.duplicateCount > 1 && (
+                              <span className="rounded-full bg-amber-50 px-2 py-0.5 font-medium text-amber-700">
+                                {task.duplicateCount} similar requests
+                              </span>
+                            )}
                             {task.priority === "high" && (
                               <span className="font-semibold text-red-500">
                                 {t("taskPriority_high")}
@@ -1080,6 +1211,15 @@ function TaskQueuePanel({
                           </select>
                         </div>
                         <div className="flex gap-1">
+                          {taskCanConfirmReservation(task) && (
+                            <button
+                              type="button"
+                              onClick={() => onConfirmReservation(task)}
+                              className="rounded bg-emerald-600 px-2 py-1 text-xs font-medium text-white hover:bg-emerald-700"
+                            >
+                              Confirm reservation
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => onUpdateTask(task.id, { dueAt: buildSnoozeDueAt(1) })}
@@ -1110,6 +1250,7 @@ function TaskQueuePanel({
 
 export default function CrmPage() {
   const t = useTranslations("CRM");
+  const searchParams = useSearchParams();
   const [tag, setTag] = useState<string | undefined>(undefined);
   const [q, setQ] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
@@ -1130,6 +1271,11 @@ export default function CrmPage() {
   const [bulkBusy, setBulkBusy] = useState(false);
   const [openTasks, setOpenTasks] = useState<OpenTaskRow[]>([]);
   const [tasksLoading, setTasksLoading] = useState(true);
+
+  useEffect(() => {
+    const contactId = searchParams.get("contactId");
+    if (contactId) setSelectedId(contactId);
+  }, [searchParams]);
 
   // Debounce search input — wait 250ms after typing stops before querying.
   useEffect(() => {
@@ -1224,6 +1370,19 @@ export default function CrmPage() {
       ),
     );
     await trpc.contacts.updateTask.mutate({ taskId, ...patch }).catch(() => loadOpenTasks());
+  }
+
+  async function handleConfirmReservationTask(task: OpenTaskRow) {
+    const leadId = taskLeadId(task);
+    if (!leadId) {
+      setSelectedId(task.contactId);
+      return;
+    }
+    setOpenTasks((tasks) => tasks.filter((row) => row.id !== task.id));
+    await trpc.inbox.updateLeadWorkflowStatus
+      .mutate({ leadId, status: "confirmed", workflowState: "confirmed" })
+      .catch(() => null);
+    refreshCrm();
   }
 
   const totalPages = data ? Math.ceil(data.total / pageSize) : 1;
@@ -1346,6 +1505,10 @@ export default function CrmPage() {
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <h1 className="text-2xl font-bold">{t("title")}</h1>
+              <p className="mt-1 max-w-2xl text-sm text-gray-500">
+                Use this daily workspace to see who contacted your business, what staff should do
+                next, and which conversations or reservations need attention.
+              </p>
               {data && (
                 <p className="mt-0.5 text-sm text-gray-500">
                   {t("contactCount", { count: data.total })}
@@ -1410,6 +1573,7 @@ export default function CrmPage() {
             onOpenContact={setSelectedId}
             onMarkDone={(taskId) => void handleMarkOpenTaskDone(taskId)}
             onUpdateTask={(taskId, patch) => void handleUpdateOpenTask(taskId, patch)}
+            onConfirmReservation={(task) => void handleConfirmReservationTask(task)}
           />
 
           {isLoading && <div className="animate-pulse text-sm text-gray-400">{t("loading")}</div>}
@@ -1417,6 +1581,16 @@ export default function CrmPage() {
           {fetchError && (
             <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-600">
               {t("error")}
+            </div>
+          )}
+
+          {selectedId && (
+            <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+              <p className="font-semibold">Customer details are open on the right.</p>
+              <p className="mt-1 text-blue-700">
+                Review the latest lead, reservation task, notes, and timeline before replying or
+                marking the follow-up complete.
+              </p>
             </div>
           )}
 

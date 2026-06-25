@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/dashboard/sidebar";
 import { FloatingChat } from "@/components/copilot/floating-chat";
 import { isPlatformRole } from "@/lib/platform-access";
 import { getSafeServerSession } from "@/server/auth/safe-session";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 
 type Props = {
   children: ReactNode;
@@ -158,6 +159,7 @@ export default async function DashboardLayout({ children, params }: Props) {
         <div className="h-14 flex-shrink-0 lg:hidden" />
         <main className="flex-1">{children}</main>
       </div>
+      <NotificationBell />
       <FloatingChat />
     </div>
   );

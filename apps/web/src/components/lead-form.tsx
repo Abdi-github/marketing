@@ -483,6 +483,8 @@ export default function LeadForm({
 
     setSubmitting(true);
     setError(null);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 25_000);
 
     try {
       const body: Record<string, unknown> = { ...payload };
@@ -493,6 +495,7 @@ export default function LeadForm({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
+        signal: controller.signal,
       });
 
       if (!res.ok) {
@@ -504,8 +507,13 @@ export default function LeadForm({
       // Notify track.js for A/B experiment conversion counting.
       dispatchFormEvent("__form_submit", {});
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error sending. Please try again.");
+      if (err instanceof DOMException && err.name === "AbortError") {
+        setError("This is taking longer than expected. Please try again in a moment.");
+      } else {
+        setError(err instanceof Error ? err.message : "Error sending. Please try again.");
+      }
     } finally {
+      window.clearTimeout(timeout);
       setSubmitting(false);
     }
   }

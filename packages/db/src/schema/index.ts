@@ -26,6 +26,7 @@ export * from "./deals";
 export * from "./crm-tasks";
 export * from "./segments";
 export * from "./messaging";
+export * from "./notifications";
 export * from "./copilot";
 export * from "./metrics";
 export * from "./domains";

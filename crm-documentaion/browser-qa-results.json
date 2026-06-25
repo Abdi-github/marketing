@@ -1,0 +1,81 @@
+{
+  "generatedAt": "2026-06-25T15:29:31.821Z",
+  "baseUrl": "http://localhost:3000",
+  "publicPath": "/p/geneva-restaurant-e2e-jz3bc/abdi-restaurant-16a3690b",
+  "mode": "read-only baseline plus tenant login",
+  "steps": [
+    {
+      "step": "customer-public-page",
+      "purpose": "Customer opens the published Abdi Restaurant website and decides whether to contact the restaurant.",
+      "url": "http://localhost:3000/p/geneva-restaurant-e2e-jz3bc/abdi-restaurant-16a3690b",
+      "title": "Abdi Restaurant",
+      "screenshot": "screenshots/01-customer-public-page.png",
+      "visibleText": "Abdi Restaurant Home About Menu Contact Request quote ★ TRUSTED QUALITY Neuchâtel's Table of Choice Abdi Restaurant is where exceptional food meets an atmosphere worth remembering. Whether you're celebrating a milestone or simply enjoying an evening out, your seat is waiting. Reserve yours tonight. Book now MENU Dishes Crafted With Intention Every plate at Abdi begins with fresh, carefully sourced ingredients — and ends with something that stays with you. From refined starters to indulgent mains, our menu is built around one idea: food that genuinely delights. Explore the full menu and find your next favourite dish. GALLERY A Space That Sets the Mood Warm lighting, elegant interiors, and a r"
+    },
+    {
+      "step": "tenant-login",
+      "purpose": "Restaurant staff logs in to see whether new customer work is waiting.",
+      "url": "http://localhost:3000/en/dashboard",
+      "title": "",
+      "screenshot": "screenshots/02-tenant-login-result.png",
+      "visibleText": "M Marketing AI OVERVIEW Home CONTENT Social posts Landing pages Forms CRM Contacts Deals Segments Inbox Duplicates AUTOMATION Email templates Email settings Sequences SMS automation CHANNELS Integrations ACCOUNT Account Brand Domains Billing Settings EN DE FR IT Log out Hi, Abdi Restaurant Here's your marketing at a glance. CONTACTS 4 LEADS (MONTH) 12 POSTS (MONTH) 0 LIVE PAGES 3 OPEN PIPELINE CHF 0 ✍️ New social post Let AI draft an Instagram or Facebook post in seconds. Create post → 🚀 New landing page Describe your offer — AI builds the full page with lead form. Create page → 👥 Add a contact Manage leads, notes, and AI follow-ups in one place. Go to CRM →"
+    },
+    {
+      "step": "tenant-dashboard",
+      "purpose": "Staff starts from the daily dashboard.",
+      "url": "http://localhost:3000/en/dashboard",
+      "title": "",
+      "screenshot": "screenshots/tenant-dashboard.png",
+      "visibleText": "M Marketing AI OVERVIEW Home CONTENT Social posts Landing pages Forms CRM Contacts Deals Segments Inbox Duplicates AUTOMATION Email templates Email settings Sequences SMS automation CHANNELS Integrations ACCOUNT Account Brand Domains Billing Settings EN DE FR IT Log out Hi, Abdi Restaurant Here's your marketing at a glance. CONTACTS 4 LEADS (MONTH) 12 POSTS (MONTH) 0 LIVE PAGES 3 OPEN PIPELINE CHF 0 ✍️ New social post Let AI draft an Instagram or Facebook post in seconds. Create post → 🚀 New landing page Describe your offer — AI builds the full page with lead form. Create page → 👥 Add a contact Manage leads, notes, and AI follow-ups in one place. Go to CRM →"
+    },
+    {
+      "step": "crm-contacts",
+      "purpose": "Staff reviews leads, contacts, and follow-up tasks.",
+      "url": "http://localhost:3000/en/crm",
+      "title": "",
+      "screenshot": "screenshots/crm-contacts.png",
+      "visibleText": "M Marketing AI OVERVIEW Home CONTENT Social posts Landing pages Forms CRM Contacts Deals Segments Inbox Duplicates AUTOMATION Email templates Email settings Sequences SMS automation CHANNELS Integrations ACCOUNT Account Brand Domains Billing Settings EN DE FR IT Log out Contacts Use this daily workspace to see who contacted your business, what staff should do next, and which conversations or reservations need attention. All stages Subscriber Lead Marketing-qualified Sales-qualified Customer Evangelist Export CSV Add contact Follow-up queue Open CRM tasks grouped by when they need attention. 0 open tasks Loading tasks… Loading contacts…"
+    },
+    {
+      "step": "crm-inbox",
+      "purpose": "Staff checks customer replies that need attention.",
+      "url": "http://localhost:3000/en/crm/inbox",
+      "title": "",
+      "screenshot": "screenshots/crm-inbox.png",
+      "visibleText": "M Marketing AI OVERVIEW Home CONTENT Social posts Landing pages Forms CRM Contacts Deals Segments Inbox Duplicates AUTOMATION Email templates Email settings Sequences SMS automation CHANNELS Integrations ACCOUNT Account Brand Domains Billing Settings EN DE FR IT Log out Inbox Unified message inbox — WhatsApp, SMS and email threads The Inbox is where customer replies become staff work. Use it to answer SMS and WhatsApp messages, complete missing reservation details, and move a request toward confirmation. All channels WhatsApp SMS Email Loading messages… Select a conversation to view messages"
+    },
+    {
+      "step": "crm-deals",
+      "purpose": "Staff tracks larger opportunities such as private dining or catering.",
+      "url": "http://localhost:3000/en/crm/deals",
+      "title": "",
+      "screenshot": "screenshots/crm-deals.png",
+      "visibleText": "M Marketing AI OVERVIEW Home CONTENT Social posts Landing pages Forms CRM Contacts Deals Segments Inbox Duplicates AUTOMATION Email templates Email settings Sequences SMS automation CHANNELS Integrations ACCOUNT Account Brand Domains Billing Settings EN DE FR IT Log out Deal Pipeline Track your sales opportunities through the pipeline Deals are useful for larger opportunities such as private dining, catering, events, or high-value bookings. Move each card across the columns as the sale progresses. New deal Loading pipeline…"
+    },
+    {
+      "step": "crm-segments",
+      "purpose": "Staff groups customers for future follow-up.",
+      "url": "http://localhost:3000/en/crm/segments",
+      "title": "",
+      "screenshot": "screenshots/crm-segments.png",
+      "visibleText": "M Marketing AI OVERVIEW Home CONTENT Social posts Landing pages Forms CRM Contacts Deals Segments Inbox Duplicates AUTOMATION Email templates Email settings Sequences SMS automation CHANNELS Integrations ACCOUNT Account Brand Domains Billing Settings EN DE FR IT Log out Segments Save contact filters and run bulk actions Segments are saved customer groups. For example, a restaurant can keep a list of reservation leads, private dining enquiries, or customers who agreed to SMS updates. New segment Loading segments…"
+    },
+    {
+      "step": "crm-duplicates",
+      "purpose": "Staff reviews possible duplicate customer records.",
+      "url": "http://localhost:3000/en/crm/duplicates",
+      "title": "",
+      "screenshot": "screenshots/crm-duplicates.png",
+      "visibleText": "M Marketing AI OVERVIEW Home CONTENT Social posts Landing pages Forms CRM Contacts Deals Segments Inbox Duplicates AUTOMATION Email templates Email settings Sequences SMS automation CHANNELS Integrations ACCOUNT Account Brand Domains Billing Settings EN DE FR IT Log out ← Back to contacts Duplicate contacts We found possible duplicates. Pick the \"primary\" contact in each group — the others will be merged into it, preserving tags, leads, notes, and history. Duplicates happen when the same customer submits more than one form or uses different contact details. Review carefully before merging so the customer history stays clean. SAME PHONE NUMBER+41791234567 2 contacts sophie.martin@test.ch PRIM"
+    },
+    {
+      "step": "integrations-notifications",
+      "purpose": "Staff checks SMS and channel readiness.",
+      "url": "http://localhost:3000/en/integrations",
+      "title": "",
+      "screenshot": "screenshots/integrations-notifications.png",
+      "visibleText": "M Marketing AI OVERVIEW Home CONTENT Social posts Landing pages Forms CRM Contacts Deals Segments Inbox Duplicates AUTOMATION Email templates Email settings Sequences SMS automation CHANNELS Integrations ACCOUNT Account Brand Domains Billing Settings EN DE FR IT Log out Loading…"
+    }
+  ],
+  "issues": []
+}

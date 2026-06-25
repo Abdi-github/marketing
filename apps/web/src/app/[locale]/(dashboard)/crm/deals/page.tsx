@@ -560,6 +560,10 @@ export default function DealsPage() {
         <div>
           <h1 className="text-xl font-bold text-gray-900">{t("title")}</h1>
           <p className="mt-0.5 text-sm text-gray-500">{t("subtitle")}</p>
+          <p className="mt-1 max-w-2xl text-xs leading-relaxed text-gray-500">
+            Deals are useful for larger opportunities such as private dining, catering, events, or
+            high-value bookings. Move each card across the columns as the sale progresses.
+          </p>
         </div>
         <button
           onClick={() => setShowNewDeal(true)}

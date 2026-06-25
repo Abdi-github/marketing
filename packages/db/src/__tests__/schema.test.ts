@@ -10,6 +10,8 @@ import {
   leads,
   mediaAssets,
   messages,
+  notifications,
+  notificationPreferences,
 } from "../schema";
 
 describe("db schema", () => {
@@ -203,5 +205,57 @@ describe("db schema", () => {
     expect(migration).toContain("workflow_kind");
     expect(migration).toContain("source_channel");
     expect(migration).toContain("structured_data");
+  });
+
+  it("notifications tables have required tenant-aware columns", () => {
+    expect(Object.keys(notifications)).toEqual(
+      expect.arrayContaining([
+        "id",
+        "tenantId",
+        "type",
+        "title",
+        "status",
+        "priority",
+        "actionUrl",
+        "entityType",
+        "entityId",
+        "idempotencyKey",
+        "metadata",
+        "createdAt",
+        "updatedAt",
+      ]),
+    );
+    expect(Object.keys(notificationPreferences)).toEqual(
+      expect.arrayContaining([
+        "id",
+        "tenantId",
+        "inAppEnabled",
+        "staffSmsEnabled",
+        "staffSmsPhone",
+        "quietHoursStart",
+        "quietHoursEnd",
+        "timezone",
+        "createdAt",
+        "updatedAt",
+      ]),
+    );
+  });
+
+  it("notifications migration has tenant RLS policies", () => {
+    const migration = readFileSync(
+      new URL("../../migrations/0046_notifications.sql", import.meta.url),
+      "utf8",
+    );
+
+    for (const table of ["notifications", "notification_preferences"]) {
+      expect(migration).toContain(`CREATE TABLE IF NOT EXISTS ${table}`);
+      expect(migration).toContain("tenant_id");
+      expect(migration).toContain(`ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY`);
+      expect(migration).toContain(`CREATE POLICY ${table}_tenant_isolation`);
+      expect(migration).toContain("current_setting('app.tenant_id', TRUE)::uuid");
+      expect(migration).toMatch(
+        new RegExp(`CREATE POLICY ${table}_tenant_isolation[\\s\\S]+WITH CHECK`),
+      );
+    }
   });
 });

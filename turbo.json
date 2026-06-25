@@ -3,6 +3,7 @@
   "ui": "tui",
   "globalEnv": [
     "DATABASE_URL",
+    "DATABASE_POOL_MAX",
     "REDIS_URL",
     "PORT",
     "BETTER_AUTH_SECRET",

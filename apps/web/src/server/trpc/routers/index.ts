@@ -20,6 +20,7 @@ import { tenancyRouter } from "./tenancy";
 import { uploadsRouter } from "./uploads";
 import { smsAutomationRouter } from "./sms-automation";
 import { smsRouter } from "./sms";
+import { notificationsRouter } from "./notifications";
 
 export const appRouter = router({
   auth: authRouter,
@@ -35,6 +36,7 @@ export const appRouter = router({
   inbox: inboxRouter,
   landingPages: landingPagesRouter,
   integrations: integrationsRouter,
+  notifications: notificationsRouter,
   ops: opsRouter,
   platform: platformRouter,
   segments: segmentsRouter,

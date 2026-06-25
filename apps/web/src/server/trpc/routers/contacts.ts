@@ -74,6 +74,18 @@ function parseOptionalDate(input: string | null | undefined): Date | null {
   return parsed;
 }
 
+function readRecord(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function openTaskGroupKey(task: { contactId: string; title: string; meta?: unknown }): string {
+  const meta = readRecord(task.meta);
+  const workflowKind = typeof meta["workflowKind"] === "string" ? meta["workflowKind"] : "";
+  return `${task.contactId}:${task.title}:${workflowKind}`;
+}
+
 async function assertContactBelongsToTenant(tenantId: string, contactId: string): Promise<void> {
   const [contact] = await db
     .select({ id: contacts.id })
@@ -238,6 +250,11 @@ export const contactsRouter = router({
           submittedAt: leads.submittedAt,
           sourceUrl: leads.sourceUrl,
           payload: leads.payload,
+          status: leads.status,
+          workflowKind: leads.workflowKind,
+          workflowState: leads.workflowState,
+          sourceChannel: leads.sourceChannel,
+          structuredData: leads.structuredData,
         })
         .from(leads)
         .where(and(eq(leads.tenantId, tenantId), eq(leads.contactId, input.contactId)))
@@ -325,13 +342,14 @@ export const contactsRouter = router({
     .query(async ({ ctx, input }) => {
       const { tenantId } = ctx.tenantCtx;
 
-      return db
+      const rows = await db
         .select({
           id: crmTasks.id,
           contactId: crmTasks.contactId,
           dealId: crmTasks.dealId,
           title: crmTasks.title,
           body: crmTasks.body,
+          meta: crmTasks.meta,
           dueAt: crmTasks.dueAt,
           status: crmTasks.status,
           priority: crmTasks.priority,
@@ -348,7 +366,30 @@ export const contactsRouter = router({
         )
         .where(and(eq(crmTasks.tenantId, tenantId), eq(crmTasks.status, "open")))
         .orderBy(sql`${crmTasks.dueAt} ASC NULLS LAST`, desc(crmTasks.createdAt))
-        .limit(input.limit);
+        .limit(input.limit * 4);
+
+      const grouped = new Map<string, (typeof rows)[number] & { duplicateCount: number }>();
+      for (const row of rows) {
+        const key = openTaskGroupKey(row);
+        const existing = grouped.get(key);
+        if (!existing) {
+          grouped.set(key, { ...row, duplicateCount: 1 });
+          continue;
+        }
+        existing.duplicateCount += 1;
+        const existingDue = existing.dueAt
+          ? new Date(existing.dueAt).getTime()
+          : Number.POSITIVE_INFINITY;
+        const rowDue = row.dueAt ? new Date(row.dueAt).getTime() : Number.POSITIVE_INFINITY;
+        if (
+          rowDue < existingDue ||
+          (rowDue === existingDue && row.createdAt > existing.createdAt)
+        ) {
+          grouped.set(key, { ...row, duplicateCount: existing.duplicateCount });
+        }
+      }
+
+      return [...grouped.values()].slice(0, input.limit);
     }),
 
   createTask: tenantProcedure

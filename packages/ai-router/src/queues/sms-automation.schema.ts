@@ -6,6 +6,7 @@ export const smsSendPurposeSchema = z.enum([
   "sequence_transactional",
   "sequence_marketing",
   "integration_test",
+  "staff_alert",
 ]);
 
 export const smsSendJobSchema = z.object({

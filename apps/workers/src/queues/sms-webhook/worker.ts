@@ -4,6 +4,7 @@ import {
   db,
   leads,
   messages,
+  notifications,
   smsPreferences,
   smsSequenceEnrollments,
   webhookEvents,
@@ -74,6 +75,27 @@ async function processStatus(event: typeof webhookEvents.$inferSelect): Promise<
         eq(messages.externalId, messageSid),
       ),
     );
+  if (status === "failed" || status === "undelivered") {
+    await db
+      .insert(notifications)
+      .values({
+        tenantId: event.tenantId,
+        type: "automation.failed",
+        title: "SMS delivery needs attention",
+        body: "A customer SMS could not be delivered. Open the Inbox to review the contact and try another channel.",
+        priority: "high",
+        actionUrl: "/en/crm/inbox",
+        entityType: "message",
+        idempotencyKey: `sms-status-failed:${messageSid}`,
+        metadata: {
+          messageSid,
+          status,
+          errorCode: params["ErrorCode"],
+          errorMessage: params["ErrorMessage"],
+        },
+      })
+      .onConflictDoNothing({ target: [notifications.tenantId, notifications.idempotencyKey] });
+  }
 }
 
 async function processInbound(event: typeof webhookEvents.$inferSelect): Promise<void> {
@@ -127,6 +149,27 @@ async function processInbound(event: typeof webhookEvents.$inferSelect): Promise
       },
     })
     .onConflictDoNothing();
+
+  await db
+    .insert(notifications)
+    .values({
+      tenantId: event.tenantId,
+      type: "inbox.reply_needed",
+      title: "Customer replied by SMS",
+      body: "Open the Inbox to read the message and continue the conversation.",
+      priority: "high",
+      actionUrl: `/en/crm/inbox`,
+      entityType: "contact",
+      entityId: contact.id,
+      idempotencyKey: `sms-inbound:${messageSid}`,
+      metadata: {
+        contactId: contact.id,
+        phone: from,
+        messageSid,
+        preview: body.slice(0, 120),
+      },
+    })
+    .onConflictDoNothing({ target: [notifications.tenantId, notifications.idempotencyKey] });
 
   const keyword = classifySmsKeyword(body);
   if (keyword === "help") {

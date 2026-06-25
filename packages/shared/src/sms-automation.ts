@@ -3,7 +3,8 @@ export type SmsPurpose =
   | "manual_reply"
   | "sequence_transactional"
   | "sequence_marketing"
-  | "integration_test";
+  | "integration_test"
+  | "staff_alert";
 
 export type SmsTriggerFilter = {
   leadKind?: string;
