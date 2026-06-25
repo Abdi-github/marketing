@@ -11,7 +11,7 @@ import {
   tenants,
   usageRecords,
 } from "@marketing/db";
-import { eq, and, desc, inArray, sql } from "drizzle-orm";
+import { eq, and, desc, gte, inArray, sql } from "drizzle-orm";
 import { getPlanCaps, smsUsageMonthStart } from "@marketing/billing";
 import {
   GastrofixAdapter,
@@ -119,7 +119,7 @@ async function resolveSmsForTenant(tenantId: string) {
         and(
           eq(usageRecords.tenantId, tenantId),
           eq(usageRecords.metric, "sms_sent"),
-          sql`${usageRecords.recordedAt} >= ${smsUsageMonthStart()}`,
+          gte(usageRecords.recordedAt, smsUsageMonthStart()),
         ),
       ),
   ]);

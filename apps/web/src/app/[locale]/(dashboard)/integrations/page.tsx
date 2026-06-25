@@ -303,6 +303,10 @@ function IntegrationsPageContent() {
   const connectedProviders = new Set(
     connections.filter((c) => c.status === "connected").map((c) => c.provider),
   );
+  const smsConfigured = smsHealth?.configured ?? businessSmsSettings?.entitlement?.allowed ?? false;
+  const smsPlan = smsHealth?.plan ?? businessSmsSettings?.plan ?? "trial";
+  const smsVerifiedBusinessPhone =
+    smsHealth?.verifiedBusinessPhone ?? businessSmsSettings?.businessPhone ?? null;
   const activeSyncConnectionIds = new Set(
     syncRuns
       .filter((run) => run.status === "queued" || run.status === "running")
@@ -732,15 +736,15 @@ function IntegrationsPageContent() {
             <div style={{ display: "grid", gap: "0.45rem", marginTop: "0.7rem" }}>
               <WhatsAppCapability
                 label="Phone-only leads can receive acknowledgement"
-                enabled={smsHealth?.configured === true}
+                enabled={smsConfigured}
               />
               <WhatsAppCapability
                 label="Staff can reply by SMS from CRM Inbox"
-                enabled={smsHealth?.configured === true}
+                enabled={smsConfigured}
               />
               <WhatsAppCapability
                 label="Business phone is verified for trust and contact details"
-                enabled={Boolean(smsHealth?.verifiedBusinessPhone)}
+                enabled={Boolean(smsVerifiedBusinessPhone)}
               />
               <WhatsAppCapability
                 label="Failed SMS sends appear in automation attention"
@@ -772,7 +776,7 @@ function IntegrationsPageContent() {
                 marginTop: "0.75rem",
               }}
             >
-              <MiniMetric label="Plan" value={smsHealth?.plan ?? "trial"} />
+              <MiniMetric label="Plan" value={smsPlan} />
               <MiniMetric
                 label="Automation"
                 value={businessSmsSettings?.enabled === false ? "Paused" : "Enabled"}
@@ -787,7 +791,7 @@ function IntegrationsPageContent() {
               />
               <MiniMetric
                 label="Business phone"
-                value={smsHealth?.verifiedBusinessPhone ?? "Not verified"}
+                value={smsVerifiedBusinessPhone ?? "Not verified"}
               />
               <MiniMetric label="Sender" value={smsHealth?.originator ?? "Platform sender"} />
               <MiniMetric label="Failed" value={String(smsHealth?.failedSends ?? 0)} />
@@ -823,9 +827,9 @@ function IntegrationsPageContent() {
             platform sender, but your verified phone is used for contact details, trust, and staff
             workflow.
           </p>
-          {smsHealth?.verifiedBusinessPhone ? (
+          {smsVerifiedBusinessPhone ? (
             <p style={{ color: "#15803d", fontSize: "0.85rem", fontWeight: 750 }}>
-              Verified: {smsHealth.verifiedBusinessPhone}
+              Verified: {smsVerifiedBusinessPhone}
             </p>
           ) : (
             <div style={{ display: "grid", gap: "0.75rem" }}>
@@ -842,15 +846,9 @@ function IntegrationsPageContent() {
                 />
                 <button
                   type="submit"
-                  disabled={
-                    phoneVerificationBusy ||
-                    !businessPhoneInput.trim() ||
-                    smsHealth?.configured !== true
-                  }
+                  disabled={phoneVerificationBusy || !businessPhoneInput.trim() || !smsConfigured}
                   style={btnStyle(
-                    phoneVerificationBusy ||
-                      !businessPhoneInput.trim() ||
-                      smsHealth?.configured !== true
+                    phoneVerificationBusy || !businessPhoneInput.trim() || !smsConfigured
                       ? "#9ca3af"
                       : "#2563eb",
                   )}
@@ -926,11 +924,9 @@ function IntegrationsPageContent() {
               />
               <button
                 type="submit"
-                disabled={smsTesting || !smsTestPhone.trim() || smsHealth?.configured !== true}
+                disabled={smsTesting || !smsTestPhone.trim() || !smsConfigured}
                 style={btnStyle(
-                  smsTesting || !smsTestPhone.trim() || smsHealth?.configured !== true
-                    ? "#9ca3af"
-                    : "#2563eb",
+                  smsTesting || !smsTestPhone.trim() || !smsConfigured ? "#9ca3af" : "#2563eb",
                 )}
               >
                 {smsTesting ? "Sending..." : "Send test"}
@@ -988,8 +984,8 @@ function IntegrationsPageContent() {
           >
             <HealthCard
               label="Automation"
-              value={smsHealth?.configured ? "Available" : "Needs attention"}
-              tone={smsHealth?.configured ? "#16a34a" : "#dc2626"}
+              value={smsConfigured ? "Available" : "Needs attention"}
+              tone={smsConfigured ? "#16a34a" : "#dc2626"}
             />
             <HealthCard
               label="Last message"
