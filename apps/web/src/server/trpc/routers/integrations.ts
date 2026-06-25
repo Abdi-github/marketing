@@ -7,6 +7,7 @@ import {
   outbox,
   smsPhoneVerifications,
   socialPosts,
+  subscriptions,
   tenants,
   usageRecords,
 } from "@marketing/db";
@@ -86,11 +87,16 @@ function getMetaAdapter(): MetaAdapter {
 }
 
 async function resolveSmsForTenant(tenantId: string) {
-  const [[tenant], [connection], [monthlyUsage]] = await Promise.all([
+  const [[tenant], [subscription], [connection], [monthlyUsage]] = await Promise.all([
     db
       .select({ slug: tenants.slug, plan: tenants.plan })
       .from(tenants)
       .where(eq(tenants.id, tenantId))
+      .limit(1),
+    db
+      .select({ plan: subscriptions.plan })
+      .from(subscriptions)
+      .where(and(eq(subscriptions.tenantId, tenantId), eq(subscriptions.status, "active")))
       .limit(1),
     db
       .select({
@@ -118,10 +124,12 @@ async function resolveSmsForTenant(tenantId: string) {
       ),
   ]);
   if (!tenant) return null;
+  const effectivePlan =
+    tenant.plan === "trial" && subscription?.plan ? subscription.plan : tenant.plan;
   const demoModeAllowed = isSmsPlatformTestModeEnabled(env);
   const providerConfigured = Boolean(connection) || getSmsProviderHealth(env).configured;
   const entitlement = evaluateSmsEntitlement({
-    monthlyLimit: getPlanCaps(tenant.plan).monthlySmsLimit,
+    monthlyLimit: getPlanCaps(effectivePlan).monthlySmsLimit,
     monthlyUsed: Number(monthlyUsage?.total ?? 0),
     providerConfigured,
     demoModeAllowed,
@@ -140,7 +148,7 @@ async function resolveSmsForTenant(tenantId: string) {
     env,
     allowPlatformManaged: entitlement.allowed,
   });
-  return { credentials, entitlement, tenant, demoModeAllowed };
+  return { credentials, entitlement, tenant: { ...tenant, plan: effectivePlan }, demoModeAllowed };
 }
 
 // ─── Router ───────────────────────────────────────────────────────────────────

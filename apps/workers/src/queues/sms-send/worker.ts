@@ -5,6 +5,7 @@ import {
   messages,
   smsPreferences,
   smsSequenceEnrollments,
+  subscriptions,
   tenants,
   usageRecords,
 } from "@marketing/db";
@@ -46,12 +47,17 @@ async function processSmsSend(rawJob: Job<SmsSendJob>): Promise<void> {
   const purpose = (meta["purpose"] as SmsPurpose | undefined) ?? "manual_reply";
   const normalizedPhone = normalizeSmsPhone(message.toAddress);
 
-  const [[tenant], [connectionRow], [preference], [tenantCount], [contactCount]] =
+  const [[tenant], [subscription], [connectionRow], [preference], [tenantCount], [contactCount]] =
     await Promise.all([
       db
         .select({ slug: tenants.slug, plan: tenants.plan })
         .from(tenants)
         .where(eq(tenants.id, job.tenantId))
+        .limit(1),
+      db
+        .select({ plan: subscriptions.plan })
+        .from(subscriptions)
+        .where(and(eq(subscriptions.tenantId, job.tenantId), eq(subscriptions.status, "active")))
         .limit(1),
       db
         .select({
@@ -108,6 +114,8 @@ async function processSmsSend(rawJob: Job<SmsSendJob>): Promise<void> {
     ]);
 
   if (!tenant) throw new Error("SMS tenant not found.");
+  const effectivePlan =
+    tenant.plan === "trial" && subscription?.plan ? subscription.plan : tenant.plan;
   const [monthlyUsage] = await db
     .select({ total: sql<number>`coalesce(sum(${usageRecords.quantity}), 0)::int` })
     .from(usageRecords)
@@ -121,7 +129,7 @@ async function processSmsSend(rawJob: Job<SmsSendJob>): Promise<void> {
   const demoModeAllowed = isSmsPlatformTestModeEnabled(env);
   const providerConfigured = Boolean(connectionRow) || getSmsProviderHealth(env).configured;
   const entitlement = evaluateSmsEntitlement({
-    monthlyLimit: getPlanCaps(tenant.plan).monthlySmsLimit,
+    monthlyLimit: getPlanCaps(effectivePlan).monthlySmsLimit,
     monthlyUsed: Number(monthlyUsage?.total ?? 0),
     providerConfigured,
     demoModeAllowed,

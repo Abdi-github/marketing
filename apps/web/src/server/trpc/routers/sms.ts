@@ -5,6 +5,7 @@ import {
   db,
   messages,
   smsPhoneVerifications,
+  subscriptions,
   tenants,
   usageRecords,
 } from "@marketing/db";
@@ -42,11 +43,16 @@ function smsSettingsRecord(value: unknown): Record<string, unknown> {
 }
 
 async function getTenantSmsEntitlement(tenantId: string) {
-  const [[tenant], [monthlyUsage]] = await Promise.all([
+  const [[tenant], [subscription], [monthlyUsage]] = await Promise.all([
     db
       .select({ id: tenants.id, name: tenants.name, slug: tenants.slug, plan: tenants.plan })
       .from(tenants)
       .where(eq(tenants.id, tenantId))
+      .limit(1),
+    db
+      .select({ plan: subscriptions.plan })
+      .from(subscriptions)
+      .where(and(eq(subscriptions.tenantId, tenantId), eq(subscriptions.status, "active")))
       .limit(1),
     db
       .select({ total: sql<number>`coalesce(sum(${usageRecords.quantity}), 0)::int` })
@@ -60,14 +66,16 @@ async function getTenantSmsEntitlement(tenantId: string) {
       ),
   ]);
   if (!tenant) throw new TRPCError({ code: "NOT_FOUND", message: "Tenant not found." });
+  const effectivePlan =
+    tenant.plan === "trial" && subscription?.plan ? subscription.plan : tenant.plan;
   const demoModeAllowed = isSmsPlatformTestModeEnabled(env);
   const entitlement = evaluateSmsEntitlement({
-    monthlyLimit: getPlanCaps(tenant.plan).monthlySmsLimit,
+    monthlyLimit: getPlanCaps(effectivePlan).monthlySmsLimit,
     monthlyUsed: Number(monthlyUsage?.total ?? 0),
     providerConfigured: getSmsProviderHealth(env).configured,
     demoModeAllowed,
   });
-  return { tenant, entitlement, demoModeAllowed };
+  return { tenant: { ...tenant, plan: effectivePlan }, entitlement, demoModeAllowed };
 }
 
 export const smsRouter = router({
