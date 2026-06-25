@@ -21,7 +21,7 @@ try {
   const foundMetrics = new Set(metrics.map((row) => row.enumlabel));
   const missing = [
     ...(tables.length > 0 ? [] : ["sms_phone_verifications"]),
-    ...(["sms_sent", "sms_segments"].filter((metric) => !foundMetrics.has(metric))),
+    ...["sms_sent", "sms_segments"].filter((metric) => !foundMetrics.has(metric)),
   ];
 
   if (missing.length > 0) {
