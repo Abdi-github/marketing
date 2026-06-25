@@ -14,7 +14,7 @@ import {
   isSmsPlatformTestModeEnabled,
   resolveSmsCredentials,
 } from "@marketing/integrations";
-import { env, evaluateSmsEntitlement, normalizeSmsPhone } from "@marketing/shared";
+import { env, evaluateSmsEntitlement, logger, normalizeSmsPhone } from "@marketing/shared";
 import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -212,12 +212,15 @@ export const smsRouter = router({
 
       const code = generateCode();
       const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
-      await db.insert(smsPhoneVerifications).values({
-        tenantId,
-        phone,
-        codeHash: hashVerificationCode(tenantId, phone, code),
-        expiresAt,
-      });
+      const [verification] = await db
+        .insert(smsPhoneVerifications)
+        .values({
+          tenantId,
+          phone,
+          codeHash: hashVerificationCode(tenantId, phone, code),
+          expiresAt,
+        })
+        .returning({ id: smsPhoneVerifications.id });
       const [message] = await db
         .insert(messages)
         .values({
@@ -237,7 +240,37 @@ export const smsRouter = router({
         })
         .returning({ id: messages.id });
       if (!message) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
-      await enqueueSmsSendJob({ tenantId, messageId: message.id });
+      try {
+        await enqueueSmsSendJob({ tenantId, messageId: message.id });
+      } catch (error) {
+        logger.error(
+          {
+            tenantId,
+            messageId: message.id,
+            err: error instanceof Error ? error.message : String(error),
+          },
+          "[sms] Failed to enqueue phone verification SMS",
+        );
+        await Promise.all([
+          db
+            .update(messages)
+            .set({
+              status: "failed",
+              errorMessage: "SMS delivery queue is unavailable.",
+            })
+            .where(eq(messages.id, message.id)),
+          verification
+            ? db
+                .update(smsPhoneVerifications)
+                .set({ status: "failed", updatedAt: new Date() })
+                .where(eq(smsPhoneVerifications.id, verification.id))
+            : Promise.resolve(),
+        ]);
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "The SMS verification code could not be queued. Please try again in a moment.",
+        });
+      }
       return { ok: true, phone, expiresAt };
     }),
 

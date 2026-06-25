@@ -7,9 +7,12 @@ import {
   type SmsSendJob,
   type SmsSequenceTriggerJob,
 } from "@marketing/ai-router";
-import { env } from "@marketing/shared";
+import { env, logger } from "@marketing/shared";
 import { Queue, type JobsOptions } from "bullmq";
 import IORedis from "ioredis";
+
+const QUEUE_ADD_TIMEOUT_MS = 10_000;
+const QUEUE_CLOSE_TIMEOUT_MS = 2_000;
 
 function createConnection() {
   return new IORedis(env.REDIS_URL, {
@@ -17,6 +20,13 @@ function createConnection() {
     enableReadyCheck: false,
     connectTimeout: 5000,
     commandTimeout: 8000,
+  });
+}
+
+function timeoutAfter(ms: number, message: string): Promise<never> {
+  return new Promise((_, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    timer.unref?.();
   });
 }
 
@@ -37,9 +47,26 @@ async function addJob<T>(
     },
   });
   try {
-    await queue.add(name, data, options);
+    await Promise.race([
+      queue.add(name, data, options),
+      timeoutAfter(QUEUE_ADD_TIMEOUT_MS, `Timed out while enqueueing ${queueName}`),
+    ]);
   } finally {
-    await queue.close();
+    try {
+      await Promise.race([
+        queue.close(),
+        timeoutAfter(QUEUE_CLOSE_TIMEOUT_MS, `Timed out while closing ${queueName}`),
+      ]);
+    } catch (error) {
+      logger.warn(
+        {
+          queueName,
+          err: error instanceof Error ? error.message : String(error),
+        },
+        "[queue] Failed to close SMS queue cleanly",
+      );
+      connection.disconnect();
+    }
   }
 }
 

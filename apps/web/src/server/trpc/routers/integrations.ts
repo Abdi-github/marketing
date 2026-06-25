@@ -33,6 +33,7 @@ import {
 import {
   env,
   evaluateSmsEntitlement,
+  logger,
   normalizeSmsPhone,
   summarizeWhatsappConnectionHealth,
 } from "@marketing/shared";
@@ -502,7 +503,29 @@ export const integrationsRouter = router({
         })
         .returning({ id: messages.id });
       if (!message) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
-      await enqueueSmsSendJob({ tenantId, messageId: message.id });
+      try {
+        await enqueueSmsSendJob({ tenantId, messageId: message.id });
+      } catch (error) {
+        logger.error(
+          {
+            tenantId,
+            messageId: message.id,
+            err: error instanceof Error ? error.message : String(error),
+          },
+          "[integrations] Failed to enqueue SMS test message",
+        );
+        await db
+          .update(messages)
+          .set({
+            status: "failed",
+            errorMessage: "SMS delivery queue is unavailable.",
+          })
+          .where(eq(messages.id, message.id));
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "The test SMS could not be queued. Please try again in a moment.",
+        });
+      }
       return {
         ok: true,
         provider: getSmsProviderHealth(credentials).providerLabel,
