@@ -27,6 +27,7 @@ import {
   getSmsProviderHealth,
   resolveSmsCredentials,
   isSmsPlatformTestModeEnabled,
+  sendSmsViaConfiguredProvider,
   sendWhatsAppText,
   WhatsAppApiError,
 } from "@marketing/integrations";
@@ -44,7 +45,6 @@ import {
   getSocialCreativePublicUrl,
 } from "../../../lib/social-creative";
 import { enqueueIntegrationSyncJob } from "../../queues/integration-sync";
-import { enqueueSmsSendJob } from "../../queues/sms";
 import { router, tenantProcedure, requires } from "../trpc";
 
 // ─── Adapter instances ─────────────────────────────────────────────────────────
@@ -504,7 +504,45 @@ export const integrationsRouter = router({
         .returning({ id: messages.id });
       if (!message) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
       try {
-        await enqueueSmsSendJob({ tenantId, messageId: message.id });
+        const result = await sendSmsViaConfiguredProvider(credentials, {
+          to: normalizedPhone,
+          text,
+        });
+        await db
+          .update(messages)
+          .set({
+            status: result.sandbox ? "delivered" : "sent",
+            externalId: result.messageId,
+            fromAddress: result.fromAddress,
+            toAddress: result.toAddress,
+            errorMessage: null,
+            meta: {
+              provider: result.provider,
+              providerLabel: result.providerLabel,
+              integrationTest: true,
+              purpose: "integration_test",
+              credentialMode: credentials.mode,
+              segmentCount: result.segmentCount,
+              statusCode: result.statusCode,
+              statusInfo: result.statusInfo,
+              sandbox: result.sandbox,
+            },
+          })
+          .where(eq(messages.id, message.id));
+        if (!result.sandbox) {
+          await db.insert(usageRecords).values([
+            {
+              tenantId,
+              metric: "sms_sent",
+              quantity: 1,
+            },
+            {
+              tenantId,
+              metric: "sms_segments",
+              quantity: Math.max(1, result.segmentCount),
+            },
+          ]);
+        }
       } catch (error) {
         logger.error(
           {
@@ -512,18 +550,18 @@ export const integrationsRouter = router({
             messageId: message.id,
             err: error instanceof Error ? error.message : String(error),
           },
-          "[integrations] Failed to enqueue SMS test message",
+          "[integrations] Failed to send SMS test message",
         );
         await db
           .update(messages)
           .set({
             status: "failed",
-            errorMessage: "SMS delivery queue is unavailable.",
+            errorMessage: error instanceof Error ? error.message : "SMS test send failed.",
           })
           .where(eq(messages.id, message.id));
         throw new TRPCError({
           code: "PRECONDITION_FAILED",
-          message: "The test SMS could not be queued. Please try again in a moment.",
+          message: error instanceof Error ? error.message : "The test SMS could not be sent.",
         });
       }
       return {

@@ -13,12 +13,12 @@ import {
   getSmsProviderHealth,
   isSmsPlatformTestModeEnabled,
   resolveSmsCredentials,
+  sendSmsViaConfiguredProvider,
 } from "@marketing/integrations";
 import { env, evaluateSmsEntitlement, logger, normalizeSmsPhone } from "@marketing/shared";
 import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { enqueueSmsSendJob } from "../../queues/sms";
 import { requires, router, tenantProcedure } from "../trpc";
 
 function hashVerificationCode(tenantId: string, phone: string, code: string): string {
@@ -241,7 +241,44 @@ export const smsRouter = router({
         .returning({ id: messages.id });
       if (!message) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
       try {
-        await enqueueSmsSendJob({ tenantId, messageId: message.id });
+        const result = await sendSmsViaConfiguredProvider(credentials, {
+          to: phone,
+          text: `${tenant.name}: Your SMS verification code is ${code}. It expires in 10 minutes.`,
+        });
+        await db
+          .update(messages)
+          .set({
+            status: result.sandbox ? "delivered" : "sent",
+            externalId: result.messageId,
+            fromAddress: result.fromAddress,
+            toAddress: result.toAddress,
+            errorMessage: null,
+            meta: {
+              provider: result.provider,
+              providerLabel: result.providerLabel,
+              purpose: "phone_verification",
+              credentialMode: credentials.mode,
+              segmentCount: result.segmentCount,
+              statusCode: result.statusCode,
+              statusInfo: result.statusInfo,
+              sandbox: result.sandbox,
+            },
+          })
+          .where(eq(messages.id, message.id));
+        if (!result.sandbox) {
+          await db.insert(usageRecords).values([
+            {
+              tenantId,
+              metric: "sms_sent",
+              quantity: 1,
+            },
+            {
+              tenantId,
+              metric: "sms_segments",
+              quantity: Math.max(1, result.segmentCount),
+            },
+          ]);
+        }
       } catch (error) {
         logger.error(
           {
@@ -249,14 +286,15 @@ export const smsRouter = router({
             messageId: message.id,
             err: error instanceof Error ? error.message : String(error),
           },
-          "[sms] Failed to enqueue phone verification SMS",
+          "[sms] Failed to send phone verification SMS",
         );
         await Promise.all([
           db
             .update(messages)
             .set({
               status: "failed",
-              errorMessage: "SMS delivery queue is unavailable.",
+              errorMessage:
+                error instanceof Error ? error.message : "SMS verification send failed.",
             })
             .where(eq(messages.id, message.id)),
           verification
@@ -268,7 +306,8 @@ export const smsRouter = router({
         ]);
         throw new TRPCError({
           code: "PRECONDITION_FAILED",
-          message: "The SMS verification code could not be queued. Please try again in a moment.",
+          message:
+            error instanceof Error ? error.message : "The SMS verification code could not be sent.",
         });
       }
       return { ok: true, phone, expiresAt };
