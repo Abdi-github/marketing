@@ -10,7 +10,7 @@ import {
 } from "@marketing/db";
 import {
   getSmsProviderHealth,
-  isSmsTestModeTenant,
+  isSmsPlatformTestModeEnabled,
   resolveSmsCredentials,
 } from "@marketing/integrations";
 import { env, evaluateSmsEntitlement, normalizeSmsPhone } from "@marketing/shared";
@@ -60,7 +60,7 @@ async function getTenantSmsEntitlement(tenantId: string) {
       ),
   ]);
   if (!tenant) throw new TRPCError({ code: "NOT_FOUND", message: "Tenant not found." });
-  const demoModeAllowed = isSmsTestModeTenant(env, tenant.slug);
+  const demoModeAllowed = isSmsPlatformTestModeEnabled(env);
   const entitlement = evaluateSmsEntitlement({
     monthlyLimit: getPlanCaps(tenant.plan).monthlySmsLimit,
     monthlyUsed: Number(monthlyUsage?.total ?? 0),

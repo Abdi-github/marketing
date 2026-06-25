@@ -86,5 +86,5 @@ export {
   verifyTwilioWebhookSignature,
 } from "../sms-twilio/webhook";
 export type { TwilioWebhookParams } from "../sms-twilio/webhook";
-export { isSmsTestModeTenant, resolveSmsCredentials } from "../sms/credentials";
+export { isSmsPlatformTestModeEnabled, resolveSmsCredentials } from "../sms/credentials";
 export type { ResolvedSmsCredentials, SmsCredentialConnection } from "../sms/credentials";

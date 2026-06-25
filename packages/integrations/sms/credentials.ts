@@ -15,7 +15,6 @@ export type ResolvedSmsCredentials = SmsProviderEnv & {
 type SmsCredentialEnv = SmsProviderEnv & {
   INTEGRATION_ENCRYPTION_KEY?: string;
   SMS_TEST_MODE_ENABLED?: string;
-  SMS_TEST_TENANT_SLUG?: string;
 };
 
 function readString(record: Record<string, unknown>, key: string): string | undefined {
@@ -99,11 +98,7 @@ export function resolveSmsCredentials(input: {
     }
   }
 
-  const isTestTenant =
-    input.env.SMS_TEST_MODE_ENABLED === "true" &&
-    Boolean(input.env.SMS_TEST_TENANT_SLUG) &&
-    input.tenantSlug === input.env.SMS_TEST_TENANT_SLUG;
-  if (!isTestTenant) return null;
+  if (!isSmsPlatformTestModeEnabled(input.env)) return null;
 
   if (provider === "twilio") {
     if (
@@ -140,13 +135,8 @@ export function resolveSmsCredentials(input: {
   };
 }
 
-export function isSmsTestModeTenant(
-  env: Pick<SmsCredentialEnv, "SMS_TEST_MODE_ENABLED" | "SMS_TEST_TENANT_SLUG">,
-  tenantSlug: string | null,
+export function isSmsPlatformTestModeEnabled(
+  env: Pick<SmsCredentialEnv, "SMS_TEST_MODE_ENABLED">,
 ): boolean {
-  return (
-    env.SMS_TEST_MODE_ENABLED === "true" &&
-    Boolean(env.SMS_TEST_TENANT_SLUG) &&
-    env.SMS_TEST_TENANT_SLUG === tenantSlug
-  );
+  return env.SMS_TEST_MODE_ENABLED === "true";
 }

@@ -86,7 +86,6 @@ describe("Twilio tenant credential resolution", () => {
         TWILIO_AUTH_TOKEN: "platform-auth-token",
         TWILIO_FROM_NUMBER: "+15557654321",
         SMS_TEST_MODE_ENABLED: "true",
-        SMS_TEST_TENANT_SLUG: "abdi-restaurant",
       },
     });
 
@@ -95,14 +94,13 @@ describe("Twilio tenant credential resolution", () => {
     expect(resolved?.senderAddress).toBe("+15551234567");
   });
 
-  it("allows platform credentials only for the explicit demo tenant", () => {
+  it("allows platform test credentials for any tenant when platform SMS test mode is enabled", () => {
     const env = {
       SMS_PROVIDER: "twilio" as const,
       TWILIO_ACCOUNT_SID: `AC${"2".repeat(32)}`,
       TWILIO_AUTH_TOKEN: "platform-auth-token",
       TWILIO_FROM_NUMBER: "+15557654321",
       SMS_TEST_MODE_ENABLED: "true" as const,
-      SMS_TEST_TENANT_SLUG: "abdi-restaurant",
     };
 
     expect(
@@ -110,7 +108,7 @@ describe("Twilio tenant credential resolution", () => {
     ).toBe("platform_test");
     expect(
       resolveSmsCredentials({ tenantSlug: "another-tenant", connection: null, env }),
-    ).toBeNull();
+    ).toMatchObject({ mode: "platform_test" });
   });
 
   it("allows platform-managed credentials when entitlement has approved platform SMS", () => {

@@ -10,7 +10,7 @@ import {
 } from "@marketing/db";
 import {
   getSmsProviderHealth,
-  isSmsTestModeTenant,
+  isSmsPlatformTestModeEnabled,
   resolveSmsCredentials,
   sendSmsViaConfiguredProvider,
 } from "@marketing/integrations";
@@ -118,7 +118,7 @@ async function processSmsSend(rawJob: Job<SmsSendJob>): Promise<void> {
         gte(usageRecords.recordedAt, smsUsageMonthStart()),
       ),
     );
-  const demoModeAllowed = isSmsTestModeTenant(env, tenant.slug);
+  const demoModeAllowed = isSmsPlatformTestModeEnabled(env);
   const providerConfigured = Boolean(connectionRow) || getSmsProviderHealth(env).configured;
   const entitlement = evaluateSmsEntitlement({
     monthlyLimit: getPlanCaps(tenant.plan).monthlySmsLimit,

@@ -61,22 +61,25 @@ TWILIO_ACCOUNT_SID=<your Twilio account SID>
 TWILIO_AUTH_TOKEN=<your Twilio auth token>
 TWILIO_FROM_NUMBER=<your Twilio SMS number>
 SMS_TEST_MODE_ENABLED=true
-SMS_TEST_TENANT_SLUG=geneva-restaurant-e2e-jz3bc
 SMS_INBOUND_CALLBACK_URL=https://marketing-web-pied-nine.vercel.app/api/integrations/twilio/sms/inbound
 SMS_STATUS_CALLBACK_URL=https://marketing-web-pied-nine.vercel.app/api/integrations/twilio/sms/status
 ```
 
 Do not paste secrets into screenshots or documentation.
 
+`SMS_TEST_MODE_ENABLED=true` is only for your current controlled development/demo phase. It allows
+all tenants you create to use the platform SMS sender even if their plan would normally block SMS.
+For broad production self-serve, set it to `false` and let plan limits control access.
+
 ### 3. Confirm the tenant plan allows SMS
 
 Open `Integrations` and check the SMS card:
 
-| Plan    | Expected SMS behavior                                      |
-| ------- | ---------------------------------------------------------- |
-| Trial   | Real SMS blocked unless this is the configured demo tenant |
-| Starter | Up to 50 SMS per month                                     |
-| Growth  | Up to 500 SMS per month                                    |
+| Plan    | Expected SMS behavior                                 |
+| ------- | ----------------------------------------------------- |
+| Trial   | Real SMS blocked unless platform demo mode is enabled |
+| Starter | Up to 50 SMS per month                                |
+| Growth  | Up to 500 SMS per month                               |
 
 If the panel says `Upgrade required`, the tenant can still collect leads, but real SMS sending is
 blocked until the plan includes SMS.

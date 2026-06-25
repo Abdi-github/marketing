@@ -25,7 +25,7 @@ import {
   resolveWhatsappCredentials,
   getSmsProviderHealth,
   resolveSmsCredentials,
-  isSmsTestModeTenant,
+  isSmsPlatformTestModeEnabled,
   sendWhatsAppText,
   WhatsAppApiError,
 } from "@marketing/integrations";
@@ -118,7 +118,7 @@ async function resolveSmsForTenant(tenantId: string) {
       ),
   ]);
   if (!tenant) return null;
-  const demoModeAllowed = isSmsTestModeTenant(env, tenant.slug);
+  const demoModeAllowed = isSmsPlatformTestModeEnabled(env);
   const providerConfigured = Boolean(connection) || getSmsProviderHealth(env).configured;
   const entitlement = evaluateSmsEntitlement({
     monthlyLimit: getPlanCaps(tenant.plan).monthlySmsLimit,

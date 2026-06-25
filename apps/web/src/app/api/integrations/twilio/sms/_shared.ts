@@ -1,4 +1,4 @@
-import { db, integrationConnections, messages, tenants, webhookEvents } from "@marketing/db";
+import { db, integrationConnections, messages, webhookEvents } from "@marketing/db";
 import {
   decryptTokens,
   formDataToTwilioParams,
@@ -6,7 +6,7 @@ import {
   type TwilioWebhookParams,
 } from "@marketing/integrations";
 import { env } from "@marketing/shared";
-import { and, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { enqueueSmsWebhookJob } from "../../../../../server/queues/sms";
 
 type ResolvedWebhookTenant = {
@@ -24,7 +24,10 @@ function readToken(blob: string): string | null {
   }
 }
 
-async function resolveInboundTenant(toNumber: string): Promise<ResolvedWebhookTenant | null> {
+async function resolveInboundTenant(
+  toNumber: string,
+  fromNumber: string,
+): Promise<ResolvedWebhookTenant | null> {
   const [connection] = await db
     .select({
       tenantId: integrationConnections.tenantId,
@@ -46,18 +49,26 @@ async function resolveInboundTenant(toNumber: string): Promise<ResolvedWebhookTe
 
   if (
     env.SMS_TEST_MODE_ENABLED !== "true" ||
-    !env.SMS_TEST_TENANT_SLUG ||
     env.TWILIO_FROM_NUMBER !== toNumber ||
     !env.TWILIO_AUTH_TOKEN
   ) {
     return null;
   }
-  const [tenant] = await db
-    .select({ id: tenants.id })
-    .from(tenants)
-    .where(eq(tenants.slug, env.SMS_TEST_TENANT_SLUG))
+  const [lastOutbound] = await db
+    .select({ tenantId: messages.tenantId })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.channel, "sms"),
+        eq(messages.direction, "outbound"),
+        eq(messages.toAddress, fromNumber),
+      ),
+    )
+    .orderBy(desc(messages.occurredAt))
     .limit(1);
-  return tenant ? { tenantId: tenant.id, authToken: env.TWILIO_AUTH_TOKEN } : null;
+  return lastOutbound
+    ? { tenantId: lastOutbound.tenantId, authToken: env.TWILIO_AUTH_TOKEN }
+    : null;
 }
 
 async function resolveStatusTenant(messageSid: string): Promise<ResolvedWebhookTenant | null> {
@@ -102,7 +113,7 @@ export async function acceptTwilioWebhook(input: {
 
   const resolved =
     input.eventType === "sms.inbound"
-      ? await resolveInboundTenant(params["To"] ?? "")
+      ? await resolveInboundTenant(params["To"] ?? "", params["From"] ?? "")
       : await resolveStatusTenant(messageSid);
   if (!resolved) return new Response("Unknown SMS destination", { status: 404 });
 

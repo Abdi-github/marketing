@@ -137,7 +137,6 @@ const schema = z.object({
   TWILIO_FROM_NUMBER: z.string().optional(),
   TWILIO_MESSAGING_SERVICE_SID: z.string().optional(),
   SMS_TEST_MODE_ENABLED: z.enum(["true", "false"]).default("false"),
-  SMS_TEST_TENANT_SLUG: z.string().optional(),
   SMS_INBOUND_CALLBACK_URL: optionalUrl,
   SMS_STATUS_CALLBACK_URL: optionalUrl,
   SMS_DAILY_TENANT_CAP: z.coerce.number().int().positive().default(100),

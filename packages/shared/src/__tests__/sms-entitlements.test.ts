@@ -36,7 +36,7 @@ describe("evaluateSmsEntitlement", () => {
     expect(result.reason).toBe("provider_missing");
   });
 
-  it("allows the explicit demo tenant even without a plan limit", () => {
+  it("allows platform demo mode even without a plan limit", () => {
     const result = evaluateSmsEntitlement({
       monthlyLimit: 0,
       monthlyUsed: 0,

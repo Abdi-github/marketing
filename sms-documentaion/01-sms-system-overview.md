@@ -13,20 +13,23 @@ thank-you messages.
 | Published website/form | Collects name, phone, preferred channel, date, time, party size, and notes.                 |
 | CRM                    | Stores the contact, lead, reservation facts, source, and status.                            |
 | Outbox and queues      | Move work safely to background workers.                                                     |
-| SMS send worker        | Applies consent, caps, length limits, and tenant credential rules before Twilio.            |
+| SMS send worker        | Applies consent, caps, length limits, plan entitlement, and sender rules before Twilio.     |
 | Twilio                 | Sends the SMS and calls the delivery/inbound webhooks.                                      |
 | SMS webhook worker     | Stores delivery updates, customer replies, STOP/START, media metadata, and extracted facts. |
 | Inbox                  | Gives staff one place to read and reply.                                                    |
 | SMS automation         | Stores templates, sequences, enrollments, timing, and AI drafts.                            |
 
-## Tenant-safe credential order
+## Tenant-safe sender order
 
-1. Use an encrypted Twilio connection owned by the tenant.
-2. Otherwise use platform test credentials only when the tenant slug equals
-   `SMS_TEST_TENANT_SLUG`.
-3. Reject the send or webhook if tenant routing is ambiguous.
+1. Use the platform-managed Twilio sender when the tenant has SMS entitlement.
+2. In development/demo mode, `SMS_TEST_MODE_ENABLED=true` allows platform SMS for all tenants under
+   your control, even when their plan would normally block real SMS.
+3. Keep encrypted tenant-owned Twilio credentials as a hidden enterprise override only.
+4. Reject the send or webhook if tenant routing is ambiguous.
 
-This prevents one tenant from using another tenant's sender or receiving another tenant's replies.
+For inbound replies on the shared platform sender, routing is based on the most recent outbound SMS
+sent to that customer phone. That is good enough for demos and simple production use, while larger
+tenant-owned sender setups can use the enterprise override later.
 
 ## Message states
 

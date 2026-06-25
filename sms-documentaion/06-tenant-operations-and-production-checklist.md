@@ -22,11 +22,11 @@ limits.
 
 Default monthly SMS limits:
 
-| Plan    | Monthly SMS limit | Notes                                         |
-| ------- | ----------------- | --------------------------------------------- |
-| Trial   | 0                 | No real SMS except the configured demo tenant |
-| Starter | 50                | Suitable for basic reservation follow-up      |
-| Growth  | 500               | Suitable for higher-volume lead follow-up     |
+| Plan    | Monthly SMS limit | Notes                                       |
+| ------- | ----------------- | ------------------------------------------- |
+| Trial   | 0                 | No real SMS unless platform demo mode is on |
+| Starter | 50                | Suitable for basic reservation follow-up    |
+| Growth  | 500               | Suitable for higher-volume lead follow-up   |
 
 The verified tenant phone is used as the business contact identity in public pages, CRM, and trust
 display. Outbound SMS still comes from the platform Twilio sender unless a future enterprise setup
@@ -34,15 +34,16 @@ hosts or approves the tenant number in Twilio.
 
 ### Platform demo mode
 
-Use for one explicit demonstration tenant only when the tenant is on a plan without real SMS:
+Use while the platform is still controlled by your team and you want any test tenant to send real
+SMS, even if the tenant is on a plan that would normally block SMS:
 
 ```text
 SMS_PROVIDER=twilio
 SMS_TEST_MODE_ENABLED=true
-SMS_TEST_TENANT_SLUG=<demo-tenant-slug>
 ```
 
-The Account SID, auth token, and sender number remain secret environment variables.
+The Account SID, auth token, and sender number remain secret environment variables. Turn this off
+before opening self-serve signups broadly.
 
 ### Tenant-owned Twilio override
 
@@ -79,7 +80,7 @@ The exact URL matters because it is part of Twilio signature validation.
 - [ ] Add platform SMS and Twilio environment variables to Vercel.
 - [ ] Add the same worker-required values to Fly.
 - [ ] Confirm both callback URLs no longer return `404`.
-- [ ] Confirm `SMS_TEST_TENANT_SLUG` matches the intended demo tenant exactly.
+- [ ] Decide whether `SMS_TEST_MODE_ENABLED` should be on for controlled demos or off for plan-based production.
 - [ ] Confirm the Twilio trial recipient is verified.
 - [ ] Confirm the Twilio sender supports SMS to Switzerland.
 - [ ] Confirm tenant plan limits show correctly in Integrations.
