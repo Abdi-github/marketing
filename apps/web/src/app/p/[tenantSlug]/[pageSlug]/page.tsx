@@ -41,12 +41,10 @@ import { LANDING_THEME_GLOBAL_CSS, resolveLandingTheme } from "../../../../lib/l
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-function anchorIdForSection(
-  type: LandingPageComposition["sections"][number]["type"],
-): string | null {
-  if (type === "lead_form") return "lp-lead-form";
-  if (type === "contact") return "lp-contact";
-  return null;
+function anchorIdsForSection(type: LandingPageComposition["sections"][number]["type"]): string[] {
+  if (type === "lead_form") return ["lp-lead-form", "lead-form", "booking", "reserve"];
+  if (type === "contact") return ["lp-contact", "contact"];
+  return [];
 }
 
 type Props = {
@@ -266,9 +264,9 @@ export default async function PublicLandingPage({ params, searchParams }: Props)
 
         {sections.map((section, i) => (
           <div key={i} id={`lp-section-${i}`} data-lp-section={i}>
-            {anchorIdForSection(section.type) && (
-              <div id={anchorIdForSection(section.type)!} style={{ scrollMarginTop: "110px" }} />
-            )}
+            {anchorIdsForSection(section.type).map((anchorId) => (
+              <div key={anchorId} id={anchorId} style={{ scrollMarginTop: "110px" }} />
+            ))}
             <Reveal>
               <SectionBlock
                 section={section}

@@ -4,6 +4,13 @@ import { buildTrackedCtaProps } from "../tracking";
 import { HeroCarouselMedia } from "./hero-carousel-media";
 import { getHeroCarouselImages } from "./hero-carousel-utils";
 
+function normalizeHeroCtaHref(href?: string | null): string {
+  const raw = href?.trim();
+  if (!raw) return "#lp-lead-form";
+  const legacyLeadAnchors = new Set(["#contact", "#lead", "#lead-form", "#booking", "#reserve"]);
+  return legacyLeadAnchors.has(raw.toLowerCase()) ? "#lp-lead-form" : raw;
+}
+
 // ─── hero · centered ──────────────────────────────────────────────────────────
 // Dark gradient background, large centered headline, white pill CTA.
 export function HeroCentered({
@@ -14,6 +21,7 @@ export function HeroCentered({
   brandPrimary: string;
 }) {
   const { heading, body, extras } = section;
+  const primaryHref = normalizeHeroCtaHref(extras?.ctaHref);
   const bgImg = extras?.backgroundImageUrl;
   const carouselImages = getHeroCarouselImages(extras);
   return (
@@ -70,11 +78,11 @@ export function HeroCentered({
           {body && <p className="lp-hc__lead">{renderRich(body)}</p>}
           {extras?.ctaText && (
             <a
-              href={extras.ctaHref ?? "#contact"}
+              href={primaryHref}
               className="lp-hc__cta"
               {...buildTrackedCtaProps({
                 label: extras.ctaText,
-                href: extras.ctaHref ?? "#contact",
+                href: primaryHref,
                 section: "hero",
               })}
             >
@@ -119,6 +127,7 @@ export function HeroImageBgOverlay({
   brandPrimary: string;
 }) {
   const { heading, body, extras } = section;
+  const primaryHref = normalizeHeroCtaHref(extras?.ctaHref);
   const bgImg = extras?.backgroundImageUrl;
   const carouselImages = getHeroCarouselImages(extras);
   // Scrim opacity adapts to brand luminance: lighter brand palettes → stronger scrim so white
@@ -172,11 +181,11 @@ export function HeroImageBgOverlay({
           {body && <p className="lp-hio__lead">{renderRich(body)}</p>}
           {extras?.ctaText && (
             <a
-              href={extras.ctaHref ?? "#contact"}
+              href={primaryHref}
               className="lp-hio__cta"
               {...buildTrackedCtaProps({
                 label: extras.ctaText,
-                href: extras.ctaHref ?? "#contact",
+                href: primaryHref,
                 section: "hero",
               })}
             >
@@ -206,6 +215,7 @@ export function HeroSplitImageRight({
   brandPrimary: string;
 }) {
   const { heading, body, extras } = section;
+  const primaryHref = normalizeHeroCtaHref(extras?.ctaHref);
   const img = extras?.backgroundImageUrl;
   const carouselImages = getHeroCarouselImages(extras);
   return (
@@ -227,11 +237,11 @@ export function HeroSplitImageRight({
           {body && <p className="lp-hsi__lead">{renderRich(body)}</p>}
           {extras?.ctaText && (
             <a
-              href={extras.ctaHref ?? "#contact"}
+              href={primaryHref}
               className="lp-hsi__cta"
               {...buildTrackedCtaProps({
                 label: extras.ctaText,
-                href: extras.ctaHref ?? "#contact",
+                href: primaryHref,
                 section: "hero",
               })}
             >
@@ -285,10 +295,7 @@ export function HeroSplitFormRight({
   brandPrimary: string;
 }) {
   const { heading, body, extras } = section;
-  const primaryHref =
-    extras?.ctaHref && extras.ctaHref.trim() && extras.ctaHref !== "#contact"
-      ? extras.ctaHref
-      : "#lp-lead-form";
+  const primaryHref = normalizeHeroCtaHref(extras?.ctaHref);
   return (
     <>
       <style>{`
@@ -388,6 +395,7 @@ export function HeroEditorialBold({
   brandPrimary: string;
 }) {
   const { heading, body, extras } = section;
+  const primaryHref = normalizeHeroCtaHref(extras?.ctaHref);
   return (
     <>
       <style>{`
@@ -409,11 +417,11 @@ export function HeroEditorialBold({
             {body && <p className="lp-heb__lead">{renderRich(body)}</p>}
             {extras?.ctaText && (
               <a
-                href={extras.ctaHref ?? "#contact"}
+                href={primaryHref}
                 className="lp-heb__cta"
                 {...buildTrackedCtaProps({
                   label: extras.ctaText,
-                  href: extras.ctaHref ?? "#contact",
+                  href: primaryHref,
                   section: "hero",
                 })}
               >
@@ -445,6 +453,7 @@ export function HeroGradientSpotlight({
   brandPrimary: string;
 }) {
   const { heading, body, extras } = section;
+  const primaryHref = normalizeHeroCtaHref(extras?.ctaHref);
   const bg = extras?.backgroundImageUrl;
   const carouselImages = getHeroCarouselImages(extras);
   return (
@@ -481,11 +490,11 @@ export function HeroGradientSpotlight({
           {body && <p className="lp-hgs__lead">{renderRich(body)}</p>}
           {extras?.ctaText && (
             <a
-              href={extras.ctaHref ?? "#contact"}
+              href={primaryHref}
               className="lp-hgs__cta"
               {...buildTrackedCtaProps({
                 label: extras.ctaText,
-                href: extras.ctaHref ?? "#contact",
+                href: primaryHref,
                 section: "hero",
               })}
             >
