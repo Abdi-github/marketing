@@ -517,6 +517,14 @@ export async function POST(
       workflowPlan.kind === "booking"
         ? "A customer submitted a restaurant request from your website. Open CRM to review and confirm."
         : "A customer submitted a form from your website. Open CRM to follow up.";
+    const staffSmsText =
+      workflowPlan.kind === "booking"
+        ? `${tenant.name}: New reservation request received from your website. Open CRM to review and confirm.`
+        : workflowPlan.kind === "callback"
+          ? `${tenant.name}: New callback request received from your website. Open CRM to follow up.`
+          : workflowPlan.kind === "quote"
+            ? `${tenant.name}: New quote request received from your website. Open CRM to follow up.`
+            : `${tenant.name}: New website lead received. Open CRM to follow up.`;
     await createTenantNotification({
       tenantId: tenant.id,
       type: "lead.captured",
@@ -535,12 +543,9 @@ export async function POST(
         workflowState,
         sourceChannel,
       },
-      staffSms:
-        workflowPlan.kind === "booking"
-          ? {
-              text: `${tenant.name}: New reservation request received from your website. Open CRM to review and confirm.`,
-            }
-          : undefined,
+      staffSms: {
+        text: staffSmsText,
+      },
     }).catch((err) => {
       logger.warn(
         { err: String(err), tenantId: tenant.id, leadId: createdLeadId },

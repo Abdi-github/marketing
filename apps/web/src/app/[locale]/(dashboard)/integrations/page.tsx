@@ -1011,7 +1011,46 @@ function IntegrationsPageContent() {
               value={smsHealth?.lastRecipient ?? "None"}
               tone="#475569"
             />
+            <HealthCard
+              label="Last staff alert"
+              value={
+                smsHealth?.lastStaffAlertAt
+                  ? formatDate(smsHealth.lastStaffAlertAt)
+                  : "No staff alert yet"
+              }
+              tone="#2563eb"
+            />
+            <HealthCard
+              label="Staff alert status"
+              value={
+                smsHealth?.queuedStaffAlerts
+                  ? `${smsHealth.queuedStaffAlerts} queued`
+                  : (smsHealth?.lastStaffAlertStatus ?? "No status yet")
+              }
+              tone={
+                smsHealth?.lastStaffAlertStatus === "failed"
+                  ? "#dc2626"
+                  : smsHealth?.queuedStaffAlerts
+                    ? "#ca8a04"
+                    : "#475569"
+              }
+            />
+            <HealthCard
+              label="Staff alert recipient"
+              value={smsHealth?.lastStaffAlertRecipient ?? "None"}
+              tone="#475569"
+            />
           </div>
+          {smsHealth?.lastStaffAlertExternalId ? (
+            <p style={{ color: "#64748b", fontSize: "0.78rem", lineHeight: 1.45 }}>
+              Last staff alert provider ID: {smsHealth.lastStaffAlertExternalId}
+            </p>
+          ) : null}
+          {smsHealth?.lastStaffAlertFailureMessage ? (
+            <p style={{ color: "#991b1b", fontSize: "0.78rem", lineHeight: 1.45 }}>
+              Staff alert problem: {smsHealth.lastStaffAlertFailureMessage}
+            </p>
+          ) : null}
           <p style={{ color: "#64748b", fontSize: "0.78rem", lineHeight: 1.45 }}>
             SMS is handled by the platform. Verify the business phone, keep an eye on monthly usage,
             and review failed messages here when customer follow-up needs attention.

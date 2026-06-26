@@ -284,63 +284,101 @@ export const integrationsRouter = router({
       });
     const providerHealth = getSmsProviderHealth(credentials ?? env);
 
-    const [[lastOutbound], [failedCount], [sentCount], [verification], [businessProfile]] =
-      await Promise.all([
-        db
-          .select({
-            occurredAt: messages.occurredAt,
-            status: messages.status,
-            errorMessage: messages.errorMessage,
-            toAddress: messages.toAddress,
-          })
-          .from(messages)
-          .where(
-            and(
-              eq(messages.tenantId, tenantId),
-              eq(messages.channel, "sms"),
-              eq(messages.direction, "outbound"),
-            ),
-          )
-          .orderBy(desc(messages.occurredAt))
-          .limit(1),
-        db
-          .select({ total: sql<number>`count(*)::int` })
-          .from(messages)
-          .where(
-            and(
-              eq(messages.tenantId, tenantId),
-              eq(messages.channel, "sms"),
-              eq(messages.direction, "outbound"),
-              eq(messages.status, "failed"),
-            ),
+    const [
+      [lastOutbound],
+      [lastStaffAlert],
+      [queuedStaffAlertCount],
+      [failedCount],
+      [sentCount],
+      [verification],
+      [businessProfile],
+    ] = await Promise.all([
+      db
+        .select({
+          occurredAt: messages.occurredAt,
+          status: messages.status,
+          errorMessage: messages.errorMessage,
+          toAddress: messages.toAddress,
+        })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.tenantId, tenantId),
+            eq(messages.channel, "sms"),
+            eq(messages.direction, "outbound"),
           ),
-        db
-          .select({ total: sql<number>`count(*)::int` })
-          .from(messages)
-          .where(
-            and(
-              eq(messages.tenantId, tenantId),
-              eq(messages.channel, "sms"),
-              eq(messages.direction, "outbound"),
-              inArray(messages.status, ["sent", "delivered", "read"]),
-            ),
+        )
+        .orderBy(desc(messages.occurredAt))
+        .limit(1),
+      db
+        .select({
+          occurredAt: messages.occurredAt,
+          status: messages.status,
+          errorMessage: messages.errorMessage,
+          toAddress: messages.toAddress,
+          externalId: messages.externalId,
+        })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.tenantId, tenantId),
+            eq(messages.channel, "sms"),
+            eq(messages.direction, "outbound"),
+            eq(messages.messageType, "staff_alert"),
           ),
-        db
-          .select({
-            phone: smsPhoneVerifications.phone,
-            status: smsPhoneVerifications.status,
-            verifiedAt: smsPhoneVerifications.verifiedAt,
-          })
-          .from(smsPhoneVerifications)
-          .where(eq(smsPhoneVerifications.tenantId, tenantId))
-          .orderBy(desc(smsPhoneVerifications.createdAt))
-          .limit(1),
-        db
-          .select({ leadCaptureSettings: businessProfiles.leadCaptureSettings })
-          .from(businessProfiles)
-          .where(eq(businessProfiles.tenantId, tenantId))
-          .limit(1),
-      ]);
+        )
+        .orderBy(desc(messages.occurredAt))
+        .limit(1),
+      db
+        .select({ total: sql<number>`count(*)::int` })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.tenantId, tenantId),
+            eq(messages.channel, "sms"),
+            eq(messages.direction, "outbound"),
+            eq(messages.messageType, "staff_alert"),
+            eq(messages.status, "queued"),
+          ),
+        ),
+      db
+        .select({ total: sql<number>`count(*)::int` })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.tenantId, tenantId),
+            eq(messages.channel, "sms"),
+            eq(messages.direction, "outbound"),
+            eq(messages.status, "failed"),
+          ),
+        ),
+      db
+        .select({ total: sql<number>`count(*)::int` })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.tenantId, tenantId),
+            eq(messages.channel, "sms"),
+            eq(messages.direction, "outbound"),
+            inArray(messages.status, ["sent", "delivered", "read"]),
+          ),
+        ),
+      db
+        .select({
+          phone: smsPhoneVerifications.phone,
+          status: smsPhoneVerifications.status,
+          verifiedAt: smsPhoneVerifications.verifiedAt,
+        })
+        .from(smsPhoneVerifications)
+        .where(eq(smsPhoneVerifications.tenantId, tenantId))
+        .orderBy(desc(smsPhoneVerifications.createdAt))
+        .limit(1),
+      db
+        .select({ leadCaptureSettings: businessProfiles.leadCaptureSettings })
+        .from(businessProfiles)
+        .where(eq(businessProfiles.tenantId, tenantId))
+        .limit(1),
+    ]);
 
     const failedSends = Number(failedCount?.total ?? 0);
     const smsSettings =
@@ -371,6 +409,13 @@ export const integrationsRouter = router({
       lastOutboundStatus: lastOutbound?.status ?? null,
       lastRecipient: lastOutbound?.toAddress ?? null,
       lastFailureMessage: lastOutbound?.status === "failed" ? lastOutbound.errorMessage : null,
+      lastStaffAlertAt: lastStaffAlert?.occurredAt ?? null,
+      lastStaffAlertStatus: lastStaffAlert?.status ?? null,
+      lastStaffAlertRecipient: lastStaffAlert?.toAddress ?? null,
+      lastStaffAlertExternalId: lastStaffAlert?.externalId ?? null,
+      lastStaffAlertFailureMessage:
+        lastStaffAlert?.status === "failed" ? lastStaffAlert.errorMessage : null,
+      queuedStaffAlerts: Number(queuedStaffAlertCount?.total ?? 0),
       failedSends,
       sentSends: Number(sentCount?.total ?? 0),
       maxRecommendedChars: providerHealth.maxRecommendedChars,

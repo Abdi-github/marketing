@@ -4,9 +4,10 @@ import {
   messages,
   notificationPreferences,
   notifications,
+  smsPhoneVerifications,
 } from "@marketing/db";
 import { logger, normalizeSmsPhone } from "@marketing/shared";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { enqueueSmsSendJob } from "../queues/sms";
 
 type NotificationPriority = "low" | "normal" | "high";
@@ -117,14 +118,29 @@ async function maybeSendStaffSmsAlert(input: {
 }) {
   if (input.preferences?.staffSmsEnabled === false) return;
 
-  const [profile] = await db
-    .select({ leadCaptureSettings: businessProfiles.leadCaptureSettings })
-    .from(businessProfiles)
-    .where(eq(businessProfiles.tenantId, input.tenantId))
-    .limit(1);
+  const [[profile], [latestVerifiedPhone]] = await Promise.all([
+    db
+      .select({ leadCaptureSettings: businessProfiles.leadCaptureSettings })
+      .from(businessProfiles)
+      .where(eq(businessProfiles.tenantId, input.tenantId))
+      .limit(1),
+    db
+      .select({ phone: smsPhoneVerifications.phone })
+      .from(smsPhoneVerifications)
+      .where(
+        and(
+          eq(smsPhoneVerifications.tenantId, input.tenantId),
+          eq(smsPhoneVerifications.status, "verified"),
+        ),
+      )
+      .orderBy(desc(smsPhoneVerifications.verifiedAt), desc(smsPhoneVerifications.createdAt))
+      .limit(1),
+  ]);
 
   const phone =
-    input.preferences?.staffSmsPhone ?? getSmsBusinessPhone(profile?.leadCaptureSettings);
+    input.preferences?.staffSmsPhone ??
+    getSmsBusinessPhone(profile?.leadCaptureSettings) ??
+    latestVerifiedPhone?.phone;
   if (!phone) return;
 
   let normalizedPhone: string;
