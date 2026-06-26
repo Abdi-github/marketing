@@ -853,11 +853,9 @@ function IntegrationsPageContent() {
                 />
                 <button
                   type="submit"
-                  disabled={phoneVerificationBusy || !businessPhoneInput.trim() || !smsConfigured}
+                  disabled={phoneVerificationBusy || !businessPhoneInput.trim()}
                   style={btnStyle(
-                    phoneVerificationBusy || !businessPhoneInput.trim() || !smsConfigured
-                      ? "#9ca3af"
-                      : "#2563eb",
+                    phoneVerificationBusy || !businessPhoneInput.trim() ? "#9ca3af" : "#2563eb",
                   )}
                 >
                   {phoneVerificationBusy ? "Sending..." : "Send code"}
