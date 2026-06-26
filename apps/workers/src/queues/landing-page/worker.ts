@@ -738,6 +738,15 @@ function applyLeadCapturePresetToComposition(
           : "Contact us",
   } satisfies Record<LeadCapturePresetConfig["preset"], string>;
   const applyToSection = (section: LandingPageSection): LandingPageSection => {
+    if (section.type === "hero" || section.type === "offer") {
+      return {
+        ...section,
+        extras: {
+          ...(section.extras ?? {}),
+          ctaText: ctaLabels[config.preset],
+        },
+      } as LandingPageSection;
+    }
     if (section.type !== "lead_form") return section;
     return {
       ...section,
@@ -762,10 +771,12 @@ function applyLeadCapturePresetToComposition(
                   ? {
                       ...composition.site.nav.cta,
                       label: ctaLabels[config.preset],
+                      sectionId: "lp-lead-form",
                     }
                   : {
                       label: ctaLabels[config.preset],
                       pageSlug: "contact",
+                      sectionId: "lp-lead-form",
                     },
               }
             : composition.site.nav,

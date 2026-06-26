@@ -12,22 +12,14 @@ import {
   type LandingLanguagePreferences,
 } from "../../lib/landing-language";
 import { buildTrackedCtaProps } from "./tracking";
+import { resolveLandingSiteLinkHref } from "./cta-targets";
 
 function trimTrailingSlash(path: string): string {
   return path.length > 1 ? path.replace(/\/+$/, "") : path;
 }
 
-function safeHref(href: string): string {
-  if (/^(https?:\/\/|mailto:|tel:|#|\/|\.{1,2}\/)/i.test(href)) return href;
-  return "#";
-}
-
 function hrefForLink(link: LandingPageSiteLink, basePath: string): string {
-  if (link.href) return safeHref(link.href);
-  const cleanBase = trimTrailingSlash(basePath);
-  const anchor = link.sectionId ? `#${link.sectionId}` : "";
-  if (!link.pageSlug || link.pageSlug === "home") return `${cleanBase}${anchor}`;
-  return `${cleanBase}/${link.pageSlug}${anchor}`;
+  return resolveLandingSiteLinkHref(link, basePath);
 }
 
 function hrefForLocale(basePath: string, activePageSlug: string, locale: string): string {

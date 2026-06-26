@@ -15,6 +15,7 @@ import {
 } from "../../../../../../components/landing/site-shell";
 import { PreviewSyncBridge } from "../../../../../../components/landing/editor/preview-sync-bridge";
 import { Reveal } from "../../../../../../components/landing/reveal";
+import { anchorIdsForSection } from "../../../../../../components/landing/cta-targets";
 import {
   isLandingPageLocale,
   normalizeLandingLanguagePreferences,
@@ -29,12 +30,6 @@ import { LANDING_THEME_GLOBAL_CSS, resolveLandingTheme } from "../../../../../..
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-
-function anchorIdsForSection(type: LandingPageComposition["sections"][number]["type"]): string[] {
-  if (type === "lead_form") return ["lp-lead-form", "lead-form", "booking", "reserve"];
-  if (type === "contact") return ["lp-contact", "contact"];
-  return [];
-}
 
 type Props = {
   params: Promise<{ pageId: string; sitePageSlug: string }>;

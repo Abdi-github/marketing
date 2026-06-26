@@ -1,15 +1,9 @@
 import type { HeroSection } from "@marketing/ai-router";
 import { renderRich } from "../rich-text";
+import { isLeadActionLabel, normalizeLandingCtaHref } from "../cta-targets";
 import { buildTrackedCtaProps } from "../tracking";
 import { HeroCarouselMedia } from "./hero-carousel-media";
 import { getHeroCarouselImages } from "./hero-carousel-utils";
-
-function normalizeHeroCtaHref(href?: string | null): string {
-  const raw = href?.trim();
-  if (!raw) return "#lp-lead-form";
-  const legacyLeadAnchors = new Set(["#contact", "#lead", "#lead-form", "#booking", "#reserve"]);
-  return legacyLeadAnchors.has(raw.toLowerCase()) ? "#lp-lead-form" : raw;
-}
 
 // ─── hero · centered ──────────────────────────────────────────────────────────
 // Dark gradient background, large centered headline, white pill CTA.
@@ -21,7 +15,9 @@ export function HeroCentered({
   brandPrimary: string;
 }) {
   const { heading, body, extras } = section;
-  const primaryHref = normalizeHeroCtaHref(extras?.ctaHref);
+  const primaryHref = normalizeLandingCtaHref(extras?.ctaHref, {
+    preferLeadForContact: isLeadActionLabel(extras?.ctaText),
+  });
   const bgImg = extras?.backgroundImageUrl;
   const carouselImages = getHeroCarouselImages(extras);
   return (
@@ -127,7 +123,9 @@ export function HeroImageBgOverlay({
   brandPrimary: string;
 }) {
   const { heading, body, extras } = section;
-  const primaryHref = normalizeHeroCtaHref(extras?.ctaHref);
+  const primaryHref = normalizeLandingCtaHref(extras?.ctaHref, {
+    preferLeadForContact: isLeadActionLabel(extras?.ctaText),
+  });
   const bgImg = extras?.backgroundImageUrl;
   const carouselImages = getHeroCarouselImages(extras);
   // Scrim opacity adapts to brand luminance: lighter brand palettes → stronger scrim so white
@@ -215,7 +213,9 @@ export function HeroSplitImageRight({
   brandPrimary: string;
 }) {
   const { heading, body, extras } = section;
-  const primaryHref = normalizeHeroCtaHref(extras?.ctaHref);
+  const primaryHref = normalizeLandingCtaHref(extras?.ctaHref, {
+    preferLeadForContact: isLeadActionLabel(extras?.ctaText),
+  });
   const img = extras?.backgroundImageUrl;
   const carouselImages = getHeroCarouselImages(extras);
   return (
@@ -295,7 +295,9 @@ export function HeroSplitFormRight({
   brandPrimary: string;
 }) {
   const { heading, body, extras } = section;
-  const primaryHref = normalizeHeroCtaHref(extras?.ctaHref);
+  const primaryHref = normalizeLandingCtaHref(extras?.ctaHref, {
+    preferLeadForContact: isLeadActionLabel(extras?.ctaText),
+  });
   return (
     <>
       <style>{`
@@ -395,7 +397,9 @@ export function HeroEditorialBold({
   brandPrimary: string;
 }) {
   const { heading, body, extras } = section;
-  const primaryHref = normalizeHeroCtaHref(extras?.ctaHref);
+  const primaryHref = normalizeLandingCtaHref(extras?.ctaHref, {
+    preferLeadForContact: isLeadActionLabel(extras?.ctaText),
+  });
   return (
     <>
       <style>{`
@@ -453,7 +457,9 @@ export function HeroGradientSpotlight({
   brandPrimary: string;
 }) {
   const { heading, body, extras } = section;
-  const primaryHref = normalizeHeroCtaHref(extras?.ctaHref);
+  const primaryHref = normalizeLandingCtaHref(extras?.ctaHref, {
+    preferLeadForContact: isLeadActionLabel(extras?.ctaText),
+  });
   const bg = extras?.backgroundImageUrl;
   const carouselImages = getHeroCarouselImages(extras);
   return (

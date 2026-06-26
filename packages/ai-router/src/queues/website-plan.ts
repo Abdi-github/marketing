@@ -102,6 +102,7 @@ function labelsForLocale(input: WebsiteCompositionInput): Labels {
   const name = input.businessName;
   const locale = input.locale.toLowerCase();
   const service = serviceMeta(input);
+  const kind = verticalKind(input.vertical);
 
   if (locale.startsWith("fr")) {
     return {
@@ -110,13 +111,16 @@ function labelsForLocale(input: WebsiteCompositionInput): Labels {
       services: service.fr,
       servicesSlug: service.slug,
       contact: "Contact",
-      cta: "Demander une offre",
+      cta: kind === "hospitality" ? "Reserver une table" : "Demander une offre",
       aboutTitle: `A propos de ${name}`,
       servicesTitle: `${service.fr} de ${name}`,
       contactTitle: `Contacter ${name}`,
       aboutBody: `${name} associe une expertise locale${city} a une experience claire, soignee et facile a reserver.`,
       servicesBody: `Decouvrez les offres, specialites et options les plus utiles pour choisir rapidement ce qui vous convient.`,
-      contactBody: `Posez une question, demandez une offre ou reservez un rendez-vous. L'equipe vous repond rapidement.`,
+      contactBody:
+        kind === "hospitality"
+          ? `Posez une question ou demandez une reservation. L'equipe vous repond rapidement.`
+          : `Posez une question, demandez une offre ou reservez un rendez-vous. L'equipe vous repond rapidement.`,
       offerHeading: "Offre recommandee",
       offerBody: "Une selection claire pour transformer l'interet en prochaine etape concrete.",
       faqHeading: "Questions frequentes",
@@ -131,7 +135,7 @@ function labelsForLocale(input: WebsiteCompositionInput): Labels {
       services: service.it,
       servicesSlug: service.slug,
       contact: "Contatto",
-      cta: "Richiedi un'offerta",
+      cta: kind === "hospitality" ? "Prenota un tavolo" : "Richiedi un'offerta",
       aboutTitle: `Chi e ${name}`,
       servicesTitle: `${service.it} di ${name}`,
       contactTitle: `Contatta ${name}`,
@@ -139,7 +143,9 @@ function labelsForLocale(input: WebsiteCompositionInput): Labels {
       servicesBody:
         "Scopri le offerte, le specialita e le opzioni piu utili per scegliere con sicurezza.",
       contactBody:
-        "Fai una domanda, richiedi un'offerta o prenota un appuntamento. Il team risponde rapidamente.",
+        kind === "hospitality"
+          ? "Fai una domanda o richiedi una prenotazione. Il team risponde rapidamente."
+          : "Fai una domanda, richiedi un'offerta o prenota un appuntamento. Il team risponde rapidamente.",
       offerHeading: "Offerta consigliata",
       offerBody: "Una proposta chiara per trasformare l'interesse nel prossimo passo concreto.",
       faqHeading: "Domande frequenti",
@@ -154,7 +160,7 @@ function labelsForLocale(input: WebsiteCompositionInput): Labels {
       services: service.de,
       servicesSlug: service.slug,
       contact: "Kontakt",
-      cta: "Anfrage senden",
+      cta: kind === "hospitality" ? "Tisch anfragen" : "Anfrage senden",
       aboutTitle: `Ueber ${name}`,
       servicesTitle: `${service.de} von ${name}`,
       contactTitle: `${name} kontaktieren`,
@@ -162,7 +168,9 @@ function labelsForLocale(input: WebsiteCompositionInput): Labels {
       servicesBody:
         "Entdecken Sie die wichtigsten Angebote, Spezialitaeten und Optionen, um schnell die passende Wahl zu treffen.",
       contactBody:
-        "Stellen Sie eine Frage, fordern Sie ein Angebot an oder vereinbaren Sie einen Termin. Das Team meldet sich zeitnah.",
+        kind === "hospitality"
+          ? "Stellen Sie eine Frage oder senden Sie eine Tischanfrage. Das Team meldet sich zeitnah."
+          : "Stellen Sie eine Frage, fordern Sie ein Angebot an oder vereinbaren Sie einen Termin. Das Team meldet sich zeitnah.",
       offerHeading: "Empfohlenes Angebot",
       offerBody: "Ein klares Angebot, das Interesse in den naechsten konkreten Schritt verwandelt.",
       faqHeading: "Haeufige Fragen",
@@ -176,7 +184,7 @@ function labelsForLocale(input: WebsiteCompositionInput): Labels {
     services: service.en,
     servicesSlug: service.slug,
     contact: "Contact",
-    cta: "Request quote",
+    cta: kind === "hospitality" ? "Reserve a table" : "Request quote",
     aboutTitle: `About ${name}`,
     servicesTitle: `${name} ${service.en.toLowerCase()}`,
     contactTitle: `Contact ${name}`,
@@ -184,7 +192,9 @@ function labelsForLocale(input: WebsiteCompositionInput): Labels {
     servicesBody:
       "Explore the key offers, specialties, and options so visitors can choose the right next step quickly.",
     contactBody:
-      "Ask a question, request a quote, or book an appointment. The team will get back to you quickly.",
+      kind === "hospitality"
+        ? "Ask a question or request a table. The team will get back to you quickly."
+        : "Ask a question, request a quote, or book an appointment. The team will get back to you quickly.",
     offerHeading: "Recommended offer",
     offerBody: "A clear offer that turns interest into the next concrete step.",
     faqHeading: "Common questions",

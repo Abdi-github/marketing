@@ -1,4 +1,5 @@
 import type { OfferSection } from "@marketing/ai-router";
+import { isLeadActionLabel, normalizeLandingCtaHref } from "../cta-targets";
 import { renderRich } from "../rich-text";
 import { buildTrackedCtaProps } from "../tracking";
 
@@ -13,6 +14,9 @@ export function OfferBannerCentered({
   accentMode = false,
 }: Props & { accentMode?: boolean }) {
   const { heading, body, extras } = section;
+  const ctaHref = normalizeLandingCtaHref(extras?.ctaHref, {
+    preferLeadForContact: isLeadActionLabel(extras?.ctaText),
+  });
   const am = accentMode ? " lp-obc--accent" : "";
   return (
     <>
@@ -72,11 +76,11 @@ export function OfferBannerCentered({
           {extras?.validUntil && <p className="lp-obc__valid">Valid until: {extras.validUntil}</p>}
           {extras?.ctaText && (
             <a
-              href={extras.ctaHref ?? "#contact"}
+              href={ctaHref}
               className="lp-obc__cta"
               {...buildTrackedCtaProps({
                 label: extras.ctaText,
-                href: extras.ctaHref ?? "#contact",
+                href: ctaHref,
                 section: "offer",
               })}
             >
@@ -93,6 +97,9 @@ export function OfferBannerCentered({
 // Lifestyle image on left, price + features + CTA on right.
 export function OfferSplitImagePrice({ section, brandPrimary }: Props) {
   const { heading, body, extras } = section;
+  const ctaHref = normalizeLandingCtaHref(extras?.ctaHref, {
+    preferLeadForContact: isLeadActionLabel(extras?.ctaText),
+  });
   return (
     <>
       <style>{`
@@ -141,11 +148,11 @@ export function OfferSplitImagePrice({ section, brandPrimary }: Props) {
             )}
             {extras?.ctaText && (
               <a
-                href={extras.ctaHref ?? "#contact"}
+                href={ctaHref}
                 className="lp-osip__cta"
                 {...buildTrackedCtaProps({
                   label: extras.ctaText,
-                  href: extras.ctaHref ?? "#contact",
+                  href: ctaHref,
                   section: "offer",
                 })}
               >
@@ -170,6 +177,9 @@ export function OfferSplitImagePrice({ section, brandPrimary }: Props) {
 // Dark dramatic design with large price display — high urgency feel.
 export function OfferCountdownBold({ section, brandPrimary }: Props) {
   const { heading, body, extras } = section;
+  const ctaHref = normalizeLandingCtaHref(extras?.ctaHref, {
+    preferLeadForContact: isLeadActionLabel(extras?.ctaText),
+  });
   return (
     <>
       <style>{`
@@ -219,11 +229,11 @@ export function OfferCountdownBold({ section, brandPrimary }: Props) {
           )}
           {extras?.ctaText && (
             <a
-              href={extras.ctaHref ?? "#contact"}
+              href={ctaHref}
               className="lp-ocb__cta"
               {...buildTrackedCtaProps({
                 label: extras.ctaText,
-                href: extras.ctaHref ?? "#contact",
+                href: ctaHref,
                 section: "offer",
               })}
             >
