@@ -59,6 +59,93 @@ Because Twilio is still in trial mode, use only the verified test number:
 +41762147690
 ```
 
+### Production Staff SMS Checklist
+
+When a customer submits a booking, the app should create two staff alerts:
+
+- an in-app notification in the dashboard bell
+- an SMS to the tenant's verified business phone
+
+If the in-app notification appears but the SMS does not arrive, check these items in production:
+
+```text
+Vercel env:
+SMS_PROVIDER=twilio
+TWILIO_ACCOUNT_SID=...
+TWILIO_AUTH_TOKEN=...
+TWILIO_FROM_NUMBER=+14406246520
+SMS_STATUS_CALLBACK_URL=https://marketing-web-pied-nine.vercel.app/api/integrations/twilio/sms/status
+SMS_INBOUND_CALLBACK_URL=https://marketing-web-pied-nine.vercel.app/api/integrations/twilio/sms/inbound
+APP_URL=https://marketing-web-pied-nine.vercel.app
+DATABASE_POOL_MAX=3
+```
+
+```text
+Fly worker env:
+DATABASE_URL=same database as Vercel
+REDIS_URL=same Redis as Vercel
+SMS_PROVIDER=twilio
+TWILIO_ACCOUNT_SID=...
+TWILIO_AUTH_TOKEN=...
+TWILIO_FROM_NUMBER=+14406246520
+SMS_STATUS_CALLBACK_URL=https://marketing-web-pied-nine.vercel.app/api/integrations/twilio/sms/status
+SMS_INBOUND_CALLBACK_URL=https://marketing-web-pied-nine.vercel.app/api/integrations/twilio/sms/inbound
+APP_URL=https://marketing-web-pied-nine.vercel.app
+DATABASE_POOL_MAX=3
+```
+
+After a booking test, you can inspect the latest staff SMS rows locally with:
+
+```bash
+node scripts/inspect-staff-sms-alerts.mjs geneva-restaurant-e2e-jz3bc 10
+```
+
+How to read the result:
+
+- `queued`: Vercel created the SMS, but the worker has not processed it.
+- `failed`: read `errorMessage`; it usually means plan, provider, quota, or Twilio rejected it.
+- `sent`: Twilio accepted it. If the phone did not receive it, check Twilio Message Logs using the `externalId`.
+- `delivered`: Twilio confirmed delivery through the status callback.
+
+For the production checks on June 26, 2026, there were two separate states:
+
+- Before the Fly worker redeploy, the newest production booking created a staff SMS row with status
+  `queued` and no Twilio SID. That meant Vercel saved the alert, but the worker was not consuming it.
+- After updating Fly secrets and deploying the current worker image, the worker consumed the queued SMS
+  jobs. The newest staff alert received Twilio SID `SM0f64e7dcfe7265764626f7d281f3e490`, then Twilio
+  marked it `undelivered` with error code `30008`.
+
+That means the application handed the production message to Twilio. If the phone does not receive it,
+check Twilio Message Logs by SID. At that point the issue is provider/carrier delivery, trial-recipient
+verification, sender reputation, or Twilio geo/carrier rules rather than the app queue.
+
+If a newer production booking creates a staff alert with status `queued` and no Twilio SID, the
+worker has not sent it yet. Check Fly worker secrets:
+
+```bash
+fly secrets list --app marketing-workers
+```
+
+The worker must have the same production SMS settings as Vercel. At minimum it needs:
+
+```text
+DATABASE_URL
+REDIS_URL
+DATABASE_POOL_MAX=3
+APP_URL
+SMS_PROVIDER
+TWILIO_ACCOUNT_SID
+TWILIO_AUTH_TOKEN
+TWILIO_FROM_NUMBER or TWILIO_MESSAGING_SERVICE_SID
+SMS_STATUS_CALLBACK_URL
+SMS_INBOUND_CALLBACK_URL
+```
+
+On June 26, 2026, Fly initially only had database, Redis, auth, and AI secrets. It was missing the
+Twilio/SMS secrets, so new production staff SMS rows stayed `queued` and never appeared in Twilio logs.
+After importing the SMS secrets and redeploying the worker image
+`marketing-workers:deployment-01KW0MS1B99DSHCD71NNS4QDGA`, Fly consumed the queued SMS jobs.
+
 ## Scenario 1: Complete Reservation Request
 
 ### Goal
