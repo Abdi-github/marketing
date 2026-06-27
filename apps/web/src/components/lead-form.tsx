@@ -71,6 +71,55 @@ function isVisible(field: FormField, values: Record<string, string>): boolean {
   return true;
 }
 
+function isBlank(value: string | undefined): boolean {
+  return value === undefined || value.trim() === "";
+}
+
+function validateField(field: FormField, value: string | undefined): string | null {
+  const trimmed = value?.trim() ?? "";
+
+  if (field.required) {
+    if (field.type === "checkbox" && trimmed !== "true") {
+      return `${field.label} must be accepted.`;
+    }
+    if (field.type !== "checkbox" && isBlank(value)) {
+      return `Please complete ${field.label}.`;
+    }
+  }
+
+  if (isBlank(value)) return null;
+
+  if (field.type === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+    return `Please enter a valid email address for ${field.label}.`;
+  }
+
+  if (field.type === "number") {
+    const num = Number(trimmed);
+    if (!Number.isFinite(num)) return `${field.label} must be a number.`;
+    if (typeof field.min === "number" && num < field.min) {
+      return `${field.label} must be at least ${field.min}.`;
+    }
+    if (typeof field.max === "number" && num > field.max) {
+      return `${field.label} must be at most ${field.max}.`;
+    }
+  }
+
+  if ((field.type === "select" || field.type === "radio") && field.options?.length) {
+    const allowed = new Set(field.options.map((option) => option.value));
+    if (!allowed.has(trimmed)) return `Please choose a valid option for ${field.label}.`;
+  }
+
+  return null;
+}
+
+function validateVisibleFields(fields: FormField[], values: Record<string, string>): string | null {
+  for (const field of fields) {
+    const error = validateField(field, values[field.name]);
+    if (error) return error;
+  }
+  return null;
+}
+
 // ─── Individual field renderer ────────────────────────────────────────────────
 
 const inputStyle: React.CSSProperties = {
@@ -81,6 +130,22 @@ const inputStyle: React.CSSProperties = {
   width: "100%",
   boxSizing: "border-box",
 };
+
+function inputTypeFor(field: FormField): React.HTMLInputTypeAttribute {
+  if (field.type === "email") return "email";
+  if (field.type === "tel") return "tel";
+  if (field.type === "number") return "number";
+  return "text";
+}
+
+function placeholderFor(field: FormField): string | undefined {
+  if (field.placeholder) return field.placeholder;
+  const name = field.name.toLowerCase();
+  const label = field.label.toLowerCase();
+  if (name.includes("date") || label.includes("date")) return "YYYY-MM-DD or DD-MM-YYYY";
+  if (name.includes("time") || label.includes("time")) return "HH:MM";
+  return undefined;
+}
 
 function FieldInput({
   field,
@@ -168,12 +233,12 @@ function FieldInput({
   return (
     <input
       id={id}
-      type={field.type}
+      type={inputTypeFor(field)}
       name={field.name}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       required={field.required}
-      placeholder={field.placeholder}
+      placeholder={placeholderFor(field)}
       min={field.min}
       max={field.max}
       style={inputStyle}
@@ -247,6 +312,7 @@ function SmartFormBody({
   const [stepIndex, setStepIndex] = useState(0);
   const [values, setValues] = useState<Record<string, string>>({});
   const [turnstileToken, setTurnstileToken] = useState<string | undefined>(undefined);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   const siteKey =
     typeof process !== "undefined" ? (process.env["NEXT_PUBLIC_TURNSTILE_SITE_KEY"] ?? "") : "";
@@ -262,11 +328,19 @@ function SmartFormBody({
 
   function setValue(name: string, val: string) {
     onStart(name);
+    setValidationError(null);
     setValues((prev) => ({ ...prev, [name]: val }));
   }
 
   function handleNext(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    const visibleError = validateVisibleFields(visibleFields, values);
+    if (visibleError) {
+      setValidationError(visibleError);
+      return;
+    }
+    setValidationError(null);
+
     if (!isLastStep) {
       onStepComplete(stepIndex, currentStep.title);
       setStepIndex((i) => i + 1);
@@ -279,6 +353,7 @@ function SmartFormBody({
     <form
       data-form-slug={formSlug}
       data-form-kind="smart"
+      noValidate
       onSubmit={handleNext}
       style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}
     >
@@ -319,7 +394,11 @@ function SmartFormBody({
         <TurnstileWidget siteKey={siteKey} onToken={setTurnstileToken} />
       )}
 
-      {error && <p style={{ color: "#ef4444", fontSize: "0.85rem", margin: 0 }}>{error}</p>}
+      {(validationError || error) && (
+        <p aria-live="polite" style={{ color: "#ef4444", fontSize: "0.85rem", margin: 0 }}>
+          {validationError ?? error}
+        </p>
+      )}
 
       <div style={{ display: "flex", gap: "0.5rem" }}>
         {stepIndex > 0 && (
@@ -349,7 +428,10 @@ function SmartFormBody({
             border: "none",
             borderRadius: 6,
             fontSize: "0.9rem",
-            cursor: submitting ? "not-allowed" : "pointer",
+            cursor:
+              submitting || (isLastStep && showTurnstile && !turnstileToken)
+                ? "not-allowed"
+                : "pointer",
           }}
         >
           {submitting ? "Sending…" : isLastStep ? (submitLabel ?? "Submit") : "Next"}
@@ -382,9 +464,27 @@ function LegacyFormBody({
   const [values, setValues] = useState<Record<string, string>>(
     Object.fromEntries(fields.map((f) => [f.name, ""])),
   );
+  const [validationError, setValidationError] = useState<string | null>(null);
+
+  function validateLegacyFields(): string | null {
+    for (const field of fields) {
+      const value = values[field.name]?.trim() ?? "";
+      if (field.required && value === "") return `Please complete ${field.label}.`;
+      if (field.type === "email" && value !== "" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+        return `Please enter a valid email address for ${field.label}.`;
+      }
+    }
+    return null;
+  }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    const visibleError = validateLegacyFields();
+    if (visibleError) {
+      setValidationError(visibleError);
+      return;
+    }
+    setValidationError(null);
     void onSubmit(values);
   }
 
@@ -392,6 +492,7 @@ function LegacyFormBody({
     <form
       data-form-slug={formSlug}
       data-form-kind="legacy"
+      noValidate
       onSubmit={handleSubmit}
       style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}
     >
@@ -412,6 +513,7 @@ function LegacyFormBody({
             value={values[field.name] ?? ""}
             onChange={(e) => {
               onStart(field.name);
+              setValidationError(null);
               setValues((v) => ({ ...v, [field.name]: e.target.value }));
             }}
             required={field.required}
@@ -420,7 +522,11 @@ function LegacyFormBody({
         </label>
       ))}
 
-      {error && <p style={{ color: "#ef4444", fontSize: "0.85rem", margin: 0 }}>{error}</p>}
+      {(validationError || error) && (
+        <p aria-live="polite" style={{ color: "#ef4444", fontSize: "0.85rem", margin: 0 }}>
+          {validationError ?? error}
+        </p>
+      )}
 
       <button
         type="submit"
@@ -479,7 +585,10 @@ export default function LeadForm({
 
   async function handleSubmit(payload: Record<string, string>, turnstileToken?: string) {
     // Honeypot check (client-side fast-path to avoid network call)
-    if (honeypotEnabled && honeypotRef.current?.value) return;
+    if (honeypotEnabled && honeypotRef.current?.value) {
+      setError("We could not submit this form. Please refresh the page and try again.");
+      return;
+    }
 
     setSubmitting(true);
     setError(null);
