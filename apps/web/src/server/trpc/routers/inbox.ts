@@ -1,10 +1,22 @@
 // Unified inbox router (step-29).
 // Threads = grouped messages per contact per channel.
 import { db } from "@marketing/db";
-import { contacts, crmTasks, leads, messages, outbox, tenants } from "@marketing/db";
 import {
+  businessProfiles,
+  contacts,
+  crmTasks,
+  leads,
+  messages,
+  outbox,
+  tenants,
+} from "@marketing/db";
+import { getSmsProviderHealth } from "@marketing/integrations";
+import {
+  buildLeadConfirmationCopy,
   computeWhatsappConversationState,
+  env,
   normalizeSmsPhone,
+  normalizeLeadCaptureSettings,
   reservationStatusChangedV1,
 } from "@marketing/shared";
 import { TRPCError } from "@trpc/server";
@@ -13,6 +25,224 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { enqueueSmsSendJob, enqueueSmsSequenceTriggerJob } from "../../queues/sms";
 import { tenantProcedure, router } from "../trpc";
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function textValue(value: unknown): string | null {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return null;
+}
+
+function valueFromAnyKey(source: Record<string, unknown>, keys: string[]): string | null {
+  for (const key of keys) {
+    const direct = textValue(source[key]);
+    if (direct) return direct;
+    const matchingKey = Object.keys(source).find(
+      (candidate) => candidate.toLowerCase() === key.toLowerCase(),
+    );
+    if (matchingKey) {
+      const matched = textValue(source[matchingKey]);
+      if (matched) return matched;
+    }
+  }
+  return null;
+}
+
+function leadChannelPreference(lead: {
+  payload: unknown;
+  structuredData: unknown;
+  sourceChannel: string | null;
+}): "email" | "sms" | "whatsapp" | null {
+  const data = { ...asRecord(lead.payload), ...asRecord(lead.structuredData) };
+  const raw = valueFromAnyKey(data, [
+    "preferredChannel",
+    "preferred_channel",
+    "channel",
+    "contactMethod",
+    "contact_method",
+    "replyBy",
+    "reply_by",
+  ]);
+  const normalized = raw?.toLowerCase() ?? "";
+  if (normalized.includes("sms") || normalized.includes("text")) return "sms";
+  if (normalized.includes("whatsapp")) return "whatsapp";
+  if (normalized.includes("email") || normalized.includes("mail")) return "email";
+  if (lead.sourceChannel === "sms") return "sms";
+  if (lead.sourceChannel === "whatsapp") return "whatsapp";
+  return null;
+}
+
+function reservationDetails(payload: Record<string, unknown>): string {
+  const date = valueFromAnyKey(payload, ["date", "reservation_date", "reservationDate"]);
+  const time = valueFromAnyKey(payload, ["time", "reservation_time", "reservationTime"]);
+  const guests = valueFromAnyKey(payload, [
+    "party_size",
+    "partySize",
+    "guest_count",
+    "guests",
+    "people",
+  ]);
+  return [
+    date ? `Date: ${date}` : null,
+    time ? `Time: ${time}` : null,
+    guests ? `Guests: ${guests}` : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
+}
+
+function shortenSms(text: string, limit = 459): string {
+  const trimmed = text.trim().replace(/\s+/g, " ");
+  if (trimmed.length <= limit) return trimmed;
+  return `${trimmed.slice(0, limit - 3).trimEnd()}...`;
+}
+
+function buildReservationConfirmedSms(input: {
+  businessName: string;
+  locale: string | null;
+  payload: Record<string, unknown>;
+}): string {
+  const details = reservationDetails(input.payload);
+  const suffix = details ? ` ${details}.` : "";
+  if (input.locale === "de-CH") {
+    return shortenSms(
+      `${input.businessName}: Ihre Reservierung ist bestaetigt.${suffix} Wir freuen uns auf Ihren Besuch.`,
+    );
+  }
+  if (input.locale === "fr-CH") {
+    return shortenSms(
+      `${input.businessName}: Votre reservation est confirmee.${suffix} Nous nous rejouissons de vous accueillir.`,
+    );
+  }
+  if (input.locale === "it-CH") {
+    return shortenSms(
+      `${input.businessName}: La tua prenotazione e confermata.${suffix} Ti aspettiamo con piacere.`,
+    );
+  }
+  return shortenSms(
+    `${input.businessName}: Your reservation is confirmed.${suffix} We look forward to welcoming you.`,
+  );
+}
+
+async function queueReservationConfirmationSms(input: {
+  tenantId: string;
+  leadId: string;
+  contactId: string | null;
+}): Promise<{ queued: boolean; reason?: string }> {
+  if (!input.contactId) return { queued: false, reason: "Lead has no contact." };
+
+  const [[lead], [contact], [profile]] = await Promise.all([
+    db
+      .select({
+        id: leads.id,
+        workflowKind: leads.workflowKind,
+        payload: leads.payload,
+        structuredData: leads.structuredData,
+        sourceChannel: leads.sourceChannel,
+      })
+      .from(leads)
+      .where(and(eq(leads.tenantId, input.tenantId), eq(leads.id, input.leadId)))
+      .limit(1),
+    db
+      .select({ id: contacts.id, phone: contacts.phone })
+      .from(contacts)
+      .where(and(eq(contacts.tenantId, input.tenantId), eq(contacts.id, input.contactId)))
+      .limit(1),
+    db
+      .select({
+        businessName: businessProfiles.businessName,
+        locale: businessProfiles.locale,
+        leadCaptureSettings: businessProfiles.leadCaptureSettings,
+      })
+      .from(businessProfiles)
+      .where(eq(businessProfiles.tenantId, input.tenantId))
+      .limit(1),
+  ]);
+
+  if (!lead || lead.workflowKind !== "booking") {
+    return { queued: false, reason: "Lead is not a reservation." };
+  }
+  if (!contact?.phone) return { queued: false, reason: "Contact has no phone number." };
+
+  const settings = normalizeLeadCaptureSettings(profile?.leadCaptureSettings);
+  const customerPreference = leadChannelPreference(lead);
+  if (customerPreference && customerPreference !== "sms") {
+    return { queued: false, reason: `Customer preferred ${customerPreference}.` };
+  }
+  if (!customerPreference && settings.preferredConfirmationChannel !== "sms") {
+    return { queued: false, reason: "SMS is not the configured confirmation channel." };
+  }
+
+  let toAddress: string;
+  try {
+    toAddress = normalizeSmsPhone(contact.phone);
+  } catch {
+    return { queued: false, reason: "Contact phone is not a valid SMS number." };
+  }
+
+  const [existing] = await db
+    .select({ id: messages.id })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.tenantId, input.tenantId),
+        eq(messages.contactId, input.contactId),
+        eq(messages.channel, "sms"),
+        eq(messages.messageType, "reservation_confirmation"),
+        sql`${messages.meta}->>'leadId' = ${input.leadId}`,
+      ),
+    )
+    .limit(1);
+  if (existing) return { queued: false, reason: "Reservation confirmation already queued." };
+
+  const payload = { ...asRecord(lead.payload), ...asRecord(lead.structuredData) };
+  const copy = buildLeadConfirmationCopy({
+    kind: "booking",
+    businessName: profile?.businessName ?? "Our team",
+    locale: profile?.locale ?? "en",
+    payload,
+    settings,
+  });
+  const body = buildReservationConfirmedSms({
+    businessName: profile?.businessName ?? "Our team",
+    locale: profile?.locale ?? "en",
+    payload,
+  });
+  const providerHealth = getSmsProviderHealth(env);
+
+  const [message] = await db
+    .insert(messages)
+    .values({
+      tenantId: input.tenantId,
+      contactId: input.contactId,
+      channel: "sms",
+      direction: "outbound",
+      fromAddress: providerHealth.senderLabel,
+      toAddress,
+      body,
+      messageType: "reservation_confirmation",
+      status: "queued",
+      meta: {
+        automated: true,
+        leadId: input.leadId,
+        purpose: "sequence_transactional",
+        trigger: "reservation_confirmed",
+        provider: providerHealth.provider,
+        providerLabel: providerHealth.providerLabel,
+        acknowledgementSubject: copy.subject,
+      },
+    })
+    .returning({ id: messages.id });
+
+  if (!message) return { queued: false, reason: "Could not create SMS message." };
+  await enqueueSmsSendJob({ tenantId: input.tenantId, messageId: message.id });
+  return { queued: true };
+}
 
 export const inboxRouter = router({
   /**
@@ -377,6 +607,9 @@ export const inboxRouter = router({
           id: leads.id,
           contactId: leads.contactId,
           workflowKind: leads.workflowKind,
+          payload: leads.payload,
+          structuredData: leads.structuredData,
+          sourceChannel: leads.sourceChannel,
         })
         .from(leads)
         .where(and(eq(leads.tenantId, tenantId), eq(leads.id, input.leadId)))
@@ -439,11 +672,22 @@ export const inboxRouter = router({
         });
       }
 
+      const confirmation =
+        input.workflowState === "confirmed" && lead.workflowKind === "booking"
+          ? await queueReservationConfirmationSms({
+              tenantId,
+              leadId: lead.id,
+              contactId: lead.contactId,
+            })
+          : { queued: false };
+
       return {
         leadId: lead.id,
         workflowKind: lead.workflowKind,
         workflowState: input.workflowState,
         status: input.status,
+        confirmationSmsQueued: confirmation.queued,
+        confirmationSmsReason: confirmation.reason ?? null,
       };
     }),
 

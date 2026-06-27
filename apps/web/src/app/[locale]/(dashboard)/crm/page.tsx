@@ -704,6 +704,7 @@ function DetailPanel({
   const [taskPriority, setTaskPriority] = useState<"low" | "normal" | "high">("normal");
   const [savingTask, setSavingTask] = useState(false);
   const [updatingLeadId, setUpdatingLeadId] = useState<string | null>(null);
+  const [leadActionNotice, setLeadActionNotice] = useState<string | null>(null);
 
   const [draft, setDraft] = useState<string | null>(null);
   const [draftingFollowUp, setDraftingFollowUp] = useState(false);
@@ -862,12 +863,24 @@ function DetailPanel({
     },
   ) {
     setUpdatingLeadId(lead.id);
-    await trpc.inbox.updateLeadWorkflowStatus
+    setLeadActionNotice(null);
+    const result = await trpc.inbox.updateLeadWorkflowStatus
       .mutate({
         leadId: lead.id,
         ...input,
       })
       .catch(() => null);
+    if (result && input.workflowState === "confirmed") {
+      setLeadActionNotice(
+        result.confirmationSmsQueued
+          ? "Reservation confirmed. A customer confirmation SMS is queued and will appear in the Inbox timeline."
+          : `Reservation confirmed. No SMS was queued: ${
+              result.confirmationSmsReason ?? "the customer or tenant settings did not choose SMS"
+            }.`,
+      );
+    } else if (result) {
+      setLeadActionNotice("Lead status updated.");
+    }
     setUpdatingLeadId(null);
     load();
     onUpdated();
@@ -905,16 +918,22 @@ function DetailPanel({
         )}
         <button
           onClick={onClose}
-          className="ml-4 shrink-0 text-xl leading-none text-gray-400 hover:text-gray-700"
+          className="ml-4 shrink-0 rounded-md border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900"
           aria-label={t("panelClose")}
         >
-          ✕
+          Close
         </button>
       </div>
 
       {/* Body */}
       {detail && (
         <div className="flex-1 space-y-6 overflow-y-auto px-6 py-4">
+          {leadActionNotice && (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+              {leadActionNotice}
+            </div>
+          )}
+
           {detail.leads[0] && (
             <LatestLeadSummary
               lead={detail.leads[0]}
@@ -2055,14 +2074,22 @@ export default function CrmPage() {
 
       {/* Right: detail panel */}
       {selectedId && (
-        <div className="flex w-full shrink-0 flex-col overflow-hidden border-l bg-white shadow-lg lg:w-[560px] xl:w-[680px]">
-          <DetailPanel
-            key={selectedId}
-            contactId={selectedId}
-            onClose={() => setSelectedId(null)}
-            onUpdated={refreshCrm}
+        <>
+          <button
+            type="button"
+            aria-label="Close customer details"
+            className="fixed inset-0 z-40 cursor-default bg-slate-950/10"
+            onClick={() => setSelectedId(null)}
           />
-        </div>
+          <div className="fixed inset-y-0 right-0 z-50 flex w-full max-w-[720px] flex-col overflow-hidden border-l bg-white shadow-2xl">
+            <DetailPanel
+              key={selectedId}
+              contactId={selectedId}
+              onClose={() => setSelectedId(null)}
+              onUpdated={refreshCrm}
+            />
+          </div>
+        </>
       )}
 
       {/* Add contact modal */}

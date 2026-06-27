@@ -235,12 +235,23 @@ Confirm reservation
 Use **Mark contacted** when staff has replied, called, or started checking availability.
 Use **Confirm reservation** only after the restaurant is sure the table can be accepted.
 
+After confirming, the drawer can be closed with the **Close** button or by clicking outside the
+right-side drawer.
+
 ### Expected Final Result
 
 - Lead status becomes `Confirmed`.
 - Reservation workflow state becomes `Confirmed`.
 - Related task is completed or removed from open tasks.
-- A `reservation.status_changed` event can trigger SMS/email sequence automation if active.
+- If the customer chose SMS, a customer confirmation SMS is queued automatically.
+- The SMS appears in the Inbox/contact timeline as `reservation_confirmation`.
+- The SMS worker sends it through the platform sender and updates the delivery status.
+- A `reservation.status_changed` event can still trigger longer SMS/email sequence automation if
+  active, such as reminders or post-visit messages.
+
+The confirmation SMS is different from the first acknowledgement. The first message means “we
+received your request.” The confirmation message means “staff checked availability and accepted the
+booking.”
 
 ### Business Meaning
 
@@ -254,6 +265,8 @@ flowchart LR
   D --> E[Staff notification]
   E --> F[Staff confirms]
   F --> G[Lead becomes confirmed]
+  F --> H[Customer confirmation SMS queued]
+  H --> I[SMS delivery status appears in Inbox]
 ```
 
 ## Scenario 2: Reservation With Missing Details
