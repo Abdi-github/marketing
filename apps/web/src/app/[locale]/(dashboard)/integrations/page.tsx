@@ -1020,15 +1020,11 @@ function IntegrationsPageContent() {
             />
             <HealthCard
               label="Staff alert status"
-              value={
-                smsHealth?.queuedStaffAlerts
-                  ? `${smsHealth.queuedStaffAlerts} queued`
-                  : (smsHealth?.lastStaffAlertStatus ?? "No status yet")
-              }
+              value={smsHealth?.lastStaffAlertStatus ?? "No status yet"}
               tone={
                 smsHealth?.lastStaffAlertStatus === "failed"
                   ? "#dc2626"
-                  : smsHealth?.queuedStaffAlerts
+                  : smsHealth?.lastStaffAlertStatus === "queued"
                     ? "#ca8a04"
                     : "#475569"
               }
@@ -1047,6 +1043,12 @@ function IntegrationsPageContent() {
           {smsHealth?.lastStaffAlertFailureMessage ? (
             <p style={{ color: "#991b1b", fontSize: "0.78rem", lineHeight: 1.45 }}>
               Staff alert problem: {smsHealth.lastStaffAlertFailureMessage}
+            </p>
+          ) : null}
+          {smsHealth?.queuedStaffAlerts ? (
+            <p style={{ color: "#92400e", fontSize: "0.78rem", lineHeight: 1.45 }}>
+              Queue backlog: {smsHealth.queuedStaffAlerts} older staff alert
+              {smsHealth.queuedStaffAlerts === 1 ? "" : "s"} still waiting for the worker.
             </p>
           ) : null}
           <p style={{ color: "#64748b", fontSize: "0.78rem", lineHeight: 1.45 }}>
