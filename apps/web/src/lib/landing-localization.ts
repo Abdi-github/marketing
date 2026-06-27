@@ -1,13 +1,9 @@
-import type { LandingPageComposition } from "@marketing/ai-router";
+import { landingPageCompositionSchema, type LandingPageComposition } from "@marketing/ai-router";
 
 export type LocalizedLandingCompositions = Record<string, LandingPageComposition>;
 
 function isComposition(value: unknown): value is LandingPageComposition {
-  return (
-    !!value &&
-    typeof value === "object" &&
-    Array.isArray((value as { sections?: unknown }).sections)
-  );
+  return landingPageCompositionSchema.safeParse(value).success;
 }
 
 export function selectLocalizedComposition(input: {

@@ -17,7 +17,12 @@ import { and, eq, desc } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import type { FormSettings, FormStep, LandingPageComposition } from "@marketing/ai-router";
+import {
+  landingPageCompositionSchema,
+  type FormSettings,
+  type FormStep,
+  type LandingPageComposition,
+} from "@marketing/ai-router";
 import LeadForm from "../../../../components/lead-form";
 import { SectionBlock } from "../../../../components/landing/section-renderer";
 import {
@@ -46,6 +51,11 @@ type Props = {
   params: Promise<{ tenantSlug: string; pageSlug: string }>;
   searchParams?: Promise<{ lang?: string }>;
 };
+
+function parsePublishedComposition(value: unknown): LandingPageComposition | null {
+  const parsed = landingPageCompositionSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
 
 // ─── SEO metadata ─────────────────────────────────────────────────────────────
 
@@ -176,12 +186,28 @@ export default async function PublicLandingPage({ params, searchParams }: Props)
     }
   }
 
-  const [version] = await db
+  let [version] = await db
     .select()
     .from(landingPageVersions)
     .where(and(eq(landingPageVersions.tenantId, tenant.id), eq(landingPageVersions.id, versionId)));
 
   if (!version) notFound();
+  let composition = parsePublishedComposition(version.composition);
+  if (!composition && versionId !== defaultVersionId) {
+    const [fallbackVersion] = await db
+      .select()
+      .from(landingPageVersions)
+      .where(
+        and(
+          eq(landingPageVersions.tenantId, tenant.id),
+          eq(landingPageVersions.id, defaultVersionId),
+        ),
+      );
+    version = fallbackVersion;
+    composition = fallbackVersion ? parsePublishedComposition(fallbackVersion.composition) : null;
+    assignedVariantId = null;
+  }
+  if (!version || !composition) notFound();
 
   void db
     .insert(landingPageViews)
@@ -194,7 +220,6 @@ export default async function PublicLandingPage({ params, searchParams }: Props)
     })
     .catch(() => null);
 
-  const composition = version.composition as LandingPageComposition;
   const stepData = (page.stepData ?? {}) as Record<string, unknown>;
   const languagePreferences = normalizeLandingLanguagePreferences(
     stepData["languagePreferences"],

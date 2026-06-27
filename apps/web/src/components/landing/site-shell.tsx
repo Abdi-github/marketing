@@ -39,12 +39,28 @@ function hrefWithLocale(href: string, locale?: string | null): string {
   return `${path}${separator}lang=${encodeURIComponent(locale)}${hash ? `#${hash}` : ""}`;
 }
 
+function asArray<T>(value: T[] | null | undefined): T[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function sitePages(site?: LandingPageSite): LandingPageSitePage[] {
+  return asArray(site?.pages);
+}
+
+function navLinks(site?: LandingPageSite): LandingPageSiteLink[] {
+  return asArray(site?.nav?.links);
+}
+
+function footerLinks(site?: LandingPageSite): LandingPageSiteLink[] {
+  return asArray(site?.footer?.links);
+}
+
 export function getSitePage(
   composition: LandingPageComposition,
   sitePageSlug?: string | null,
 ): LandingPageSitePage | null {
   if (!sitePageSlug) return null;
-  return composition.site?.pages?.find((page) => page.slug === sitePageSlug) ?? null;
+  return sitePages(composition.site).find((page) => page.slug === sitePageSlug) ?? null;
 }
 
 export function getSitePageSections(
@@ -53,7 +69,8 @@ export function getSitePageSections(
 ): LandingPageSection[] | null {
   const page = getSitePage(composition, sitePageSlug);
   if (sitePageSlug && !page) return null;
-  return (page?.sections ?? composition.sections).slice().sort((a, b) => a.order - b.order);
+  const sections = asArray(page?.sections ?? composition.sections);
+  return sections.slice().sort((a, b) => a.order - b.order);
 }
 
 export function LandingSiteNav({
@@ -74,13 +91,14 @@ export function LandingSiteNav({
   activeLocale?: string | null;
 }) {
   const nav = site?.nav;
-  if (!nav || nav.links.length === 0) return null;
+  const links = navLinks(site);
+  if (!nav || links.length === 0) return null;
   const navStyle = nav.style ?? "classic";
   const isBold = navStyle === "bold-pill";
   const isEditorial = navStyle === "editorial";
   const isCompact = navStyle === "compact-cta";
   const active = activePageSlug ?? "home";
-  const brandLabel = nav.brandLabel ?? nav.links[0]?.label ?? "Home";
+  const brandLabel = nav.brandLabel ?? links[0]?.label ?? "Home";
   const languages = languagePreferences
     ? normalizeLandingLanguagePreferences(languagePreferences, languagePreferences.defaultLocale)
     : null;
@@ -344,7 +362,7 @@ export function LandingSiteNav({
           {brandLabel}
         </a>
         <div className="lp-site-nav__desktop">
-          {nav.links.map((link, index) => (
+          {links.map((link, index) => (
             <a
               key={`${link.label}-${link.pageSlug ?? link.href ?? ""}`}
               href={hrefWithLocale(
@@ -418,7 +436,7 @@ export function LandingSiteNav({
             className="lp-site-nav__panel"
             style={{ color: isBold ? "var(--lp-dark-text,#ffffff)" : "var(--lp-text,#111827)" }}
           >
-            {nav.links.map((link) => (
+            {links.map((link) => (
               <a
                 key={`mobile-${link.label}-${link.pageSlug ?? link.href ?? ""}`}
                 href={hrefWithLocale(
@@ -480,7 +498,7 @@ export function LandingSiteFooter({
   site?: LandingPageSite;
   basePath: string;
 }) {
-  const links = site?.footer?.links ?? [];
+  const links = footerLinks(site);
 
   return (
     <footer
