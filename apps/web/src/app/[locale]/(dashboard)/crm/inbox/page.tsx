@@ -45,6 +45,12 @@ type ThreadContext = Awaited<ReturnType<typeof trpc.inbox.getThreadContext.query
 
 type AutomationIssue = Awaited<ReturnType<typeof trpc.inbox.listAutomationIssues.query>>[number];
 
+type DeleteRequest = {
+  threads: Thread[];
+  title: string;
+  body: string;
+};
+
 function threadKey(thread: Pick<Thread, "contactId" | "channel">): ThreadKey {
   return `${thread.contactId}:${thread.channel as Channel}`;
 }
@@ -298,7 +304,7 @@ function ThreadItem({
               opacity: deleting ? 0.5 : 1,
             }}
           >
-            Delete
+            Delete conversation
           </button>
         </span>
       </div>
@@ -364,6 +370,116 @@ function MessageBubble({ message, t }: { message: Message; t: (key: string) => s
   );
 }
 
+function DeleteConfirmationModal({
+  request,
+  deleting,
+  onCancel,
+  onConfirm,
+}: {
+  request: DeleteRequest;
+  deleting: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const messageCount = request.threads.reduce((sum, thread) => sum + thread.totalMessages, 0);
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="delete-inbox-title"
+      style={{
+        alignItems: "center",
+        background: "rgba(15, 23, 42, 0.45)",
+        display: "flex",
+        inset: 0,
+        justifyContent: "center",
+        padding: "1rem",
+        position: "fixed",
+        zIndex: 80,
+      }}
+    >
+      <div
+        style={{
+          background: "#fff",
+          borderRadius: 14,
+          boxShadow: "0 24px 80px rgba(15, 23, 42, 0.24)",
+          maxWidth: 520,
+          padding: "1.25rem",
+          width: "100%",
+        }}
+      >
+        <h2
+          id="delete-inbox-title"
+          style={{ color: "#111827", fontSize: "1.05rem", fontWeight: 800, margin: 0 }}
+        >
+          {request.title}
+        </h2>
+        <p style={{ color: "#475569", fontSize: "0.88rem", lineHeight: 1.55, margin: "0.6rem 0" }}>
+          {request.body}
+        </p>
+        <div
+          style={{
+            background: "#fef2f2",
+            border: "1px solid #fecaca",
+            borderRadius: 10,
+            color: "#991b1b",
+            fontSize: "0.82rem",
+            lineHeight: 1.5,
+            padding: "0.75rem",
+          }}
+        >
+          This removes {messageCount} Inbox message{messageCount === 1 ? "" : "s"} from the
+          conversation view. The CRM contact, lead, tasks, and customer record remain.
+        </div>
+        <div
+          style={{
+            display: "flex",
+            gap: "0.6rem",
+            justifyContent: "flex-end",
+            marginTop: "1rem",
+          }}
+        >
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={deleting}
+            style={{
+              background: "#fff",
+              border: "1px solid #d1d5db",
+              borderRadius: 8,
+              color: "#334155",
+              cursor: deleting ? "not-allowed" : "pointer",
+              fontSize: "0.85rem",
+              fontWeight: 700,
+              padding: "0.55rem 0.9rem",
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={deleting}
+            style={{
+              background: "#dc2626",
+              border: "none",
+              borderRadius: 8,
+              color: "#fff",
+              cursor: deleting ? "not-allowed" : "pointer",
+              fontSize: "0.85rem",
+              fontWeight: 800,
+              padding: "0.55rem 0.9rem",
+              opacity: deleting ? 0.7 : 1,
+            }}
+          >
+            {deleting ? "Deleting..." : "Delete from Inbox"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function InboxPage() {
   const t = useTranslations("Inbox");
   const [channelFilter, setChannelFilter] = useState<Channel | undefined>(undefined);
@@ -373,6 +489,8 @@ export default function InboxPage() {
   const [threadSearch, setThreadSearch] = useState("");
   const [selectedThreadKeys, setSelectedThreadKeys] = useState<Set<ThreadKey>>(new Set());
   const [deletingThreadKeys, setDeletingThreadKeys] = useState<Set<ThreadKey>>(new Set());
+  const [deleteRequest, setDeleteRequest] = useState<DeleteRequest | null>(null);
+  const [deleteInProgress, setDeleteInProgress] = useState(false);
   const [deleteNotice, setDeleteNotice] = useState<string | null>(null);
   const [activeThread, setActiveThread] = useState<Thread | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -585,19 +703,28 @@ export default function InboxPage() {
     });
   }
 
-  async function deleteConversations(targetThreads: Thread[]) {
+  function requestDeleteConversations(targetThreads: Thread[]) {
     if (targetThreads.length === 0) return;
     const label =
       targetThreads.length === 1
         ? `${targetThreads[0]!.contactName} ${targetThreads[0]!.channel} conversation`
         : `${targetThreads.length} conversations`;
-    if (
-      !confirm(`Delete ${label}? This removes the Inbox messages only. The CRM contact remains.`)
-    ) {
-      return;
-    }
+    setDeleteRequest({
+      threads: targetThreads,
+      title:
+        targetThreads.length === 1
+          ? "Delete this Inbox conversation?"
+          : "Delete selected conversations?",
+      body: `You are about to delete ${label} from the Inbox.`,
+    });
+  }
+
+  async function confirmDeleteConversations() {
+    const targetThreads = deleteRequest?.threads ?? [];
+    if (targetThreads.length === 0 || deleteInProgress) return;
 
     const keys = targetThreads.map(threadKey);
+    setDeleteInProgress(true);
     setDeletingThreadKeys((current) => new Set([...current, ...keys]));
     setDeleteNotice(null);
     try {
@@ -634,7 +761,9 @@ export default function InboxPage() {
           .then((rows) => setIssues(rows))
           .catch(() => setIssues([])),
       ]);
+      setDeleteRequest(null);
     } finally {
+      setDeleteInProgress(false);
       setDeletingThreadKeys((current) => {
         const next = new Set(current);
         keys.forEach((key) => next.delete(key));
@@ -891,7 +1020,7 @@ export default function InboxPage() {
             </button>
             <button
               type="button"
-              onClick={() => void deleteConversations(selectedThreads)}
+              onClick={() => requestDeleteConversations(selectedThreads)}
               disabled={deletingThreadKeys.size > 0}
               style={{
                 background: "#dc2626",
@@ -996,7 +1125,7 @@ export default function InboxPage() {
               }
               onClick={() => setActiveThread(thread)}
               onToggleSelected={() => toggleThreadSelection(thread)}
-              onDelete={() => void deleteConversations([thread])}
+              onDelete={() => requestDeleteConversations([thread])}
             />
           ))}
         </div>
@@ -1076,9 +1205,39 @@ export default function InboxPage() {
                       ) : null}
                     </div>
                   </div>
-                  <div style={{ textAlign: "right", fontSize: "0.75rem", color: "#64748b" }}>
-                    <div>Last automation: {formatDateTime(threadContext?.lastAutomationAt)}</div>
-                    <div>Lead submitted: {formatDateTime(threadContext?.submittedAt)}</div>
+                  <div
+                    style={{
+                      alignItems: "flex-end",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "0.5rem",
+                      textAlign: "right",
+                    }}
+                  >
+                    <div style={{ color: "#64748b", fontSize: "0.75rem" }}>
+                      <div>Last automation: {formatDateTime(threadContext?.lastAutomationAt)}</div>
+                      <div>Lead submitted: {formatDateTime(threadContext?.submittedAt)}</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => requestDeleteConversations([activeThread])}
+                      disabled={deletingThreadKeys.has(threadKey(activeThread))}
+                      style={{
+                        background: "#fff",
+                        border: "1px solid #fecaca",
+                        borderRadius: 8,
+                        color: "#dc2626",
+                        cursor: deletingThreadKeys.has(threadKey(activeThread))
+                          ? "not-allowed"
+                          : "pointer",
+                        fontSize: "0.76rem",
+                        fontWeight: 800,
+                        padding: "0.4rem 0.65rem",
+                        opacity: deletingThreadKeys.has(threadKey(activeThread)) ? 0.55 : 1,
+                      }}
+                    >
+                      Delete conversation
+                    </button>
                   </div>
                 </div>
 
@@ -1309,6 +1468,16 @@ export default function InboxPage() {
           )}
         </div>
       </div>
+      {deleteRequest ? (
+        <DeleteConfirmationModal
+          request={deleteRequest}
+          deleting={deleteInProgress}
+          onCancel={() => {
+            if (!deleteInProgress) setDeleteRequest(null);
+          }}
+          onConfirm={() => void confirmDeleteConversations()}
+        />
+      ) : null}
     </div>
   );
 }
