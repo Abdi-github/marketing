@@ -51,8 +51,28 @@ type DeleteRequest = {
   body: string;
 };
 
+type ClearAttentionRequest = {
+  issues: AutomationIssue[];
+  title: string;
+  body: string;
+};
+
 function threadKey(thread: Pick<Thread, "contactId" | "channel">): ThreadKey {
   return `${thread.contactId}:${thread.channel as Channel}`;
+}
+
+function issueKey(issue: AutomationIssue): string {
+  return issue.id;
+}
+
+function issueActionInput(issue: AutomationIssue) {
+  if (issue.type === "send_failed" && issue.messageId) {
+    return { type: "send_failed" as const, messageId: issue.messageId };
+  }
+  if (issue.type === "lead_attention" && issue.leadId) {
+    return { type: "lead_attention" as const, leadId: issue.leadId };
+  }
+  return null;
 }
 
 function threadMatchesSearch(thread: Thread, query: string): boolean {
@@ -480,6 +500,108 @@ function DeleteConfirmationModal({
   );
 }
 
+function ClearAttentionConfirmationModal({
+  request,
+  clearing,
+  onCancel,
+  onConfirm,
+}: {
+  request: ClearAttentionRequest;
+  clearing: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const count = request.issues.length;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="clear-attention-title"
+      style={{
+        alignItems: "center",
+        background: "rgba(15, 23, 42, 0.46)",
+        display: "flex",
+        inset: 0,
+        justifyContent: "center",
+        padding: "1rem",
+        position: "fixed",
+        zIndex: 80,
+      }}
+    >
+      <div
+        style={{
+          background: "#fff",
+          borderRadius: 12,
+          boxShadow: "0 24px 80px rgba(15, 23, 42, 0.24)",
+          maxWidth: 460,
+          padding: "1.2rem",
+          width: "100%",
+        }}
+      >
+        <h2 id="clear-attention-title" style={{ fontSize: "1rem", margin: 0 }}>
+          {request.title}
+        </h2>
+        <p style={{ color: "#475569", fontSize: "0.86rem", lineHeight: 1.55, margin: "0.65rem 0" }}>
+          {request.body}
+        </p>
+        <p
+          style={{
+            background: "#fffbeb",
+            border: "1px solid #fde68a",
+            borderRadius: 8,
+            color: "#92400e",
+            fontSize: "0.8rem",
+            lineHeight: 1.5,
+            margin: "0 0 1rem",
+            padding: "0.65rem 0.75rem",
+          }}
+        >
+          This clears {count} item{count === 1 ? "" : "s"} from the attention list. Customer
+          records, message history, contacts, and tasks stay in the CRM.
+        </p>
+        <div style={{ display: "flex", gap: "0.6rem", justifyContent: "flex-end" }}>
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={clearing}
+            style={{
+              background: "#fff",
+              border: "1px solid #d1d5db",
+              borderRadius: 8,
+              color: "#334155",
+              cursor: clearing ? "not-allowed" : "pointer",
+              fontSize: "0.85rem",
+              fontWeight: 700,
+              padding: "0.55rem 0.9rem",
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={clearing}
+            style={{
+              background: "#7c3aed",
+              border: "none",
+              borderRadius: 8,
+              color: "#fff",
+              cursor: clearing ? "not-allowed" : "pointer",
+              fontSize: "0.85rem",
+              fontWeight: 800,
+              opacity: clearing ? 0.7 : 1,
+              padding: "0.55rem 0.9rem",
+            }}
+          >
+            {clearing ? "Clearing..." : "Clear from attention"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function InboxPage() {
   const t = useTranslations("Inbox");
   const [channelFilter, setChannelFilter] = useState<Channel | undefined>(undefined);
@@ -497,6 +619,12 @@ export default function InboxPage() {
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [threadContext, setThreadContext] = useState<ThreadContext | null>(null);
   const [issues, setIssues] = useState<AutomationIssue[]>([]);
+  const [selectedIssueKeys, setSelectedIssueKeys] = useState<Set<string>>(new Set());
+  const [clearingIssueKeys, setClearingIssueKeys] = useState<Set<string>>(new Set());
+  const [clearAttentionRequest, setClearAttentionRequest] = useState<ClearAttentionRequest | null>(
+    null,
+  );
+  const [clearAttentionInProgress, setClearAttentionInProgress] = useState(false);
   const [replyText, setReplyText] = useState("");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
@@ -673,6 +801,10 @@ export default function InboxPage() {
     () => threads.filter((thread) => selectedThreadKeys.has(threadKey(thread))),
     [threads, selectedThreadKeys],
   );
+  const selectedIssues = useMemo(
+    () => issues.filter((issue) => selectedIssueKeys.has(issueKey(issue))),
+    [issues, selectedIssueKeys],
+  );
   const failedThreadCount = threads.filter((thread) => thread.lastStatus === "failed").length;
   const waitingThreadCount = threads.filter(
     (thread) => thread.lastDirection === "inbound" || thread.lastStatus === "queued",
@@ -703,6 +835,29 @@ export default function InboxPage() {
     });
   }
 
+  function toggleIssueSelection(issue: AutomationIssue) {
+    const key = issueKey(issue);
+    setSelectedIssueKeys((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  function toggleAllIssues() {
+    setSelectedIssueKeys((current) => {
+      const next = new Set(current);
+      const allSelected = issues.length > 0 && issues.every((issue) => next.has(issueKey(issue)));
+      for (const issue of issues) {
+        const key = issueKey(issue);
+        if (allSelected) next.delete(key);
+        else next.add(key);
+      }
+      return next;
+    });
+  }
+
   function requestDeleteConversations(targetThreads: Thread[]) {
     if (targetThreads.length === 0) return;
     const label =
@@ -716,6 +871,21 @@ export default function InboxPage() {
           ? "Delete this Inbox conversation?"
           : "Delete selected conversations?",
       body: `You are about to delete ${label} from the Inbox.`,
+    });
+  }
+
+  function requestClearAttention(targetIssues: AutomationIssue[]) {
+    if (targetIssues.length === 0) return;
+    setClearAttentionRequest({
+      issues: targetIssues,
+      title:
+        targetIssues.length === 1
+          ? "Clear this attention item?"
+          : "Clear selected attention items?",
+      body:
+        targetIssues.length === 1
+          ? "This item will stop appearing in Messaging automation attention."
+          : `${targetIssues.length} items will stop appearing in Messaging automation attention.`,
     });
   }
 
@@ -765,6 +935,49 @@ export default function InboxPage() {
     } finally {
       setDeleteInProgress(false);
       setDeletingThreadKeys((current) => {
+        const next = new Set(current);
+        keys.forEach((key) => next.delete(key));
+        return next;
+      });
+    }
+  }
+
+  async function confirmClearAttention() {
+    const targetIssues = clearAttentionRequest?.issues ?? [];
+    if (targetIssues.length === 0 || clearAttentionInProgress) return;
+
+    const actionInputs = targetIssues.map(issueActionInput).filter((issue) => issue !== null);
+    if (actionInputs.length === 0) {
+      setClearAttentionRequest(null);
+      return;
+    }
+
+    const keys = targetIssues.map(issueKey);
+    setClearAttentionInProgress(true);
+    setClearingIssueKeys((current) => new Set([...current, ...keys]));
+    setDeleteNotice(null);
+    try {
+      const result =
+        actionInputs.length === 1
+          ? await trpc.inbox.clearAutomationIssue.mutate(actionInputs[0]!)
+          : await trpc.inbox.clearAutomationIssues.mutate({ issues: actionInputs });
+
+      setDeleteNotice(
+        `${targetIssues.length === 1 ? "Attention item" : "Attention items"} cleared. ${result.clearedCount} item${result.clearedCount === 1 ? "" : "s"} removed from the attention list.`,
+      );
+      setSelectedIssueKeys((current) => {
+        const next = new Set(current);
+        keys.forEach((key) => next.delete(key));
+        return next;
+      });
+      await trpc.inbox.listAutomationIssues
+        .query({ limit: 8 })
+        .then((rows) => setIssues(rows))
+        .catch(() => setIssues([]));
+      setClearAttentionRequest(null);
+    } finally {
+      setClearAttentionInProgress(false);
+      setClearingIssueKeys((current) => {
         const next = new Set(current);
         keys.forEach((key) => next.delete(key));
         return next;
@@ -869,7 +1082,45 @@ export default function InboxPage() {
                 Leads waiting for confirmation, missing details, or failed WhatsApp/SMS replies.
               </p>
             </div>
-            <TinyBadge label={`${issues.length} open`} tone="#b45309" />
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+              <TinyBadge label={`${issues.length} open`} tone="#b45309" />
+              <button
+                type="button"
+                onClick={toggleAllIssues}
+                style={{
+                  background: "#fff",
+                  border: "1px solid #e5e7eb",
+                  borderRadius: 999,
+                  color: "#334155",
+                  cursor: "pointer",
+                  fontSize: "0.76rem",
+                  fontWeight: 700,
+                  padding: "0.32rem 0.65rem",
+                }}
+              >
+                {selectedIssues.length === issues.length ? "Unselect all" : "Select all"}
+              </button>
+              {selectedIssues.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => requestClearAttention(selectedIssues)}
+                  disabled={clearAttentionInProgress}
+                  style={{
+                    background: "#7c3aed",
+                    border: "none",
+                    borderRadius: 999,
+                    color: "#fff",
+                    cursor: clearAttentionInProgress ? "not-allowed" : "pointer",
+                    fontSize: "0.76rem",
+                    fontWeight: 800,
+                    opacity: clearAttentionInProgress ? 0.7 : 1,
+                    padding: "0.34rem 0.75rem",
+                  }}
+                >
+                  Clear selected ({selectedIssues.length})
+                </button>
+              ) : null}
+            </div>
           </div>
           <div
             style={{
@@ -879,54 +1130,106 @@ export default function InboxPage() {
               marginTop: "0.9rem",
             }}
           >
-            {issues.map((issue) => (
-              <button
-                key={issue.id}
-                onClick={() => {
-                  if (!issue.contactId) return;
-                  const thread = threads.find((item) => item.contactId === issue.contactId);
-                  if (thread) setActiveThread(thread);
-                }}
-                style={{
-                  textAlign: "left",
-                  border: "1px solid #f1f5f9",
-                  borderRadius: 8,
-                  padding: "0.8rem",
-                  background: "#fafafa",
-                  cursor: issue.contactId ? "pointer" : "default",
-                }}
-              >
+            {issues.map((issue) => {
+              const key = issueKey(issue);
+              const selected = selectedIssueKeys.has(key);
+              const clearing = clearingIssueKeys.has(key);
+
+              return (
                 <div
+                  key={issue.id}
                   style={{
-                    display: "flex",
-                    gap: "0.35rem",
-                    flexWrap: "wrap",
-                    marginBottom: "0.35rem",
+                    border: "1px solid #f1f5f9",
+                    borderRadius: 8,
+                    background: selected ? "#f5f3ff" : "#fafafa",
+                    boxShadow: selected ? "0 0 0 2px rgba(124, 58, 237, 0.18)" : "none",
+                    padding: "0.8rem",
                   }}
                 >
-                  <TinyBadge
-                    label={
-                      issue.type === "send_failed"
-                        ? "send failed"
-                        : formatWorkflowState(issue.workflowState)
-                    }
-                    tone={issue.type === "send_failed" ? "#dc2626" : "#b45309"}
-                  />
-                  {issue.workflowKind ? (
-                    <TinyBadge label={formatWorkflowKind(issue.workflowKind)} tone="#7c3aed" />
-                  ) : null}
+                  <div style={{ display: "flex", gap: "0.55rem", alignItems: "flex-start" }}>
+                    <input
+                      type="checkbox"
+                      checked={selected}
+                      onChange={() => toggleIssueSelection(issue)}
+                      aria-label={`Select attention item for ${issue.contactName}`}
+                      style={{ marginTop: "0.15rem" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!issue.contactId) return;
+                        const thread = threads.find((item) => item.contactId === issue.contactId);
+                        if (thread) setActiveThread(thread);
+                      }}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        color: "inherit",
+                        cursor: issue.contactId ? "pointer" : "default",
+                        flex: 1,
+                        padding: 0,
+                        textAlign: "left",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: "0.35rem",
+                          flexWrap: "wrap",
+                          marginBottom: "0.35rem",
+                        }}
+                      >
+                        <TinyBadge
+                          label={
+                            issue.type === "send_failed"
+                              ? "send failed"
+                              : formatWorkflowState(issue.workflowState)
+                          }
+                          tone={issue.type === "send_failed" ? "#dc2626" : "#b45309"}
+                        />
+                        {issue.workflowKind ? (
+                          <TinyBadge
+                            label={formatWorkflowKind(issue.workflowKind)}
+                            tone="#7c3aed"
+                          />
+                        ) : null}
+                      </div>
+                      <div style={{ fontWeight: 700, fontSize: "0.88rem", color: "#111827" }}>
+                        {issue.contactName}
+                      </div>
+                      <div style={{ fontSize: "0.76rem", color: "#64748b", marginTop: "0.2rem" }}>
+                        {issue.detail}
+                      </div>
+                      <div style={{ fontSize: "0.72rem", color: "#94a3b8", marginTop: "0.4rem" }}>
+                        {formatDateTime(issue.occurredAt)}
+                      </div>
+                    </button>
+                  </div>
+                  <div
+                    style={{ display: "flex", justifyContent: "flex-end", marginTop: "0.65rem" }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => requestClearAttention([issue])}
+                      disabled={clearing || clearAttentionInProgress}
+                      style={{
+                        background: "#fff",
+                        border: "1px solid #ddd6fe",
+                        borderRadius: 8,
+                        color: "#6d28d9",
+                        cursor: clearing || clearAttentionInProgress ? "not-allowed" : "pointer",
+                        fontSize: "0.76rem",
+                        fontWeight: 800,
+                        opacity: clearing || clearAttentionInProgress ? 0.65 : 1,
+                        padding: "0.38rem 0.65rem",
+                      }}
+                    >
+                      {clearing ? "Clearing..." : "Clear"}
+                    </button>
+                  </div>
                 </div>
-                <div style={{ fontWeight: 700, fontSize: "0.88rem", color: "#111827" }}>
-                  {issue.contactName}
-                </div>
-                <div style={{ fontSize: "0.76rem", color: "#64748b", marginTop: "0.2rem" }}>
-                  {issue.detail}
-                </div>
-                <div style={{ fontSize: "0.72rem", color: "#94a3b8", marginTop: "0.4rem" }}>
-                  {formatDateTime(issue.occurredAt)}
-                </div>
-              </button>
-            ))}
+              );
+            })}
           </div>
         </section>
       ) : null}
@@ -1476,6 +1779,16 @@ export default function InboxPage() {
             if (!deleteInProgress) setDeleteRequest(null);
           }}
           onConfirm={() => void confirmDeleteConversations()}
+        />
+      ) : null}
+      {clearAttentionRequest ? (
+        <ClearAttentionConfirmationModal
+          request={clearAttentionRequest}
+          clearing={clearAttentionInProgress}
+          onCancel={() => {
+            if (!clearAttentionInProgress) setClearAttentionRequest(null);
+          }}
+          onConfirm={() => void confirmClearAttention()}
         />
       ) : null}
     </div>

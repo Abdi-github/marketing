@@ -77,6 +77,17 @@ function leadChannelPreference(lead: {
   return null;
 }
 
+const automationIssueInput = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("send_failed"),
+    messageId: z.string().uuid(),
+  }),
+  z.object({
+    type: z.literal("lead_attention"),
+    leadId: z.string().uuid(),
+  }),
+]);
+
 function reservationDetails(payload: Record<string, unknown>): string {
   const date = valueFromAnyKey(payload, ["date", "reservation_date", "reservationDate"]);
   const time = valueFromAnyKey(payload, ["time", "reservation_time", "reservationTime"]);
@@ -479,6 +490,7 @@ export const inboxRouter = router({
       const [failedMessages, pendingLeads] = await Promise.all([
         db
           .select({
+            messageId: messages.id,
             contactId: messages.contactId,
             channel: messages.channel,
             contactFirstName: contacts.firstName,
@@ -499,6 +511,7 @@ export const inboxRouter = router({
               inArray(messages.channel, ["whatsapp", "sms"]),
               eq(messages.direction, "outbound"),
               eq(messages.status, "failed"),
+              sql`NOT (${messages.meta} ? 'inboxAttentionDismissedAt')`,
             ),
           )
           .orderBy(desc(messages.occurredAt))
@@ -539,8 +552,10 @@ export const inboxRouter = router({
       ]);
 
       const failedItems = failedMessages.map((row) => ({
-        id: `failed:${row.contactId ?? "unknown"}:${new Date(row.occurredAt).getTime()}`,
+        id: `failed:${row.messageId}`,
         type: "send_failed" as const,
+        messageId: row.messageId,
+        leadId: null,
         occurredAt: row.occurredAt,
         contactId: row.contactId,
         contactName:
@@ -557,6 +572,8 @@ export const inboxRouter = router({
       const pendingItems = pendingLeads.map((row) => ({
         id: `lead:${row.leadId}`,
         type: "lead_attention" as const,
+        messageId: null,
+        leadId: row.leadId,
         occurredAt: row.submittedAt,
         contactId: row.contactId,
         contactName:
@@ -580,6 +597,102 @@ export const inboxRouter = router({
       return [...failedItems, ...pendingItems]
         .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime())
         .slice(0, input.limit);
+    }),
+
+  clearAutomationIssue: tenantProcedure
+    .input(automationIssueInput)
+    .mutation(async ({ ctx, input }) => {
+      const { tenantId } = ctx.tenantCtx;
+      const now = new Date();
+
+      if (input.type === "send_failed") {
+        const dismissedMeta = JSON.stringify({ inboxAttentionDismissedAt: now.toISOString() });
+        const updated = await db
+          .update(messages)
+          .set({
+            meta: sql`${messages.meta} || ${dismissedMeta}::jsonb`,
+          })
+          .where(
+            and(
+              eq(messages.tenantId, tenantId),
+              eq(messages.id, input.messageId),
+              eq(messages.status, "failed"),
+            ),
+          )
+          .returning({ id: messages.id });
+
+        return { clearedCount: updated.length };
+      }
+
+      const updated = await db
+        .update(leads)
+        .set({
+          status: "contacted",
+          workflowState: "attention_cleared",
+          lastAutomationAt: now,
+        })
+        .where(and(eq(leads.tenantId, tenantId), eq(leads.id, input.leadId)))
+        .returning({ id: leads.id });
+
+      return { clearedCount: updated.length };
+    }),
+
+  clearAutomationIssues: tenantProcedure
+    .input(
+      z.object({
+        issues: z.array(automationIssueInput).min(1).max(50),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { tenantId } = ctx.tenantCtx;
+      const now = new Date();
+      const failedMessageIds = input.issues
+        .filter(
+          (issue): issue is z.infer<typeof automationIssueInput> & { type: "send_failed" } =>
+            issue.type === "send_failed",
+        )
+        .map((issue) => issue.messageId);
+      const leadIds = input.issues
+        .filter(
+          (issue): issue is z.infer<typeof automationIssueInput> & { type: "lead_attention" } =>
+            issue.type === "lead_attention",
+        )
+        .map((issue) => issue.leadId);
+
+      let clearedCount = 0;
+
+      if (failedMessageIds.length > 0) {
+        const dismissedMeta = JSON.stringify({ inboxAttentionDismissedAt: now.toISOString() });
+        const updated = await db
+          .update(messages)
+          .set({
+            meta: sql`${messages.meta} || ${dismissedMeta}::jsonb`,
+          })
+          .where(
+            and(
+              eq(messages.tenantId, tenantId),
+              inArray(messages.id, failedMessageIds),
+              eq(messages.status, "failed"),
+            ),
+          )
+          .returning({ id: messages.id });
+        clearedCount += updated.length;
+      }
+
+      if (leadIds.length > 0) {
+        const updated = await db
+          .update(leads)
+          .set({
+            status: "contacted",
+            workflowState: "attention_cleared",
+            lastAutomationAt: now,
+          })
+          .where(and(eq(leads.tenantId, tenantId), inArray(leads.id, leadIds)))
+          .returning({ id: leads.id });
+        clearedCount += updated.length;
+      }
+
+      return { clearedCount };
     }),
 
   deleteThread: tenantProcedure
