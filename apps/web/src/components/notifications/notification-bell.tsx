@@ -25,6 +25,35 @@ function priorityTone(priority: string): string {
   return "border-blue-200 bg-blue-50 text-blue-700";
 }
 
+function currentLocale(): string {
+  if (typeof window === "undefined") return "en";
+  const segment = window.location.pathname.split("/").filter(Boolean)[0];
+  return segment && ["de", "en", "fr", "it"].includes(segment) ? segment : "en";
+}
+
+function normalizeActionUrl(actionUrl: string | null): string | null {
+  if (!actionUrl) return null;
+  if (typeof window === "undefined") return actionUrl;
+
+  try {
+    const url = new URL(actionUrl, window.location.origin);
+    if (url.origin !== window.location.origin) return null;
+
+    const locale = currentLocale();
+    const parts = url.pathname.split("/").filter(Boolean);
+    const first = parts[0];
+    const pathWithoutLocale =
+      first && ["de", "en", "fr", "it"].includes(first)
+        ? `/${parts.slice(1).join("/")}`
+        : url.pathname;
+    const normalizedPath =
+      pathWithoutLocale === "/" ? `/${locale}` : `/${locale}${pathWithoutLocale}`;
+    return `${normalizedPath}${url.search}${url.hash}`;
+  } catch {
+    return null;
+  }
+}
+
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [rows, setRows] = useState<NotificationRow[]>([]);
@@ -206,52 +235,55 @@ export function NotificationBell() {
               </div>
             ) : (
               <div className="space-y-2">
-                {visibleRows.map((row) => (
-                  <div
-                    key={row.id}
-                    className={`rounded-lg border p-3 ${priorityTone(row.priority)}`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold">{row.title}</p>
-                        {row.body && <p className="mt-1 text-xs leading-relaxed">{row.body}</p>}
-                        <p className="mt-2 text-[11px] opacity-75">{formatTime(row.createdAt)}</p>
+                {visibleRows.map((row) => {
+                  const actionUrl = normalizeActionUrl(row.actionUrl);
+                  return (
+                    <div
+                      key={row.id}
+                      className={`rounded-lg border p-3 ${priorityTone(row.priority)}`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold">{row.title}</p>
+                          {row.body && <p className="mt-1 text-xs leading-relaxed">{row.body}</p>}
+                          <p className="mt-2 text-[11px] opacity-75">{formatTime(row.createdAt)}</p>
+                        </div>
+                        {row.status === "unread" && (
+                          <span className="mt-0.5 rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">
+                            New
+                          </span>
+                        )}
                       </div>
-                      {row.status === "unread" && (
-                        <span className="mt-0.5 rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">
-                          New
-                        </span>
-                      )}
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {row.actionUrl && (
-                        <a
-                          href={row.actionUrl}
-                          onClick={() => void markRead(row.id)}
-                          className="rounded-md bg-slate-950 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-slate-800"
-                        >
-                          Open
-                        </a>
-                      )}
-                      {row.status === "unread" && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {actionUrl && (
+                          <a
+                            href={actionUrl}
+                            onClick={() => void markRead(row.id)}
+                            className="rounded-md bg-slate-950 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-slate-800"
+                          >
+                            Open
+                          </a>
+                        )}
+                        {row.status === "unread" && (
+                          <button
+                            type="button"
+                            onClick={() => void markRead(row.id)}
+                            className="rounded-md border border-current px-2.5 py-1.5 text-xs font-semibold"
+                          >
+                            Mark read
+                          </button>
+                        )}
                         <button
                           type="button"
-                          onClick={() => void markRead(row.id)}
-                          className="rounded-md border border-current px-2.5 py-1.5 text-xs font-semibold"
+                          onClick={() => void dismiss(row.id)}
+                          className="rounded-md border border-current px-2.5 py-1.5 text-xs font-semibold opacity-75"
                         >
-                          Mark read
+                          Dismiss
                         </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => void dismiss(row.id)}
-                        className="rounded-md border border-current px-2.5 py-1.5 text-xs font-semibold opacity-75"
-                      >
-                        Dismiss
-                      </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

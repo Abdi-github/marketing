@@ -206,19 +206,34 @@ Open:
 
 Expected:
 
-- Follow-up queue shows a reservation task.
-- Contact exists or is updated.
+- The CRM contact drawer opens on the right.
+- The first card says **Latest customer request**.
+- The **Customer message** box shows exactly what the visitor typed.
+- The request facts are shown as simple fields such as name, phone, date, time, people, and preferred channel.
+- The **Recommended next step** box tells staff what to do next.
+- The follow-up queue shows a reservation task.
 - Contact source is website/form/landing page.
-- Lead history shows reservation details.
-- Workflow state is `Awaiting confirmation`.
+- Workflow state is `Awaiting confirmation`, `Contacted`, or `Confirmed` depending on the staff action.
+
+Do not start by reading the technical timeline. The timeline is mainly for history and troubleshooting.
+For normal staff work, start with:
+
+1. **Latest customer request**
+2. **Customer message**
+3. **Recommended next step**
+4. Action buttons such as **Mark contacted** or **Confirm reservation**
 
 ### Staff Decision
 
-In the follow-up queue, click:
+In the customer drawer, use one of these actions:
 
 ```text
+Mark contacted
 Confirm reservation
 ```
+
+Use **Mark contacted** when staff has replied, called, or started checking availability.
+Use **Confirm reservation** only after the restaurant is sure the table can be accepted.
 
 ### Expected Final Result
 
@@ -271,6 +286,7 @@ CRM should show:
 - New or updated contact.
 - Reservation task.
 - Workflow state: `Missing details` or equivalent.
+- The **Latest customer request** card tells staff to ask for missing date, time, or guest count before confirming.
 - Staff should ask for the missing time and guest count before confirming.
 
 ### Staff Action
@@ -313,6 +329,8 @@ Message: Please call me about booking a table for this weekend.
 - Contact is created or updated.
 - Task says staff should call/contact the customer.
 - Lead kind should be callback or generic follow-up if the form does not expose a callback preset.
+- The **Latest customer request** card shows the customer's phone and message clearly.
+- The recommended next step should tell staff to call or message the customer.
 
 ### Staff Action
 
@@ -345,6 +363,8 @@ Message: We want a private dinner for 18 people next month. Can you send a menu 
 - Contact is created or updated.
 - Lead/task appears.
 - Staff should treat this as a sales opportunity.
+- The **Customer message** box should make the private dining request readable without opening the technical payload.
+- The staff member can use the request facts to create a deal.
 
 ### Staff Action
 

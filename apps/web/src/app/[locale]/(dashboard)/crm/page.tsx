@@ -399,6 +399,278 @@ function timelineKindLabel(kind: TimelineItem["kind"]): string {
   return kind.replace("_", " ");
 }
 
+function asObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function valueAsText(value: unknown): string | null {
+  if (typeof value === "string") return value.trim() || null;
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  return null;
+}
+
+function valueFromKeys(source: Record<string, unknown>, keys: string[]): string | null {
+  for (const key of keys) {
+    const direct = valueAsText(source[key]);
+    if (direct) return direct;
+    const lowerKey = Object.keys(source).find((candidate) => candidate.toLowerCase() === key);
+    if (lowerKey) {
+      const value = valueAsText(source[lowerKey]);
+      if (value) return value;
+    }
+  }
+  return null;
+}
+
+function prettyFieldName(key: string): string {
+  return key
+    .replace(/[_-]+/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function leadPayloadRecord(lead: LeadEntry): Record<string, unknown> {
+  return { ...asObject(lead.payload), ...asObject(lead.structuredData) };
+}
+
+function leadMessage(lead: LeadEntry): string {
+  const data = leadPayloadRecord(lead);
+  return (
+    valueFromKeys(data, [
+      "message",
+      "notes",
+      "note",
+      "request",
+      "details",
+      "comment",
+      "comments",
+    ]) ?? "No written message was included. Use the request details below to follow up."
+  );
+}
+
+function leadImportantFields(lead: LeadEntry): Array<{ label: string; value: string }> {
+  const data = leadPayloadRecord(lead);
+  const fields = [
+    ["Name", ["name", "fullName", "customerName"]],
+    ["Email", ["email"]],
+    ["Phone", ["phone", "tel", "mobile"]],
+    ["Preferred channel", ["preferredChannel", "preferred_channel", "channel", "contactMethod"]],
+    ["Date", ["date", "preferredDate", "preferred_date", "reservationDate"]],
+    ["Time", ["time", "preferredTime", "preferred_time", "reservationTime"]],
+    ["People", ["partySize", "party_size", "guests", "people", "numberOfPeople"]],
+  ]
+    .map(([label, keys]) => ({
+      label: label as string,
+      value: valueFromKeys(data, keys as string[]),
+    }))
+    .filter((field): field is { label: string; value: string } => Boolean(field.value));
+
+  const knownKeys = new Set(
+    [
+      "name",
+      "fullname",
+      "customername",
+      "email",
+      "phone",
+      "tel",
+      "mobile",
+      "preferredchannel",
+      "preferred_channel",
+      "channel",
+      "contactmethod",
+      "date",
+      "preferreddate",
+      "preferred_date",
+      "reservationdate",
+      "time",
+      "preferredtime",
+      "preferred_time",
+      "reservationtime",
+      "partysize",
+      "party_size",
+      "guests",
+      "people",
+      "numberofpeople",
+      "message",
+      "notes",
+      "note",
+      "request",
+      "details",
+      "comment",
+      "comments",
+    ].map((key) => key.toLowerCase()),
+  );
+  const extraFields = Object.entries(data)
+    .filter(([key, value]) => !knownKeys.has(key.toLowerCase()) && Boolean(valueAsText(value)))
+    .slice(0, 6)
+    .map(([key, value]) => ({ label: prettyFieldName(key), value: valueAsText(value)! }));
+
+  return [...fields, ...extraFields].slice(0, 10);
+}
+
+function workflowLabel(lead: LeadEntry): string {
+  const kind = lead.workflowKind === "booking" ? "reservation" : (lead.workflowKind ?? "lead");
+  const state = (lead.workflowState ?? lead.status ?? "new").replaceAll("_", " ");
+  return `${kind} - ${state}`;
+}
+
+function staffNextStep(lead: LeadEntry): string {
+  if (lead.workflowKind === "booking") {
+    if (lead.workflowState === "missing_details") {
+      return "Ask the customer for the missing date, time, or number of guests before confirming.";
+    }
+    if (lead.workflowState === "confirmed") {
+      return "The reservation is confirmed. Keep the contact history for reminders or future visits.";
+    }
+    if (lead.workflowState === "declined" || lead.workflowState === "cancelled") {
+      return "This request is closed. No booking confirmation should be sent.";
+    }
+    return "Review the request, check availability, then contact the customer or confirm the reservation.";
+  }
+  if (lead.workflowKind === "quote") {
+    return "Review the request and create a deal if this could become a valuable booking or event.";
+  }
+  if (lead.workflowKind === "callback") {
+    return "Call or message the customer, then mark the task complete after follow-up.";
+  }
+  return "Read the customer message and reply from the right channel or create a follow-up task.";
+}
+
+function LatestLeadSummary({
+  lead,
+  tasks,
+  updatingLeadId,
+  onLeadWorkflowStatus,
+}: {
+  lead: LeadEntry;
+  tasks: TaskRow[];
+  updatingLeadId: string | null;
+  onLeadWorkflowStatus: (
+    lead: LeadEntry,
+    input: {
+      status: "new" | "contacted" | "confirmed" | "qualified" | "archived";
+      workflowState:
+        | "received"
+        | "missing_details"
+        | "awaiting_confirmation"
+        | "contacted"
+        | "confirmed"
+        | "declined"
+        | "cancelled"
+        | "manual_review";
+    },
+  ) => void;
+}) {
+  const fields = leadImportantFields(lead);
+  const openTasks = tasks.filter((task) => task.status === "open");
+  const canConfirm = lead.workflowKind === "booking" && lead.workflowState !== "confirmed";
+
+  return (
+    <section className="rounded-xl border border-violet-100 bg-violet-50/70 p-4 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">
+            Latest customer request
+          </p>
+          <h3 className="mt-1 text-base font-semibold capitalize text-slate-950">
+            {workflowLabel(lead)}
+          </h3>
+          <p className="mt-1 text-xs text-slate-500">
+            Submitted {formatDate(lead.submittedAt)}
+            {lead.sourceChannel ? ` from ${lead.sourceChannel.replaceAll("_", " ")}` : ""}
+          </p>
+        </div>
+        <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold capitalize text-violet-700">
+          {(lead.workflowState ?? lead.status ?? "new").replaceAll("_", " ")}
+        </span>
+      </div>
+
+      <div className="mt-4 rounded-lg border border-violet-100 bg-white p-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          Customer message
+        </p>
+        <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-900">
+          {leadMessage(lead)}
+        </p>
+      </div>
+
+      {fields.length > 0 && (
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          {fields.map((field) => (
+            <div key={`${field.label}:${field.value}`} className="rounded-lg bg-white px-3 py-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                {field.label}
+              </p>
+              <p className="mt-0.5 break-words text-sm font-medium text-slate-800">{field.value}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-4 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+          Recommended next step
+        </p>
+        <p className="mt-1 text-sm leading-relaxed text-amber-900">{staffNextStep(lead)}</p>
+        {openTasks.length > 0 && (
+          <p className="mt-1 text-xs text-amber-800">
+            Open staff tasks for this customer: {openTasks.length}
+          </p>
+        )}
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() =>
+            onLeadWorkflowStatus(lead, {
+              status: "contacted",
+              workflowState: "contacted",
+            })
+          }
+          disabled={updatingLeadId === lead.id || lead.workflowState === "confirmed"}
+          className="rounded bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+        >
+          Mark contacted
+        </button>
+        {canConfirm && (
+          <button
+            type="button"
+            onClick={() =>
+              onLeadWorkflowStatus(lead, {
+                status: "confirmed",
+                workflowState: "confirmed",
+              })
+            }
+            disabled={updatingLeadId === lead.id}
+            className="rounded bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+          >
+            Confirm reservation
+          </button>
+        )}
+        {canConfirm && (
+          <button
+            type="button"
+            onClick={() =>
+              onLeadWorkflowStatus(lead, {
+                status: "archived",
+                workflowState: "declined",
+              })
+            }
+            disabled={updatingLeadId === lead.id}
+            className="rounded border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-700 disabled:opacity-50"
+          >
+            Decline
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
+
 // ── Detail Panel ───────────────────────────────────────────────────────────────
 
 function DetailPanel({
@@ -643,6 +915,15 @@ function DetailPanel({
       {/* Body */}
       {detail && (
         <div className="flex-1 space-y-6 overflow-y-auto px-6 py-4">
+          {detail.leads[0] && (
+            <LatestLeadSummary
+              lead={detail.leads[0]}
+              tasks={tasks}
+              updatingLeadId={updatingLeadId}
+              onLeadWorkflowStatus={(lead, input) => void handleLeadWorkflowStatus(lead, input)}
+            />
+          )}
+
           {/* Lifecycle + Score */}
           <section>
             <div className="mb-2 flex items-center justify-between">
@@ -863,83 +1144,118 @@ function DetailPanel({
               <p className="text-sm text-gray-400">{t("noLeads")}</p>
             ) : (
               <div className="space-y-3">
-                {detail.leads.map((lead) => (
-                  <div key={lead.id} className="rounded border bg-gray-50 p-3 text-sm">
-                    <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
-                      <div>
-                        <div className="text-xs text-gray-500">
-                          {t("leadFrom", {
-                            date: formatDate(lead.submittedAt),
-                            source: lead.sourceUrl ?? "landing page",
-                          })}
+                {detail.leads.map((lead) => {
+                  const fields = leadImportantFields(lead);
+                  return (
+                    <div key={lead.id} className="rounded-lg border bg-gray-50 p-3 text-sm">
+                      <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <div className="text-xs text-gray-500">
+                            {t("leadFrom", {
+                              date: formatDate(lead.submittedAt),
+                              source: lead.sourceUrl ?? "landing page",
+                            })}
+                          </div>
+                          <div className="mt-1 flex flex-wrap gap-1.5">
+                            {lead.workflowKind && (
+                              <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-semibold capitalize text-violet-700">
+                                {lead.workflowKind === "booking"
+                                  ? "reservation"
+                                  : lead.workflowKind}
+                              </span>
+                            )}
+                            {lead.workflowState && (
+                              <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold capitalize text-amber-700">
+                                {lead.workflowState.replaceAll("_", " ")}
+                              </span>
+                            )}
+                            {lead.status && (
+                              <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold capitalize text-blue-700">
+                                {lead.status}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        <div className="mt-1 flex flex-wrap gap-1.5">
-                          {lead.workflowKind && (
-                            <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-semibold capitalize text-violet-700">
-                              {lead.workflowKind === "booking" ? "reservation" : lead.workflowKind}
-                            </span>
-                          )}
-                          {lead.workflowState && (
-                            <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold capitalize text-amber-700">
-                              {lead.workflowState.replaceAll("_", " ")}
-                            </span>
-                          )}
-                          {lead.status && (
-                            <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold capitalize text-blue-700">
-                              {lead.status}
-                            </span>
-                          )}
-                        </div>
+                        {lead.workflowKind === "booking" && lead.workflowState !== "confirmed" && (
+                          <div className="flex flex-wrap gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                void handleLeadWorkflowStatus(lead, {
+                                  status: "contacted",
+                                  workflowState: "contacted",
+                                })
+                              }
+                              disabled={updatingLeadId === lead.id}
+                              className="rounded bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50"
+                            >
+                              Mark contacted
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                void handleLeadWorkflowStatus(lead, {
+                                  status: "confirmed",
+                                  workflowState: "confirmed",
+                                })
+                              }
+                              disabled={updatingLeadId === lead.id}
+                              className="rounded bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50"
+                            >
+                              Confirm reservation
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                void handleLeadWorkflowStatus(lead, {
+                                  status: "archived",
+                                  workflowState: "declined",
+                                })
+                              }
+                              disabled={updatingLeadId === lead.id}
+                              className="rounded bg-amber-600 px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50"
+                            >
+                              Decline
+                            </button>
+                          </div>
+                        )}
                       </div>
-                      {lead.workflowKind === "booking" && lead.workflowState !== "confirmed" && (
-                        <div className="flex flex-wrap gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              void handleLeadWorkflowStatus(lead, {
-                                status: "contacted",
-                                workflowState: "contacted",
-                              })
-                            }
-                            disabled={updatingLeadId === lead.id}
-                            className="rounded bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50"
-                          >
-                            Mark contacted
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              void handleLeadWorkflowStatus(lead, {
-                                status: "confirmed",
-                                workflowState: "confirmed",
-                              })
-                            }
-                            disabled={updatingLeadId === lead.id}
-                            className="rounded bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50"
-                          >
-                            Confirm reservation
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              void handleLeadWorkflowStatus(lead, {
-                                status: "archived",
-                                workflowState: "declined",
-                              })
-                            }
-                            disabled={updatingLeadId === lead.id}
-                            className="rounded bg-amber-600 px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50"
-                          >
-                            Decline
-                          </button>
+                      <div className="rounded border bg-white p-3">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                          Customer message
+                        </p>
+                        <p className="mt-1 whitespace-pre-wrap text-sm text-gray-800">
+                          {leadMessage(lead)}
+                        </p>
+                      </div>
+                      {fields.length > 0 && (
+                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                          {fields.map((field) => (
+                            <div
+                              key={`${lead.id}:${field.label}:${field.value}`}
+                              className="rounded border border-gray-100 bg-white px-2 py-1.5"
+                            >
+                              <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                                {field.label}
+                              </p>
+                              <p className="break-words text-xs font-medium text-gray-700">
+                                {field.value}
+                              </p>
+                            </div>
+                          ))}
                         </div>
                       )}
+                      <details className="mt-2">
+                        <summary className="cursor-pointer text-xs font-medium text-gray-400 hover:text-gray-600">
+                          Technical payload
+                        </summary>
+                        <pre className="mt-2 overflow-x-auto whitespace-pre-wrap rounded border bg-white p-2 text-xs text-gray-600">
+                          {JSON.stringify(lead.payload, null, 2)}
+                        </pre>
+                      </details>
                     </div>
-                    <pre className="overflow-x-auto whitespace-pre-wrap rounded border bg-white p-2 text-xs text-gray-700">
-                      {JSON.stringify(lead.payload, null, 2)}
-                    </pre>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </section>
@@ -1739,7 +2055,7 @@ export default function CrmPage() {
 
       {/* Right: detail panel */}
       {selectedId && (
-        <div className="flex w-[420px] shrink-0 flex-col overflow-hidden border-l bg-white shadow-lg">
+        <div className="flex w-full shrink-0 flex-col overflow-hidden border-l bg-white shadow-lg lg:w-[560px] xl:w-[680px]">
           <DetailPanel
             key={selectedId}
             contactId={selectedId}

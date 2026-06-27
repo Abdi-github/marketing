@@ -532,7 +532,7 @@ export async function POST(
       body: notificationBody,
       priority:
         workflowPlan.kind === "booking" || workflowPlan.kind === "quote" ? "high" : "normal",
-      actionUrl: createdContactId ? `/en/crm?contactId=${createdContactId}` : "/en/crm",
+      actionUrl: createdContactId ? `/crm?contactId=${createdContactId}` : "/crm",
       entityType: "lead",
       entityId: createdLeadId,
       idempotencyKey: `lead-captured:${createdLeadId}`,
