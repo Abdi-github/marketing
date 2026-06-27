@@ -584,12 +584,6 @@ export default function LeadForm({
   }
 
   async function handleSubmit(payload: Record<string, string>, turnstileToken?: string) {
-    // Honeypot check (client-side fast-path to avoid network call)
-    if (honeypotEnabled && honeypotRef.current?.value) {
-      setError("We could not submit this form. Please refresh the page and try again.");
-      return;
-    }
-
     setSubmitting(true);
     setError(null);
     const controller = new AbortController();
@@ -597,7 +591,7 @@ export default function LeadForm({
 
     try {
       const body: Record<string, unknown> = { ...payload };
-      if (honeypotEnabled) body["__hp"] = honeypotRef.current?.value ?? "";
+      if (honeypotEnabled) body["__hp"] = "";
       if (turnstileToken) body["__cf_turnstile"] = turnstileToken;
 
       const res = await fetch(`/api/forms/${tenantSlug}/${formSlug}`, {
