@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { trpc } from "../../../../../lib/trpc";
 
@@ -20,6 +20,8 @@ type Thread = {
   contactEmail: string | null;
   contactPhone: string | null;
 };
+
+type ThreadKey = `${string}:${Channel}`;
 
 type Message = {
   id: string;
@@ -42,6 +44,33 @@ type Message = {
 type ThreadContext = Awaited<ReturnType<typeof trpc.inbox.getThreadContext.query>>;
 
 type AutomationIssue = Awaited<ReturnType<typeof trpc.inbox.listAutomationIssues.query>>[number];
+
+function threadKey(thread: Pick<Thread, "contactId" | "channel">): ThreadKey {
+  return `${thread.contactId}:${thread.channel as Channel}`;
+}
+
+function threadMatchesSearch(thread: Thread, query: string): boolean {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) return true;
+  return [
+    thread.contactName,
+    thread.contactEmail,
+    thread.contactPhone,
+    thread.lastBody,
+    thread.channel,
+    thread.lastStatus,
+    thread.lastMessageType,
+  ]
+    .filter(Boolean)
+    .some((value) => String(value).toLowerCase().includes(normalized));
+}
+
+function statusTone(status: string): string {
+  if (status === "failed" || status === "undelivered") return "#dc2626";
+  if (status === "queued") return "#b45309";
+  if (status === "delivered" || status === "sent" || status === "read") return "#059669";
+  return "#475569";
+}
 
 function ChannelBadge({ channel }: { channel: string }) {
   const color = channel === "whatsapp" ? "#25D366" : channel === "sms" ? "#3b82f6" : "#6b7280";
@@ -158,15 +187,31 @@ function workflowButtonStyle(color: string): React.CSSProperties {
 function ThreadItem({
   thread,
   active,
+  selected,
+  deleting,
   onClick,
+  onToggleSelected,
+  onDelete,
 }: {
   thread: Thread;
   active: boolean;
+  selected: boolean;
+  deleting: boolean;
   onClick: () => void;
+  onToggleSelected: () => void;
+  onDelete: () => void;
 }) {
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onClick();
+        }
+      }}
       style={{
         width: "100%",
         textAlign: "left",
@@ -188,6 +233,17 @@ function ThreadItem({
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", minWidth: 0 }}>
+          <input
+            type="checkbox"
+            checked={selected}
+            aria-label={`Select ${thread.contactName} ${thread.channel} conversation`}
+            onChange={(event) => {
+              event.stopPropagation();
+              onToggleSelected();
+            }}
+            onClick={(event) => event.stopPropagation()}
+            style={{ cursor: "pointer" }}
+          />
           <ChannelBadge channel={thread.channel} />
           <span
             style={{
@@ -220,13 +276,33 @@ function ThreadItem({
         {thread.lastBody}
       </p>
       <div style={{ display: "flex", gap: "0.35rem", marginTop: "0.45rem", flexWrap: "wrap" }}>
-        <TinyBadge
-          label={thread.lastStatus}
-          tone={thread.lastStatus === "failed" ? "#dc2626" : "#475569"}
-        />
+        <TinyBadge label={thread.lastStatus} tone={statusTone(thread.lastStatus)} />
         <TinyBadge label={thread.lastMessageType} tone="#7c3aed" />
+        <span style={{ marginLeft: "auto" }}>
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onDelete();
+            }}
+            disabled={deleting}
+            style={{
+              border: "1px solid #fecaca",
+              borderRadius: 999,
+              background: "#fff",
+              color: "#dc2626",
+              cursor: deleting ? "not-allowed" : "pointer",
+              fontSize: "0.68rem",
+              fontWeight: 800,
+              padding: "0.15rem 0.5rem",
+              opacity: deleting ? 0.5 : 1,
+            }}
+          >
+            Delete
+          </button>
+        </span>
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -294,6 +370,10 @@ export default function InboxPage() {
   const [threads, setThreads] = useState<Thread[]>([]);
   const [threadsLoading, setThreadsLoading] = useState(true);
   const [threadsError, setThreadsError] = useState(false);
+  const [threadSearch, setThreadSearch] = useState("");
+  const [selectedThreadKeys, setSelectedThreadKeys] = useState<Set<ThreadKey>>(new Set());
+  const [deletingThreadKeys, setDeletingThreadKeys] = useState<Set<ThreadKey>>(new Set());
+  const [deleteNotice, setDeleteNotice] = useState<string | null>(null);
   const [activeThread, setActiveThread] = useState<Thread | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
@@ -304,15 +384,26 @@ export default function InboxPage() {
   const [sendError, setSendError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  const loadThreads = useCallback(async () => {
     setThreadsLoading(true);
     setThreadsError(false);
-    trpc.inbox.listThreads
-      .query({ channel: channelFilter, limit: 50, offset: 0 })
-      .then((rows) => setThreads(rows as Thread[]))
-      .catch(() => setThreadsError(true))
-      .finally(() => setThreadsLoading(false));
+    try {
+      const rows = await trpc.inbox.listThreads.query({
+        channel: channelFilter,
+        limit: 100,
+        offset: 0,
+      });
+      setThreads(rows as Thread[]);
+    } catch {
+      setThreadsError(true);
+    } finally {
+      setThreadsLoading(false);
+    }
   }, [channelFilter]);
+
+  useEffect(() => {
+    void loadThreads();
+  }, [loadThreads]);
 
   useEffect(() => {
     trpc.inbox.listAutomationIssues
@@ -456,6 +547,101 @@ export default function InboxPage() {
   ];
 
   const extractedFacts = useMemo(() => getFacts(threadContext), [threadContext]);
+  const filteredThreads = useMemo(
+    () => threads.filter((thread) => threadMatchesSearch(thread, threadSearch)),
+    [threads, threadSearch],
+  );
+  const selectedThreads = useMemo(
+    () => threads.filter((thread) => selectedThreadKeys.has(threadKey(thread))),
+    [threads, selectedThreadKeys],
+  );
+  const failedThreadCount = threads.filter((thread) => thread.lastStatus === "failed").length;
+  const waitingThreadCount = threads.filter(
+    (thread) => thread.lastDirection === "inbound" || thread.lastStatus === "queued",
+  ).length;
+
+  function toggleThreadSelection(thread: Thread) {
+    const key = threadKey(thread);
+    setSelectedThreadKeys((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  function toggleAllFilteredThreads() {
+    setSelectedThreadKeys((current) => {
+      const next = new Set(current);
+      const allSelected =
+        filteredThreads.length > 0 &&
+        filteredThreads.every((thread) => next.has(threadKey(thread)));
+      for (const thread of filteredThreads) {
+        const key = threadKey(thread);
+        if (allSelected) next.delete(key);
+        else next.add(key);
+      }
+      return next;
+    });
+  }
+
+  async function deleteConversations(targetThreads: Thread[]) {
+    if (targetThreads.length === 0) return;
+    const label =
+      targetThreads.length === 1
+        ? `${targetThreads[0]!.contactName} ${targetThreads[0]!.channel} conversation`
+        : `${targetThreads.length} conversations`;
+    if (
+      !confirm(`Delete ${label}? This removes the Inbox messages only. The CRM contact remains.`)
+    ) {
+      return;
+    }
+
+    const keys = targetThreads.map(threadKey);
+    setDeletingThreadKeys((current) => new Set([...current, ...keys]));
+    setDeleteNotice(null);
+    try {
+      const result =
+        targetThreads.length === 1
+          ? await trpc.inbox.deleteThread.mutate({
+              contactId: targetThreads[0]!.contactId,
+              channel: targetThreads[0]!.channel as Channel,
+            })
+          : await trpc.inbox.deleteThreads.mutate({
+              threads: targetThreads.map((thread) => ({
+                contactId: thread.contactId,
+                channel: thread.channel as Channel,
+              })),
+            });
+
+      setDeleteNotice(
+        `${targetThreads.length === 1 ? "Conversation" : "Conversations"} deleted. ${result.deletedCount} message${result.deletedCount === 1 ? "" : "s"} removed from Inbox.`,
+      );
+      setSelectedThreadKeys((current) => {
+        const next = new Set(current);
+        keys.forEach((key) => next.delete(key));
+        return next;
+      });
+      if (activeThread && keys.includes(threadKey(activeThread))) {
+        setActiveThread(null);
+        setMessages([]);
+        setThreadContext(null);
+      }
+      await Promise.all([
+        loadThreads(),
+        trpc.inbox.listAutomationIssues
+          .query({ limit: 8 })
+          .then((rows) => setIssues(rows))
+          .catch(() => setIssues([])),
+      ]);
+    } finally {
+      setDeletingThreadKeys((current) => {
+        const next = new Set(current);
+        keys.forEach((key) => next.delete(key));
+        return next;
+      });
+    }
+  }
 
   return (
     <div style={{ maxWidth: 1180, margin: "0 auto", padding: "2rem 1rem" }}>
@@ -463,6 +649,39 @@ export default function InboxPage() {
       <p style={{ color: "#6b7280", fontSize: "0.875rem", marginBottom: "1.25rem" }}>
         {t("subtitle")}
       </p>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+          gap: "0.75rem",
+          marginBottom: "1rem",
+        }}
+      >
+        {[
+          { label: "Open conversations", value: threads.length, tone: "#2563eb" },
+          { label: "Needs staff attention", value: waitingThreadCount, tone: "#b45309" },
+          { label: "Failed messages", value: failedThreadCount, tone: "#dc2626" },
+          { label: "Automation issues", value: issues.length, tone: "#7c3aed" },
+        ].map((item) => (
+          <div
+            key={item.label}
+            style={{
+              border: "1px solid #e5e7eb",
+              borderRadius: 12,
+              background: "#fff",
+              padding: "0.9rem 1rem",
+              boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+            }}
+          >
+            <div style={{ color: "#64748b", fontSize: "0.75rem", fontWeight: 700 }}>
+              {item.label}
+            </div>
+            <div style={{ color: item.tone, fontSize: "1.45rem", fontWeight: 800 }}>
+              {item.value}
+            </div>
+          </div>
+        ))}
+      </div>
       <div
         style={{
           border: "1px solid #dbeafe",
@@ -478,6 +697,22 @@ export default function InboxPage() {
         The Inbox is where customer replies become staff work. Use it to answer SMS and WhatsApp
         messages, complete missing reservation details, and move a request toward confirmation.
       </div>
+
+      {deleteNotice ? (
+        <div
+          style={{
+            border: "1px solid #bbf7d0",
+            borderRadius: 10,
+            background: "#f0fdf4",
+            color: "#166534",
+            fontSize: "0.84rem",
+            marginBottom: "1rem",
+            padding: "0.75rem 1rem",
+          }}
+        >
+          {deleteNotice}
+        </div>
+      ) : null}
 
       {issues.length > 0 ? (
         <section
@@ -567,30 +802,114 @@ export default function InboxPage() {
         </section>
       ) : null}
 
-      <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem", flexWrap: "wrap" }}>
-        {channelTabs.map((tab) => (
-          <button
-            key={tab.key ?? "all"}
-            onClick={() => {
-              setChannelFilter(tab.key);
-              setActiveThread(null);
-            }}
-            style={{
-              padding: "0.4rem 0.9rem",
-              borderRadius: 8,
-              border: "1px solid",
-              borderColor: channelFilter === tab.key ? "#2563eb" : "#e5e7eb",
-              background: channelFilter === tab.key ? "#eff6ff" : "#fff",
-              color: channelFilter === tab.key ? "#2563eb" : "#334155",
-              fontWeight: channelFilter === tab.key ? 700 : 500,
-              fontSize: "0.82rem",
-              cursor: "pointer",
-            }}
-          >
-            {tab.label}
-          </button>
-        ))}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "0.75rem",
+          marginBottom: "1rem",
+          flexWrap: "wrap",
+        }}
+      >
+        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+          {channelTabs.map((tab) => (
+            <button
+              key={tab.key ?? "all"}
+              onClick={() => {
+                setChannelFilter(tab.key);
+                setActiveThread(null);
+                setSelectedThreadKeys(new Set());
+              }}
+              style={{
+                padding: "0.45rem 0.9rem",
+                borderRadius: 999,
+                border: "1px solid",
+                borderColor: channelFilter === tab.key ? "#2563eb" : "#e5e7eb",
+                background: channelFilter === tab.key ? "#eff6ff" : "#fff",
+                color: channelFilter === tab.key ? "#2563eb" : "#334155",
+                fontWeight: channelFilter === tab.key ? 800 : 600,
+                fontSize: "0.82rem",
+                cursor: "pointer",
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        <input
+          type="search"
+          value={threadSearch}
+          onChange={(event) => setThreadSearch(event.target.value)}
+          placeholder="Search customer, phone, email, or message..."
+          style={{
+            width: "min(100%, 340px)",
+            border: "1px solid #e5e7eb",
+            borderRadius: 10,
+            padding: "0.55rem 0.75rem",
+            fontSize: "0.84rem",
+            outline: "none",
+          }}
+        />
       </div>
+
+      {selectedThreadKeys.size > 0 ? (
+        <div
+          style={{
+            alignItems: "center",
+            background: "#111827",
+            borderRadius: 12,
+            color: "#fff",
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "0.75rem",
+            justifyContent: "space-between",
+            marginBottom: "1rem",
+            padding: "0.75rem 1rem",
+          }}
+        >
+          <strong style={{ fontSize: "0.85rem" }}>
+            {selectedThreadKeys.size} conversation{selectedThreadKeys.size === 1 ? "" : "s"}{" "}
+            selected
+          </strong>
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={() => setSelectedThreadKeys(new Set())}
+              style={{
+                background: "#374151",
+                border: "none",
+                borderRadius: 8,
+                color: "#fff",
+                cursor: "pointer",
+                fontSize: "0.78rem",
+                fontWeight: 700,
+                padding: "0.4rem 0.75rem",
+              }}
+            >
+              Clear selection
+            </button>
+            <button
+              type="button"
+              onClick={() => void deleteConversations(selectedThreads)}
+              disabled={deletingThreadKeys.size > 0}
+              style={{
+                background: "#dc2626",
+                border: "none",
+                borderRadius: 8,
+                color: "#fff",
+                cursor: deletingThreadKeys.size > 0 ? "not-allowed" : "pointer",
+                fontSize: "0.78rem",
+                fontWeight: 800,
+                padding: "0.4rem 0.75rem",
+                opacity: deletingThreadKeys.size > 0 ? 0.65 : 1,
+              }}
+            >
+              Delete selected
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <div
         style={{
@@ -605,6 +924,44 @@ export default function InboxPage() {
         }}
       >
         <div style={{ borderRight: "1px solid #e5e7eb", overflowY: "auto" }}>
+          <div
+            style={{
+              alignItems: "center",
+              background: "#f8fafc",
+              borderBottom: "1px solid #e5e7eb",
+              display: "flex",
+              gap: "0.6rem",
+              justifyContent: "space-between",
+              padding: "0.7rem 1rem",
+              position: "sticky",
+              top: 0,
+              zIndex: 2,
+            }}
+          >
+            <label
+              style={{
+                alignItems: "center",
+                color: "#334155",
+                display: "flex",
+                fontSize: "0.78rem",
+                fontWeight: 700,
+                gap: "0.45rem",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={
+                  filteredThreads.length > 0 &&
+                  filteredThreads.every((thread) => selectedThreadKeys.has(threadKey(thread)))
+                }
+                onChange={toggleAllFilteredThreads}
+              />
+              Select visible
+            </label>
+            <span style={{ color: "#64748b", fontSize: "0.74rem" }}>
+              {filteredThreads.length} of {threads.length}
+            </span>
+          </div>
           {threadsLoading ? (
             <p style={{ padding: "1rem", color: "#6b7280", fontSize: "0.875rem" }}>
               {t("loading")}
@@ -615,21 +972,31 @@ export default function InboxPage() {
               {t("loadError")}
             </p>
           ) : null}
-          {!threadsLoading && !threadsError && threads.length === 0 ? (
+          {!threadsLoading && !threadsError && filteredThreads.length === 0 ? (
             <div style={{ padding: "2rem 1rem", textAlign: "center" }}>
-              <p style={{ fontWeight: 700, marginBottom: "0.25rem" }}>{t("empty")}</p>
-              <p style={{ color: "#6b7280", fontSize: "0.8rem" }}>{t("emptyHint")}</p>
+              <p style={{ fontWeight: 700, marginBottom: "0.25rem" }}>
+                {threads.length === 0 ? t("empty") : "No conversations match your search"}
+              </p>
+              <p style={{ color: "#6b7280", fontSize: "0.8rem" }}>
+                {threads.length === 0
+                  ? t("emptyHint")
+                  : "Try another name, phone number, channel, or message keyword."}
+              </p>
             </div>
           ) : null}
-          {threads.map((thread) => (
+          {filteredThreads.map((thread) => (
             <ThreadItem
               key={`${thread.contactId}-${thread.channel}`}
               thread={thread}
+              selected={selectedThreadKeys.has(threadKey(thread))}
+              deleting={deletingThreadKeys.has(threadKey(thread))}
               active={
                 activeThread?.contactId === thread.contactId &&
                 activeThread?.channel === thread.channel
               }
               onClick={() => setActiveThread(thread)}
+              onToggleSelected={() => toggleThreadSelection(thread)}
+              onDelete={() => void deleteConversations([thread])}
             />
           ))}
         </div>

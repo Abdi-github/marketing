@@ -582,6 +582,67 @@ export const inboxRouter = router({
         .slice(0, input.limit);
     }),
 
+  deleteThread: tenantProcedure
+    .input(
+      z.object({
+        contactId: z.string().uuid(),
+        channel: z.enum(["email", "sms", "whatsapp"]),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { tenantId } = ctx.tenantCtx;
+
+      const deleted = await db
+        .delete(messages)
+        .where(
+          and(
+            eq(messages.tenantId, tenantId),
+            eq(messages.contactId, input.contactId),
+            eq(messages.channel, input.channel),
+          ),
+        )
+        .returning({ id: messages.id });
+
+      return { deletedCount: deleted.length };
+    }),
+
+  deleteThreads: tenantProcedure
+    .input(
+      z.object({
+        threads: z
+          .array(
+            z.object({
+              contactId: z.string().uuid(),
+              channel: z.enum(["email", "sms", "whatsapp"]),
+            }),
+          )
+          .min(1)
+          .max(50),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { tenantId } = ctx.tenantCtx;
+      let deletedCount = 0;
+
+      await db.transaction(async (tx) => {
+        for (const thread of input.threads) {
+          const deleted = await tx
+            .delete(messages)
+            .where(
+              and(
+                eq(messages.tenantId, tenantId),
+                eq(messages.contactId, thread.contactId),
+                eq(messages.channel, thread.channel),
+              ),
+            )
+            .returning({ id: messages.id });
+          deletedCount += deleted.length;
+        }
+      });
+
+      return { deletedCount };
+    }),
+
   updateLeadWorkflowStatus: tenantProcedure
     .input(
       z.object({
