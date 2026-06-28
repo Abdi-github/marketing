@@ -57,6 +57,24 @@ type ClearAttentionRequest = {
   body: string;
 };
 
+const SMS_REPLY_MAX_CHARS = 459;
+const WHATSAPP_REPLY_MAX_CHARS = 4096;
+
+function normalizeReplyDraft(value: string, channel?: string | null): string {
+  const maxChars = channel === "sms" ? SMS_REPLY_MAX_CHARS : WHATSAPP_REPLY_MAX_CHARS;
+  return value.replace(/\r\n?/g, "\n").replace(/\0/g, "").slice(0, maxChars);
+}
+
+function insertReplyText(
+  current: string,
+  insert: string,
+  start: number,
+  end: number,
+  channel?: string,
+) {
+  return normalizeReplyDraft(`${current.slice(0, start)}${insert}${current.slice(end)}`, channel);
+}
+
 function threadKey(thread: Pick<Thread, "contactId" | "channel">): ThreadKey {
   return `${thread.contactId}:${thread.channel as Channel}`;
 }
@@ -704,7 +722,7 @@ export default function InboxPage() {
   const smsCharacterCount = replyText.trim().length;
   const smsSegmentCount =
     smsCharacterCount === 0 ? 0 : smsCharacterCount <= 160 ? 1 : Math.ceil(smsCharacterCount / 153);
-  const smsTooLong = activeThread?.channel === "sms" && smsCharacterCount > 459;
+  const smsTooLong = activeThread?.channel === "sms" && smsCharacterCount > SMS_REPLY_MAX_CHARS;
 
   async function refreshActiveThread(thread = activeThread) {
     if (!thread) return;
@@ -773,7 +791,9 @@ export default function InboxPage() {
       return;
     }
     if (activeThread.channel === "sms" && smsTooLong) {
-      setSendError("SMS replies are limited to 459 characters to avoid costly long messages.");
+      setSendError(
+        `SMS replies are limited to ${SMS_REPLY_MAX_CHARS} characters to avoid costly long messages.`,
+      );
       return;
     }
 
@@ -1767,16 +1787,66 @@ export default function InboxPage() {
                   }}
                 >
                   <div style={{ display: "flex", gap: "0.6rem" }}>
-                    <input
+                    <textarea
                       value={replyText}
-                      onChange={(e) => setReplyText(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && void handleSend()}
+                      onChange={(event) => {
+                        const nextValue = normalizeReplyDraft(
+                          event.target.value,
+                          activeThread.channel,
+                        );
+                        setReplyText(nextValue);
+                        if (
+                          activeThread.channel === "sms" &&
+                          event.target.value.length > SMS_REPLY_MAX_CHARS
+                        ) {
+                          setSendError(
+                            `SMS replies are limited to ${SMS_REPLY_MAX_CHARS} characters, so the pasted text was shortened.`,
+                          );
+                        } else if (sendError?.includes("pasted text was shortened")) {
+                          setSendError(null);
+                        }
+                      }}
+                      onPaste={(event) => {
+                        const pastedText = event.clipboardData.getData("text");
+                        if (!pastedText) return;
+                        event.preventDefault();
+                        const target = event.currentTarget;
+                        const selectionStart = target.selectionStart ?? replyText.length;
+                        const selectionEnd = target.selectionEnd ?? selectionStart;
+                        const nextValue = insertReplyText(
+                          replyText,
+                          pastedText,
+                          selectionStart,
+                          selectionEnd,
+                          activeThread.channel,
+                        );
+                        setReplyText(nextValue);
+                        if (
+                          activeThread.channel === "sms" &&
+                          `${replyText.slice(0, selectionStart)}${pastedText}${replyText.slice(
+                            selectionEnd,
+                          )}`.length > SMS_REPLY_MAX_CHARS
+                        ) {
+                          setSendError(
+                            `SMS replies are limited to ${SMS_REPLY_MAX_CHARS} characters, so the pasted text was shortened.`,
+                          );
+                        } else {
+                          setSendError(null);
+                        }
+                      }}
+                      onKeyDown={(event) => {
+                        if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+                          event.preventDefault();
+                          void handleSend();
+                        }
+                      }}
                       placeholder={
                         activeThread.channel === "sms"
                           ? "Write a short SMS reply..."
                           : t("sendPlaceholder")
                       }
                       disabled={sending || Boolean(serviceWindowClosed)}
+                      rows={2}
                       style={{
                         flex: 1,
                         padding: "0.6rem 0.8rem",
@@ -1785,6 +1855,10 @@ export default function InboxPage() {
                         fontSize: "0.875rem",
                         outline: "none",
                         background: serviceWindowClosed ? "#f8fafc" : "#fff",
+                        resize: "vertical",
+                        minHeight: 42,
+                        maxHeight: 120,
+                        lineHeight: 1.45,
                       }}
                     />
                     <button
