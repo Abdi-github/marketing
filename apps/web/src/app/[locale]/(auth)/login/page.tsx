@@ -19,6 +19,8 @@ export default function LoginPage() {
     try {
       await fetch("/api/auth/sign-out", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
         credentials: "include",
         cache: "no-store",
       }).catch(() => null);

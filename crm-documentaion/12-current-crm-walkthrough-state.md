@@ -154,6 +154,7 @@ Outcome:
 - CRM now shows a clear "Your session expired" recovery panel instead of a generic failed-contacts error.
 - The notification bell catches expired-session errors and shows a sign-in prompt instead of failing roughly.
 - The login form now clears stale auth cookies before attempting a new email/password sign-in.
+- The stale-cookie cleanup now sends a valid JSON `POST /api/auth/sign-out` request, fixing the production `415 Unsupported Media Type` regression seen before sign-in.
 
 ### Inbox load failure
 
