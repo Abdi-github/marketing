@@ -47,13 +47,17 @@ async function resolveInboundTenant(
     return authToken ? { tenantId: connection.tenantId, authToken } : null;
   }
 
-  if (
-    env.SMS_TEST_MODE_ENABLED !== "true" ||
-    env.TWILIO_FROM_NUMBER !== toNumber ||
-    !env.TWILIO_AUTH_TOKEN
-  ) {
+  const platformAuthToken = env.TWILIO_AUTH_TOKEN;
+  const usesPlatformTwilio =
+    env.SMS_PROVIDER === "twilio" &&
+    Boolean(platformAuthToken) &&
+    (env.TWILIO_FROM_NUMBER === toNumber ||
+      Boolean(env.TWILIO_MESSAGING_SERVICE_SID && env.TWILIO_FROM_NUMBER === toNumber));
+
+  if (!usesPlatformTwilio) {
     return null;
   }
+
   const [lastOutbound] = await db
     .select({ tenantId: messages.tenantId })
     .from(messages)
@@ -66,9 +70,7 @@ async function resolveInboundTenant(
     )
     .orderBy(desc(messages.occurredAt))
     .limit(1);
-  return lastOutbound
-    ? { tenantId: lastOutbound.tenantId, authToken: env.TWILIO_AUTH_TOKEN }
-    : null;
+  return lastOutbound ? { tenantId: lastOutbound.tenantId, authToken: platformAuthToken! } : null;
 }
 
 async function resolveStatusTenant(messageSid: string): Promise<ResolvedWebhookTenant | null> {
