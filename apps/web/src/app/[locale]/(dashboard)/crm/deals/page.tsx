@@ -281,25 +281,43 @@ function MarkLostModal({
 
 function DealCard({
   deal,
+  stages,
   onDragStart,
+  onMoveStage,
   onWon,
   onLost,
 }: {
   deal: DealRow;
-  onDragStart: (dealId: string) => void;
+  stages: DealStage[];
+  onDragStart: (event: React.DragEvent, dealId: string) => void;
+  onMoveStage: (dealId: string, stageId: string) => void;
   onWon: (deal: DealRow) => void;
   onLost: (deal: DealRow) => void;
 }) {
   const t = useTranslations("Deals");
+  const stageLabel = useStageLabel();
   const name = contactName(deal);
+  const openStages = stages.filter((stage) => !stage.isWon && !stage.isLost);
+  const currentIndex = openStages.findIndex((stage) => stage.id === deal.stageId);
+  const previousStage = currentIndex > 0 ? openStages[currentIndex - 1] : null;
+  const nextStage =
+    currentIndex >= 0 && currentIndex < openStages.length - 1 ? openStages[currentIndex + 1] : null;
 
   return (
     <div
       draggable
-      onDragStart={() => onDragStart(deal.id)}
+      onDragStart={(event) => onDragStart(event, deal.id)}
       className="cursor-grab select-none rounded-lg border bg-white p-3 shadow-sm transition-shadow hover:shadow-md active:cursor-grabbing"
     >
-      <p className="mb-1 text-sm font-medium leading-snug text-gray-900">{deal.title}</p>
+      <div className="mb-1 flex items-start gap-2">
+        <span
+          aria-hidden="true"
+          className="mt-0.5 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-400"
+        >
+          ⋮⋮
+        </span>
+        <p className="text-sm font-medium leading-snug text-gray-900">{deal.title}</p>
+      </div>
       {name && <p className="mb-1 text-xs text-gray-500">{name}</p>}
       {deal.amountChf > 0 && (
         <p className="mb-1 text-xs font-semibold text-green-700">{formatChf(deal.amountChf)}</p>
@@ -314,14 +332,52 @@ function DealCard({
           {deal.aiSummary}
         </p>
       )}
+      <div className="mt-2 space-y-1.5 rounded border border-gray-100 bg-gray-50 p-2">
+        <label className="block text-[11px] font-medium uppercase tracking-wide text-gray-500">
+          {t("stageLabel")}
+        </label>
+        <select
+          value={deal.stageId}
+          onMouseDown={(event) => event.stopPropagation()}
+          onChange={(event) => onMoveStage(deal.id, event.target.value)}
+          className="w-full rounded border bg-white px-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          aria-label={t("moveStage")}
+        >
+          {openStages.map((stage) => (
+            <option key={stage.id} value={stage.id}>
+              {stageLabel(stage.label)}
+            </option>
+          ))}
+        </select>
+        <div className="grid grid-cols-2 gap-1.5">
+          <button
+            type="button"
+            disabled={!previousStage}
+            onClick={() => previousStage && onMoveStage(deal.id, previousStage.id)}
+            className="rounded border bg-white px-2 py-1 text-xs text-gray-600 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {t("previousStage")}
+          </button>
+          <button
+            type="button"
+            disabled={!nextStage}
+            onClick={() => nextStage && onMoveStage(deal.id, nextStage.id)}
+            className="rounded border bg-white px-2 py-1 text-xs text-gray-600 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {t("nextStage")}
+          </button>
+        </div>
+      </div>
       <div className="mt-2 flex gap-1.5">
         <button
+          type="button"
           onClick={() => onWon(deal)}
           className="flex-1 rounded border border-green-200 bg-green-50 py-1 text-xs text-green-700 transition-colors hover:bg-green-100"
         >
           {t("won")}
         </button>
         <button
+          type="button"
           onClick={() => onLost(deal)}
           className="flex-1 rounded border border-red-200 bg-red-50 py-1 text-xs text-red-700 transition-colors hover:bg-red-100"
         >
@@ -336,18 +392,22 @@ function DealCard({
 
 function KanbanColumn({
   stage,
+  stages,
   deals: columnDeals,
   draggingId,
   onDragStart,
   onDrop,
+  onMoveStage,
   onWon,
   onLost,
 }: {
   stage: DealStage;
+  stages: DealStage[];
   deals: DealRow[];
   draggingId: string | null;
-  onDragStart: (dealId: string) => void;
-  onDrop: (stageId: string) => void;
+  onDragStart: (event: React.DragEvent, dealId: string) => void;
+  onDrop: (stage: DealStage, draggedDealId?: string) => void;
+  onMoveStage: (dealId: string, stageId: string) => void;
   onWon: (deal: DealRow) => void;
   onLost: (deal: DealRow) => void;
 }) {
@@ -368,7 +428,7 @@ function KanbanColumn({
   function handleDrop(e: React.DragEvent) {
     e.preventDefault();
     setDragOver(false);
-    onDrop(stage.id);
+    onDrop(stage, e.dataTransfer.getData("text/plain") || undefined);
   }
 
   const colStyle = stage.isWon
@@ -408,7 +468,9 @@ function KanbanColumn({
             <DealCard
               key={deal.id}
               deal={deal}
+              stages={stages}
               onDragStart={onDragStart}
+              onMoveStage={onMoveStage}
               onWon={onWon}
               onLost={onLost}
             />
@@ -515,16 +577,16 @@ export default function DealsPage() {
     load();
   }, [load]);
 
-  function handleDragStart(dealId: string) {
+  function handleDragStart(event: React.DragEvent, dealId: string) {
     draggingId.current = dealId;
     setDraggingState(dealId);
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", dealId);
   }
 
-  async function handleDrop(targetStageId: string) {
-    const dealId = draggingId.current;
-    draggingId.current = null;
-    setDraggingState(null);
-    if (!dealId) return;
+  async function moveDealToStage(dealId: string, targetStageId: string) {
+    const targetStage = stages.find((stage) => stage.id === targetStageId);
+    if (!targetStage || targetStage.isWon || targetStage.isLost) return;
 
     const deal = dealsList.find((d) => d.id === dealId);
     if (!deal || deal.stageId === targetStageId) return;
@@ -534,9 +596,32 @@ export default function DealsPage() {
       prev.map((d) => (d.id === dealId ? { ...d, stageId: targetStageId } : d)),
     );
 
-    await trpc.deals.moveStage.mutate({ dealId, stageId: targetStageId }).catch(() => {
-      load(); // revert on failure
-    });
+    try {
+      await trpc.deals.moveStage.mutate({ dealId, stageId: targetStageId });
+      await load();
+    } catch {
+      await load(); // revert on failure
+    }
+  }
+
+  async function handleDrop(targetStage: DealStage, draggedDealId?: string) {
+    const dealId = draggedDealId || draggingId.current;
+    draggingId.current = null;
+    setDraggingState(null);
+    if (!dealId) return;
+
+    const deal = dealsList.find((d) => d.id === dealId);
+    if (!deal || deal.stageId === targetStage.id) return;
+
+    if (targetStage.isWon) {
+      await handleWon(deal);
+      return;
+    }
+    if (targetStage.isLost) {
+      handleLostRequest(deal);
+      return;
+    }
+    await moveDealToStage(dealId, targetStage.id);
   }
 
   async function handleWon(deal: DealRow) {
@@ -602,10 +687,12 @@ export default function DealsPage() {
                 <KanbanColumn
                   key={stage.id}
                   stage={stage}
+                  stages={stages}
                   deals={dealsList.filter((d) => d.stageId === stage.id)}
                   draggingId={draggingState}
                   onDragStart={handleDragStart}
                   onDrop={handleDrop}
+                  onMoveStage={moveDealToStage}
                   onWon={handleWon}
                   onLost={handleLostRequest}
                 />
