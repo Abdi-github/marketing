@@ -78,6 +78,17 @@ function formatDate(d: string | Date | null | undefined) {
   });
 }
 
+function currentLocale(): string {
+  if (typeof window === "undefined") return "en";
+  const segment = window.location.pathname.split("/").filter(Boolean)[0];
+  return segment && ["de", "en", "fr", "it"].includes(segment) ? segment : "en";
+}
+
+function isAuthError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes("UNAUTHORIZED") || message.includes("UNAUTHENTICATED");
+}
+
 function displayName(c: { firstName?: string | null; lastName?: string | null; email: string }) {
   const n = [c.firstName, c.lastName].filter(Boolean).join(" ");
   return n || c.email;
@@ -1606,6 +1617,7 @@ export default function CrmPage() {
   const [bulkBusy, setBulkBusy] = useState(false);
   const [openTasks, setOpenTasks] = useState<OpenTaskRow[]>([]);
   const [tasksLoading, setTasksLoading] = useState(true);
+  const [sessionExpired, setSessionExpired] = useState(false);
 
   useEffect(() => {
     const contactId = searchParams.get("contactId");
@@ -1647,9 +1659,11 @@ export default function CrmPage() {
       })
       .then((result) => {
         setData(result as ListResult);
+        setSessionExpired(false);
         setIsLoading(false);
       })
-      .catch(() => {
+      .catch((error) => {
+        if (isAuthError(error)) setSessionExpired(true);
         setFetchError(true);
         setIsLoading(false);
       });
@@ -1661,9 +1675,11 @@ export default function CrmPage() {
       .query({ limit: 30 })
       .then((result) => {
         setOpenTasks(result as OpenTaskRow[]);
+        setSessionExpired(false);
         setTasksLoading(false);
       })
-      .catch(() => {
+      .catch((error) => {
+        if (isAuthError(error)) setSessionExpired(true);
         setOpenTasks([]);
         setTasksLoading(false);
       });
@@ -1914,11 +1930,25 @@ export default function CrmPage() {
 
           {isLoading && <div className="animate-pulse text-sm text-gray-400">{t("loading")}</div>}
 
-          {fetchError && (
+          {sessionExpired ? (
+            <div className="rounded border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+              <p className="font-semibold">Your session expired.</p>
+              <p className="mt-1">
+                Please sign in again. The CRM walkthrough state is saved in the documentation, so
+                you can continue from this same step.
+              </p>
+              <a
+                href={`/${currentLocale()}/login`}
+                className="mt-3 inline-flex rounded bg-amber-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-800"
+              >
+                Sign in again
+              </a>
+            </div>
+          ) : fetchError ? (
             <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-600">
               {t("error")}
             </div>
-          )}
+          ) : null}
 
           {selectedId && (
             <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">

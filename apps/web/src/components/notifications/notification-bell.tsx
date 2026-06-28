@@ -54,11 +54,17 @@ function normalizeActionUrl(actionUrl: string | null): string | null {
   }
 }
 
+function isAuthError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes("UNAUTHORIZED") || message.includes("UNAUTHENTICATED");
+}
+
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [rows, setRows] = useState<NotificationRow[]>([]);
   const [unread, setUnread] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [authExpired, setAuthExpired] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [preferences, setPreferences] = useState<NotificationPreferences | null>(null);
   const [staffSmsPhone, setStaffSmsPhone] = useState("");
@@ -79,6 +85,13 @@ export function NotificationBell() {
           setPreferences(prefs);
           setStaffSmsPhone(prefs.staffSmsPhone ?? "");
         }
+      }
+      setAuthExpired(false);
+    } catch (error) {
+      if (isAuthError(error)) {
+        setAuthExpired(true);
+        setRows([]);
+        setUnread(0);
       }
     } finally {
       setLoading(false);
@@ -228,7 +241,20 @@ export function NotificationBell() {
           </div>
 
           <div className="max-h-[65vh] overflow-y-auto p-3">
-            {visibleRows.length === 0 ? (
+            {authExpired ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                <p className="font-semibold">Your session expired.</p>
+                <p className="mt-1 leading-relaxed">
+                  Sign in again to view notifications and continue staff work.
+                </p>
+                <a
+                  href={`/${currentLocale()}/login`}
+                  className="mt-3 inline-flex rounded-md bg-amber-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-800"
+                >
+                  Sign in again
+                </a>
+              </div>
+            ) : visibleRows.length === 0 ? (
               <div className="rounded-lg border border-dashed border-slate-200 p-4 text-sm text-slate-500">
                 No staff alerts yet. New website leads, customer replies, and failed automations
                 will appear here.

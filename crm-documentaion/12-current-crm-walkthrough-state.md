@@ -58,7 +58,7 @@ Confirmed behavior:
 
 ### Scenario 3: Callback / Staff Follow-Up Request
 
-Status: in progress, task completion fix implemented and ready to verify after redeploy.
+Status: in progress, task completion fix and session-recovery fix implemented; ready to verify after redeploy.
 
 Confirmed behavior:
 
@@ -140,6 +140,20 @@ Outcome:
 
 - Completing an open CRM task now completes matching duplicate tasks for the same customer, title, and workflow kind.
 - The follow-up queue reloads after completion so the open-task count is truthful.
+
+### Expired session recovery
+
+Problem:
+
+- After refreshing CRM, some tRPC calls returned `UNAUTHENTICATED`.
+- The dashboard shell could remain visible while contacts failed to load.
+- Clicking notifications could lead back to login, and stale cookies could make the next login attempt unreliable.
+
+Outcome:
+
+- CRM now shows a clear "Your session expired" recovery panel instead of a generic failed-contacts error.
+- The notification bell catches expired-session errors and shows a sign-in prompt instead of failing roughly.
+- The login form now clears stale auth cookies before attempting a new email/password sign-in.
 
 ## Notes Still To Improve
 

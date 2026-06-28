@@ -17,9 +17,16 @@ export default function LoginPage() {
     const form = new FormData(e.currentTarget);
 
     try {
+      await fetch("/api/auth/sign-out", {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+      }).catch(() => null);
+
       const res = await fetch("/api/auth/sign-in/email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        cache: "no-store",
         body: JSON.stringify({
           email: form.get("email"),
           password: form.get("password"),
