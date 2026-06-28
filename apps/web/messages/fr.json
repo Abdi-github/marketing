@@ -889,6 +889,8 @@
     "moveStage": "Changer d'étape",
     "previousStage": "Précédent",
     "nextStage": "Suivant",
+    "dealClosedWon": "Terminée comme gagnée. Cette opportunité est clôturée.",
+    "dealClosedLost": "Terminée comme perdue. Cette opportunité est clôturée.",
     "closeBy": "Clôture avant le",
     "forecastTitle": "Prévision du pipeline",
     "totalOpen": "Total ouvert",

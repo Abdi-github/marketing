@@ -297,11 +297,15 @@ function DealCard({
   const t = useTranslations("Deals");
   const stageLabel = useStageLabel();
   const name = contactName(deal);
-  const openStages = stages.filter((stage) => !stage.isWon && !stage.isLost);
-  const currentIndex = openStages.findIndex((stage) => stage.id === deal.stageId);
-  const previousStage = currentIndex > 0 ? openStages[currentIndex - 1] : null;
+  const progressionStages = stages.filter((stage) => !stage.isLost);
+  const currentStage = stages.find((stage) => stage.id === deal.stageId);
+  const currentIndex = progressionStages.findIndex((stage) => stage.id === deal.stageId);
+  const previousStage = currentIndex > 0 ? progressionStages[currentIndex - 1] : null;
   const nextStage =
-    currentIndex >= 0 && currentIndex < openStages.length - 1 ? openStages[currentIndex + 1] : null;
+    currentIndex >= 0 && currentIndex < progressionStages.length - 1
+      ? progressionStages[currentIndex + 1]
+      : null;
+  const isClosed = deal.status === "won" || deal.status === "lost";
 
   return (
     <div
@@ -340,50 +344,63 @@ function DealCard({
           value={deal.stageId}
           onMouseDown={(event) => event.stopPropagation()}
           onChange={(event) => onMoveStage(deal.id, event.target.value)}
+          disabled={isClosed}
           className="w-full rounded border bg-white px-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
           aria-label={t("moveStage")}
         >
-          {openStages.map((stage) => (
+          {stages.map((stage) => (
             <option key={stage.id} value={stage.id}>
               {stageLabel(stage.label)}
             </option>
           ))}
         </select>
-        <div className="grid grid-cols-2 gap-1.5">
-          <button
-            type="button"
-            disabled={!previousStage}
-            onClick={() => previousStage && onMoveStage(deal.id, previousStage.id)}
-            className="rounded border bg-white px-2 py-1 text-xs text-gray-600 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {t("previousStage")}
-          </button>
-          <button
-            type="button"
-            disabled={!nextStage}
-            onClick={() => nextStage && onMoveStage(deal.id, nextStage.id)}
-            className="rounded border bg-white px-2 py-1 text-xs text-gray-600 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {t("nextStage")}
-          </button>
+        {isClosed ? (
+          <p className="text-[11px] text-gray-500">
+            {deal.status === "won" ? t("dealClosedWon") : t("dealClosedLost")}
+          </p>
+        ) : (
+          <div className="grid grid-cols-2 gap-1.5">
+            <button
+              type="button"
+              disabled={!previousStage}
+              onClick={() => previousStage && onMoveStage(deal.id, previousStage.id)}
+              className="rounded border bg-white px-2 py-1 text-xs text-gray-600 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {t("previousStage")}
+            </button>
+            <button
+              type="button"
+              disabled={!nextStage}
+              onClick={() => nextStage && onMoveStage(deal.id, nextStage.id)}
+              className="rounded border bg-white px-2 py-1 text-xs text-gray-600 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {nextStage?.isWon ? stageLabel(nextStage.label) : t("nextStage")}
+            </button>
+          </div>
+        )}
+      </div>
+      {!isClosed && (
+        <div className="mt-2 flex gap-1.5">
+          {!currentStage?.isWon && (
+            <button
+              type="button"
+              onClick={() => onWon(deal)}
+              className="flex-1 rounded border border-green-200 bg-green-50 py-1 text-xs text-green-700 transition-colors hover:bg-green-100"
+            >
+              {t("won")}
+            </button>
+          )}
+          {!currentStage?.isLost && (
+            <button
+              type="button"
+              onClick={() => onLost(deal)}
+              className="flex-1 rounded border border-red-200 bg-red-50 py-1 text-xs text-red-700 transition-colors hover:bg-red-100"
+            >
+              {t("lost")}
+            </button>
+          )}
         </div>
-      </div>
-      <div className="mt-2 flex gap-1.5">
-        <button
-          type="button"
-          onClick={() => onWon(deal)}
-          className="flex-1 rounded border border-green-200 bg-green-50 py-1 text-xs text-green-700 transition-colors hover:bg-green-100"
-        >
-          {t("won")}
-        </button>
-        <button
-          type="button"
-          onClick={() => onLost(deal)}
-          className="flex-1 rounded border border-red-200 bg-red-50 py-1 text-xs text-red-700 transition-colors hover:bg-red-100"
-        >
-          {t("lost")}
-        </button>
-      </div>
+      )}
     </div>
   );
 }
@@ -586,10 +603,19 @@ export default function DealsPage() {
 
   async function moveDealToStage(dealId: string, targetStageId: string) {
     const targetStage = stages.find((stage) => stage.id === targetStageId);
-    if (!targetStage || targetStage.isWon || targetStage.isLost) return;
+    if (!targetStage) return;
 
     const deal = dealsList.find((d) => d.id === dealId);
     if (!deal || deal.stageId === targetStageId) return;
+
+    if (targetStage.isWon) {
+      await handleWon(deal);
+      return;
+    }
+    if (targetStage.isLost) {
+      handleLostRequest(deal);
+      return;
+    }
 
     // Optimistic update.
     setDealsList((prev) =>

@@ -889,6 +889,8 @@
     "moveStage": "Phase ändern",
     "previousStage": "Zurück",
     "nextStage": "Weiter",
+    "dealClosedWon": "Als gewonnen abgeschlossen. Diese Verkaufschance ist erledigt.",
+    "dealClosedLost": "Als verloren abgeschlossen. Diese Verkaufschance ist erledigt.",
     "closeBy": "Abschluss bis",
     "forecastTitle": "Pipeline-Prognose",
     "totalOpen": "Gesamt offen",

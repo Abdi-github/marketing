@@ -92,14 +92,18 @@ Confirmed behavior:
 - The pipeline forecast shows `CHF 720`.
 - Staff sent a private-dinner SMS follow-up from Inbox.
 - Customer received the SMS.
-- Staff could not move the deal from `Inquiry` to `Qualified` because the Deals page had only a drag affordance and no working fallback control.
+- Staff moved the deal from `Inquiry` to `Qualified`.
+- Staff sent the customer a concrete family dinner offer by SMS:
+  `For 12 guests on 2026-07-12 at 20:00, we can offer a shared family menu from around CHF 60 per person...`
+- Staff reported that there was still no reliable way to move the deal to `Won` or `Lost`, and drag-and-drop was not reliable across all stages.
 
 Next step:
 
-- Redeploy the Deals pipeline movement fix.
-- Move the deal from `Inquiry` to `Qualified` using either the card stage dropdown, the `Next` button, or drag-and-drop.
-- Explain the meaning of each pipeline stage.
-- Then prepare/send proposal wording and move the deal to `Proposal`.
+- Redeploy the improved Deal Pipeline controls.
+- Move the deal from `Qualified` to `Proposal`.
+- If the customer accepts, move it to `Won` using either the stage dropdown or the Won button.
+- If the customer refuses, move it to `Lost` using either the stage dropdown or the Lost button.
+- Verify the card appears in the final Won/Lost column and the forecast updates.
 
 ## Fixes Already Made During This Walkthrough
 
@@ -204,6 +208,7 @@ Problem:
 
 - Deal cards showed a drag affordance, but dragging did not reliably move the deal.
 - There was no stage/status fallback control for ordinary staff users.
+- Won/Lost were still not available as explicit stage choices, so staff could move through normal stages but not confidently close a deal.
 
 Outcome:
 
@@ -211,6 +216,9 @@ Outcome:
 - Deal cards include Previous/Next buttons for simple movement.
 - Drag-and-drop now sends the dragged deal id through the browser drag event and routes Won/Lost drops through the correct business actions.
 - Moving a deal reloads the pipeline forecast so totals stay accurate.
+- Deal cards now include all stages in the dropdown, including Won and Lost.
+- Choosing Won runs the safe `markWon` action; choosing Lost opens the lost-reason confirmation modal.
+- Recently closed Won/Lost deals remain visible in the board so staff can see where the card landed.
 
 ## Notes Still To Improve
 

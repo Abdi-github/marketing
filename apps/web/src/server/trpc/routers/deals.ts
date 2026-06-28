@@ -60,7 +60,8 @@ export const dealsRouter = router({
       .orderBy(asc(dealStages.order));
   }),
 
-  // All open deals for the kanban, grouped by stage client-side.
+  // Deals for the kanban, grouped by stage client-side. Keep recently closed
+  // deals visible so staff can see a card actually landed in Won/Lost.
   listByPipeline: tenantProcedure.query(async ({ ctx }) => {
     const { tenantId } = ctx.tenantCtx;
     await ensureDefaultStages(tenantId);
@@ -85,7 +86,7 @@ export const dealsRouter = router({
       })
       .from(deals)
       .leftJoin(contacts, and(eq(contacts.id, deals.contactId), eq(contacts.tenantId, tenantId)))
-      .where(and(eq(deals.tenantId, tenantId), eq(deals.status, "open")))
+      .where(eq(deals.tenantId, tenantId))
       .orderBy(desc(deals.createdAt));
 
     return rows;
@@ -201,7 +202,13 @@ export const dealsRouter = router({
       await db.transaction(async (tx) => {
         await tx
           .update(deals)
-          .set({ stageId: input.stageId, updatedAt: new Date() })
+          .set({
+            stageId: input.stageId,
+            status: "open",
+            wonAt: null,
+            lostReason: null,
+            updatedAt: new Date(),
+          })
           .where(and(eq(deals.tenantId, tenantId), eq(deals.id, input.dealId)));
 
         await tx.insert(dealActivities).values({
@@ -243,7 +250,7 @@ export const dealsRouter = router({
           .set({
             status: "won",
             wonAt: new Date(),
-            stageId: wonStage?.id ?? deals.stageId,
+            ...(wonStage ? { stageId: wonStage.id } : {}),
             updatedAt: new Date(),
           })
           .where(and(eq(deals.tenantId, tenantId), eq(deals.id, input.dealId)));
@@ -281,7 +288,7 @@ export const dealsRouter = router({
           .set({
             status: "lost",
             lostReason: input.reason ?? null,
-            stageId: lostStage?.id ?? deals.stageId,
+            ...(lostStage ? { stageId: lostStage.id } : {}),
             updatedAt: new Date(),
           })
           .where(and(eq(deals.tenantId, tenantId), eq(deals.id, input.dealId)));

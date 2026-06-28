@@ -894,6 +894,8 @@
     "moveStage": "Move stage",
     "previousStage": "Previous",
     "nextStage": "Next",
+    "dealClosedWon": "Closed as won. This opportunity is finished.",
+    "dealClosedLost": "Closed as lost. This opportunity is finished.",
     "closeBy": "Close by",
     "forecastTitle": "Pipeline forecast",
     "totalOpen": "Total open",

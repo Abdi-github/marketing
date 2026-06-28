@@ -889,6 +889,8 @@
     "moveStage": "Cambia fase",
     "previousStage": "Precedente",
     "nextStage": "Successiva",
+    "dealClosedWon": "Chiusa come vinta. Questa opportunità è conclusa.",
+    "dealClosedLost": "Chiusa come persa. Questa opportunità è conclusa.",
     "closeBy": "Chiusura entro",
     "forecastTitle": "Previsione pipeline",
     "totalOpen": "Totale aperte",
