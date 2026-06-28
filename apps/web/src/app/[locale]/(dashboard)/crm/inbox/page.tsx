@@ -625,6 +625,7 @@ export default function InboxPage() {
     null,
   );
   const [clearAttentionInProgress, setClearAttentionInProgress] = useState(false);
+  const [workflowActionInProgress, setWorkflowActionInProgress] = useState(false);
   const [replyText, setReplyText] = useState("");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
@@ -724,6 +725,17 @@ export default function InboxPage() {
     setIssues(issueRows);
   }
 
+  async function refreshInboxAfterWorkflowAction(thread = activeThread) {
+    await Promise.all([
+      thread ? refreshActiveThread(thread) : Promise.resolve(),
+      loadThreads(),
+      trpc.inbox.listAutomationIssues
+        .query({ limit: 8 })
+        .then((rows) => setIssues(rows))
+        .catch(() => setIssues([])),
+    ]);
+  }
+
   async function updateWorkflowStatus(input: {
     status: "new" | "contacted" | "confirmed" | "qualified" | "archived";
     workflowState:
@@ -736,12 +748,20 @@ export default function InboxPage() {
       | "cancelled"
       | "manual_review";
   }) {
-    if (!threadContext?.leadId) return;
-    await trpc.inbox.updateLeadWorkflowStatus.mutate({
-      leadId: threadContext.leadId,
-      ...input,
-    });
-    await refreshActiveThread();
+    if (!threadContext?.leadId || workflowActionInProgress) return;
+    setWorkflowActionInProgress(true);
+    try {
+      await trpc.inbox.updateLeadWorkflowStatus.mutate({
+        leadId: threadContext.leadId,
+        ...input,
+      });
+      await refreshInboxAfterWorkflowAction();
+      window.setTimeout(() => {
+        void refreshInboxAfterWorkflowAction();
+      }, 2500);
+    } finally {
+      setWorkflowActionInProgress(false);
+    }
   }
 
   async function handleSend() {
@@ -806,9 +826,11 @@ export default function InboxPage() {
     [issues, selectedIssueKeys],
   );
   const failedThreadCount = threads.filter((thread) => thread.lastStatus === "failed").length;
-  const waitingThreadCount = threads.filter(
-    (thread) => thread.lastDirection === "inbound" || thread.lastStatus === "queued",
-  ).length;
+  const waitingThreadCount = threads.filter((thread) => thread.lastDirection === "inbound").length;
+  const workflowState = threadContext?.workflowState ?? null;
+  const isConfirmedReservation = workflowState === "confirmed";
+  const isClosedReservation =
+    workflowState === "confirmed" || workflowState === "declined" || workflowState === "cancelled";
 
   function toggleThreadSelection(thread: Thread) {
     const key = threadKey(thread);
@@ -1619,51 +1641,98 @@ export default function InboxPage() {
                       marginTop: "0.85rem",
                     }}
                   >
+                    {isConfirmedReservation ? (
+                      <div
+                        style={{
+                          background: "#ecfdf5",
+                          border: "1px solid #bbf7d0",
+                          borderRadius: 8,
+                          color: "#166534",
+                          fontSize: "0.82rem",
+                          fontWeight: 800,
+                          padding: "0.55rem 0.75rem",
+                        }}
+                      >
+                        Reservation confirmed. Customer confirmation was sent by SMS.
+                      </div>
+                    ) : null}
+                    {!isClosedReservation ? (
+                      <>
+                        <button
+                          type="button"
+                          disabled={workflowActionInProgress || workflowState === "contacted"}
+                          onClick={() =>
+                            void updateWorkflowStatus({
+                              status: "contacted",
+                              workflowState: "contacted",
+                            })
+                          }
+                          style={{
+                            ...workflowButtonStyle("#2563eb"),
+                            cursor:
+                              workflowActionInProgress || workflowState === "contacted"
+                                ? "not-allowed"
+                                : "pointer",
+                            opacity:
+                              workflowActionInProgress || workflowState === "contacted" ? 0.65 : 1,
+                          }}
+                        >
+                          Mark contacted
+                        </button>
+                        <button
+                          type="button"
+                          disabled={workflowActionInProgress}
+                          onClick={() =>
+                            void updateWorkflowStatus({
+                              status: "confirmed",
+                              workflowState: "confirmed",
+                            })
+                          }
+                          style={{
+                            ...workflowButtonStyle("#16a34a"),
+                            cursor: workflowActionInProgress ? "not-allowed" : "pointer",
+                            opacity: workflowActionInProgress ? 0.65 : 1,
+                          }}
+                        >
+                          Confirm
+                        </button>
+                        <button
+                          type="button"
+                          disabled={workflowActionInProgress}
+                          onClick={() =>
+                            void updateWorkflowStatus({
+                              status: "archived",
+                              workflowState: "declined",
+                            })
+                          }
+                          style={{
+                            ...workflowButtonStyle("#b45309"),
+                            cursor: workflowActionInProgress ? "not-allowed" : "pointer",
+                            opacity: workflowActionInProgress ? 0.65 : 1,
+                          }}
+                        >
+                          Decline
+                        </button>
+                      </>
+                    ) : null}
                     <button
                       type="button"
-                      onClick={() =>
-                        void updateWorkflowStatus({
-                          status: "contacted",
-                          workflowState: "contacted",
-                        })
-                      }
-                      style={workflowButtonStyle("#2563eb")}
-                    >
-                      Mark contacted
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        void updateWorkflowStatus({
-                          status: "confirmed",
-                          workflowState: "confirmed",
-                        })
-                      }
-                      style={workflowButtonStyle("#16a34a")}
-                    >
-                      Confirm
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        void updateWorkflowStatus({
-                          status: "archived",
-                          workflowState: "declined",
-                        })
-                      }
-                      style={workflowButtonStyle("#b45309")}
-                    >
-                      Decline
-                    </button>
-                    <button
-                      type="button"
+                      disabled={workflowActionInProgress || workflowState === "cancelled"}
                       onClick={() =>
                         void updateWorkflowStatus({
                           status: "archived",
                           workflowState: "cancelled",
                         })
                       }
-                      style={workflowButtonStyle("#64748b")}
+                      style={{
+                        ...workflowButtonStyle("#64748b"),
+                        cursor:
+                          workflowActionInProgress || workflowState === "cancelled"
+                            ? "not-allowed"
+                            : "pointer",
+                        opacity:
+                          workflowActionInProgress || workflowState === "cancelled" ? 0.65 : 1,
+                      }}
                     >
                       Cancel
                     </button>
