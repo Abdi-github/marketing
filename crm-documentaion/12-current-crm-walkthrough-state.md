@@ -58,7 +58,7 @@ Confirmed behavior:
 
 ### Scenario 3: Callback / Staff Follow-Up Request
 
-Status: in progress, task completion fix and session-recovery fix implemented; ready to verify after redeploy.
+Status: in progress, task completion fix, session-recovery fix, and Inbox-load hardening implemented; ready to verify after redeploy.
 
 Confirmed behavior:
 
@@ -154,6 +154,20 @@ Outcome:
 - CRM now shows a clear "Your session expired" recovery panel instead of a generic failed-contacts error.
 - The notification bell catches expired-session errors and shows a sign-in prompt instead of failing roughly.
 - The login form now clears stale auth cookies before attempting a new email/password sign-in.
+
+### Inbox load failure
+
+Problem:
+
+- After login, `/en/crm/inbox` showed "Could not load inbox. Please refresh."
+- The browser console showed a 500 from the batched `inbox.listThreads` and `inbox.listAutomationIssues` tRPC call.
+- Refreshing then redirected back to login, which made the Inbox failure and auth-session issue feel like one problem.
+
+Outcome:
+
+- Inbox thread listing no longer depends on a brittle raw SQL aggregation.
+- Thread grouping now uses a safer Drizzle query and groups messages in application code.
+- Automation issue lookup now tolerates old/null message metadata when checking whether an issue was dismissed.
 
 ## Notes Still To Improve
 

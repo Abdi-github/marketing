@@ -31,7 +31,7 @@ import {
   reservationStatusChangedV1,
 } from "@marketing/shared";
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, gte, inArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, or, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { enqueueSmsSendJob, enqueueSmsSequenceTriggerJob } from "../../queues/sms";
@@ -368,80 +368,87 @@ export const inboxRouter = router({
     .query(async ({ ctx, input }) => {
       const { tenantId } = ctx.tenantCtx;
 
-      const channelFilter = input.channel ? sql`AND m.channel = ${input.channel}` : sql``;
+      const fetchLimit = Math.min(1000, Math.max((input.limit + input.offset) * 20, 200));
+      const rows = await db
+        .select({
+          contactId: messages.contactId,
+          channel: messages.channel,
+          occurredAt: messages.occurredAt,
+          direction: messages.direction,
+          body: messages.body,
+          status: messages.status,
+          messageType: messages.messageType,
+          contactFirstName: contacts.firstName,
+          contactLastName: contacts.lastName,
+          contactEmail: contacts.email,
+          contactPhone: contacts.phone,
+        })
+        .from(messages)
+        .innerJoin(
+          contacts,
+          and(eq(contacts.id, messages.contactId), eq(contacts.tenantId, tenantId)),
+        )
+        .where(
+          and(
+            eq(messages.tenantId, tenantId),
+            isNotNull(messages.contactId),
+            input.channel ? eq(messages.channel, input.channel) : undefined,
+          ),
+        )
+        .orderBy(desc(messages.occurredAt))
+        .limit(fetchLimit);
 
-      // Aggregate threads: latest message + count per (contact_id, channel).
-      const rows = await db.execute(sql`
-        SELECT
-          m.contact_id,
-          m.channel,
-          MAX(m.occurred_at) AS last_message_at,
-          MAX(CASE WHEN m.direction = 'inbound' THEN m.occurred_at END) AS last_inbound_at,
-          COUNT(*) AS total_messages,
-          (
-            SELECT body FROM messages m2
-            WHERE m2.contact_id = m.contact_id
-              AND m2.channel = m.channel
-              AND m2.tenant_id = ${tenantId}
-            ORDER BY occurred_at DESC LIMIT 1
-          ) AS last_body,
-          (
-            SELECT direction FROM messages m2
-            WHERE m2.contact_id = m.contact_id
-              AND m2.channel = m.channel
-              AND m2.tenant_id = ${tenantId}
-            ORDER BY occurred_at DESC LIMIT 1
-          ) AS last_direction,
-          (
-            SELECT status FROM messages m2
-            WHERE m2.contact_id = m.contact_id
-              AND m2.channel = m.channel
-              AND m2.tenant_id = ${tenantId}
-            ORDER BY occurred_at DESC LIMIT 1
-          ) AS last_status,
-          (
-            SELECT message_type FROM messages m2
-            WHERE m2.contact_id = m.contact_id
-              AND m2.channel = m.channel
-              AND m2.tenant_id = ${tenantId}
-            ORDER BY occurred_at DESC LIMIT 1
-          ) AS last_message_type,
-          c.first_name,
-          c.last_name,
-          c.email AS contact_email,
-          c.phone AS contact_phone
-        FROM messages m
-        JOIN contacts c ON c.id = m.contact_id
-          AND c.tenant_id = ${tenantId}
-        WHERE m.tenant_id = ${tenantId}
-          ${channelFilter}
-          AND m.contact_id IS NOT NULL
-        GROUP BY m.contact_id, m.channel, c.first_name, c.last_name, c.email, c.phone
-        ORDER BY last_message_at DESC
-        LIMIT ${input.limit} OFFSET ${input.offset}
-      `);
+      const threads = new Map<
+        string,
+        {
+          contactId: string;
+          channel: string;
+          lastMessageAt: Date;
+          lastInboundAt: Date | null;
+          totalMessages: number;
+          lastBody: string;
+          lastDirection: string;
+          lastStatus: string;
+          lastMessageType: string;
+          contactName: string;
+          contactEmail: string | null;
+          contactPhone: string | null;
+        }
+      >();
 
-      return (rows as unknown[]).map((r) => {
-        const row = r as Record<string, unknown>;
-        return {
-          contactId: row["contact_id"] as string,
-          channel: row["channel"] as string,
-          lastMessageAt: row["last_message_at"] as string,
-          totalMessages: Number(row["total_messages"]),
-          lastBody: (row["last_body"] as string) ?? "",
-          lastDirection: (row["last_direction"] as string) ?? "outbound",
-          lastStatus: (row["last_status"] as string) ?? "queued",
-          lastMessageType: (row["last_message_type"] as string) ?? "text",
-          lastInboundAt: (row["last_inbound_at"] as string | null) ?? null,
-          contactName:
-            [row["first_name"], row["last_name"]].filter(Boolean).join(" ") ||
-            (row["contact_email"] as string | null) ||
-            (row["contact_phone"] as string | null) ||
-            "Unknown",
-          contactEmail: row["contact_email"] as string | null,
-          contactPhone: row["contact_phone"] as string | null,
-        };
-      });
+      for (const row of rows) {
+        if (!row.contactId) continue;
+        const key = `${row.contactId}:${row.channel}`;
+        const existing = threads.get(key);
+        if (!existing) {
+          threads.set(key, {
+            contactId: row.contactId,
+            channel: row.channel,
+            lastMessageAt: row.occurredAt,
+            lastInboundAt: row.direction === "inbound" ? row.occurredAt : null,
+            totalMessages: 1,
+            lastBody: row.body,
+            lastDirection: row.direction,
+            lastStatus: row.status,
+            lastMessageType: row.messageType,
+            contactName:
+              [row.contactFirstName, row.contactLastName].filter(Boolean).join(" ") ||
+              row.contactEmail ||
+              row.contactPhone ||
+              "Unknown",
+            contactEmail: row.contactEmail,
+            contactPhone: row.contactPhone,
+          });
+          continue;
+        }
+
+        existing.totalMessages += 1;
+        if (row.direction === "inbound" && !existing.lastInboundAt) {
+          existing.lastInboundAt = row.occurredAt;
+        }
+      }
+
+      return [...threads.values()].slice(input.offset, input.offset + input.limit);
     }),
 
   /**
@@ -608,7 +615,7 @@ export const inboxRouter = router({
               inArray(messages.channel, ["whatsapp", "sms"]),
               eq(messages.direction, "outbound"),
               eq(messages.status, "failed"),
-              sql`NOT (${messages.meta} ? 'inboxAttentionDismissedAt')`,
+              sql`NOT (coalesce(${messages.meta}, '{}'::jsonb) ? 'inboxAttentionDismissedAt')`,
             ),
           )
           .orderBy(desc(messages.occurredAt))
