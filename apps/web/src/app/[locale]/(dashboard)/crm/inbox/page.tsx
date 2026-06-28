@@ -644,10 +644,12 @@ export default function InboxPage() {
   );
   const [clearAttentionInProgress, setClearAttentionInProgress] = useState(false);
   const [workflowActionInProgress, setWorkflowActionInProgress] = useState(false);
-  const [replyText, setReplyText] = useState("");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const replyInputRef = useRef<HTMLTextAreaElement>(null);
+  const replyMetaRef = useRef<HTMLParagraphElement>(null);
+  const replySendButtonRef = useRef<HTMLButtonElement>(null);
 
   const loadThreads = useCallback(async () => {
     setThreadsLoading(true);
@@ -719,10 +721,53 @@ export default function InboxPage() {
     threadContext?.serviceWindow &&
     !threadContext.serviceWindow.open;
   const canReplyByChannel = activeThread?.channel === "whatsapp" || activeThread?.channel === "sms";
-  const smsCharacterCount = replyText.trim().length;
-  const smsSegmentCount =
-    smsCharacterCount === 0 ? 0 : smsCharacterCount <= 160 ? 1 : Math.ceil(smsCharacterCount / 153);
-  const smsTooLong = activeThread?.channel === "sms" && smsCharacterCount > SMS_REPLY_MAX_CHARS;
+
+  function getReplyDraft(): string {
+    return normalizeReplyDraft(replyInputRef.current?.value ?? "", activeThread?.channel);
+  }
+
+  const updateReplyComposerMeta = useCallback(
+    (value = replyInputRef.current?.value ?? "") => {
+      const normalizedValue = normalizeReplyDraft(value, activeThread?.channel);
+      if (replyInputRef.current && replyInputRef.current.value !== normalizedValue) {
+        replyInputRef.current.value = normalizedValue;
+      }
+
+      const characterCount = normalizedValue.trim().length;
+      const segmentCount =
+        characterCount === 0 ? 0 : characterCount <= 160 ? 1 : Math.ceil(characterCount / 153);
+      const tooLong = activeThread?.channel === "sms" && characterCount > SMS_REPLY_MAX_CHARS;
+
+      if (replyMetaRef.current && activeThread?.channel === "sms") {
+        replyMetaRef.current.textContent = `${characterCount}/${SMS_REPLY_MAX_CHARS} characters, ${segmentCount} SMS segment${
+          segmentCount === 1 ? "" : "s"
+        }. Keep it short for cost and clarity.`;
+        replyMetaRef.current.style.color = tooLong ? "#dc2626" : "#64748b";
+      }
+
+      if (replySendButtonRef.current) {
+        replySendButtonRef.current.disabled =
+          sending || characterCount === 0 || Boolean(serviceWindowClosed) || tooLong;
+        replySendButtonRef.current.style.cursor = replySendButtonRef.current.disabled
+          ? "not-allowed"
+          : "pointer";
+        replySendButtonRef.current.style.opacity = replySendButtonRef.current.disabled
+          ? "0.7"
+          : "1";
+      }
+    },
+    [activeThread?.channel, sending, serviceWindowClosed],
+  );
+
+  useEffect(() => {
+    if (replyInputRef.current) replyInputRef.current.value = "";
+    setSendError(null);
+    updateReplyComposerMeta("");
+  }, [activeThread?.contactId, activeThread?.channel, updateReplyComposerMeta]);
+
+  useEffect(() => {
+    updateReplyComposerMeta();
+  }, [sending, serviceWindowClosed, updateReplyComposerMeta]);
 
   async function refreshActiveThread(thread = activeThread) {
     if (!thread) return;
@@ -783,7 +828,9 @@ export default function InboxPage() {
   }
 
   async function handleSend() {
-    if (!activeThread || !replyText.trim() || !canReplyByChannel) return;
+    const draft = getReplyDraft();
+    const smsTooLong = activeThread?.channel === "sms" && draft.trim().length > SMS_REPLY_MAX_CHARS;
+    if (!activeThread || !draft.trim() || !canReplyByChannel) return;
     if (activeThread.channel === "whatsapp" && serviceWindowClosed) {
       setSendError(
         "This thread is outside the 24-hour WhatsApp service window. Template sending is the next rollout step.",
@@ -807,16 +854,17 @@ export default function InboxPage() {
         await trpc.inbox.sendWhatsApp.mutate({
           contactId: activeThread.contactId,
           toPhone: phone,
-          text: replyText.trim(),
+          text: draft.trim(),
         });
       } else {
         await trpc.inbox.sendSms.mutate({
           contactId: activeThread.contactId,
           toPhone: phone,
-          text: replyText.trim(),
+          text: draft.trim(),
         });
       }
-      setReplyText("");
+      if (replyInputRef.current) replyInputRef.current.value = "";
+      updateReplyComposerMeta("");
       await refreshActiveThread(activeThread);
     } catch (err) {
       setSendError(err instanceof Error ? err.message : "Send failed.");
@@ -1028,7 +1076,11 @@ export default function InboxPage() {
   }
 
   return (
-    <div style={{ maxWidth: 1180, margin: "0 auto", padding: "2rem 1rem" }}>
+    <div
+      className="notranslate"
+      translate="no"
+      style={{ maxWidth: 1180, margin: "0 auto", padding: "2rem 1rem" }}
+    >
       <h1 style={{ fontSize: "1.5rem", fontWeight: 700, marginBottom: "0.25rem" }}>{t("title")}</h1>
       <p style={{ color: "#6b7280", fontSize: "0.875rem", marginBottom: "1.25rem" }}>
         {t("subtitle")}
@@ -1761,6 +1813,8 @@ export default function InboxPage() {
               </div>
 
               <div
+                className="notranslate"
+                translate="no"
                 style={{
                   flex: 1,
                   overflowY: "auto",
@@ -1788,44 +1842,32 @@ export default function InboxPage() {
                 >
                   <div style={{ display: "flex", gap: "0.6rem" }}>
                     <textarea
-                      value={replyText}
-                      onChange={(event) => {
-                        const nextValue = normalizeReplyDraft(
-                          event.target.value,
-                          activeThread.channel,
-                        );
-                        setReplyText(nextValue);
-                        if (
-                          activeThread.channel === "sms" &&
-                          event.target.value.length > SMS_REPLY_MAX_CHARS
-                        ) {
-                          setSendError(
-                            `SMS replies are limited to ${SMS_REPLY_MAX_CHARS} characters, so the pasted text was shortened.`,
-                          );
-                        } else if (sendError?.includes("pasted text was shortened")) {
-                          setSendError(null);
-                        }
+                      ref={replyInputRef}
+                      className="notranslate"
+                      translate="no"
+                      onInput={(event) => {
+                        updateReplyComposerMeta(event.currentTarget.value);
                       }}
                       onPaste={(event) => {
                         const pastedText = event.clipboardData.getData("text");
                         if (!pastedText) return;
                         event.preventDefault();
                         const target = event.currentTarget;
-                        const selectionStart = target.selectionStart ?? replyText.length;
+                        const currentValue = target.value;
+                        const selectionStart = target.selectionStart ?? currentValue.length;
                         const selectionEnd = target.selectionEnd ?? selectionStart;
                         const nextValue = insertReplyText(
-                          replyText,
+                          currentValue,
                           pastedText,
                           selectionStart,
                           selectionEnd,
                           activeThread.channel,
                         );
-                        setReplyText(nextValue);
+                        target.value = nextValue;
+                        updateReplyComposerMeta(nextValue);
                         if (
                           activeThread.channel === "sms" &&
-                          `${replyText.slice(0, selectionStart)}${pastedText}${replyText.slice(
-                            selectionEnd,
-                          )}`.length > SMS_REPLY_MAX_CHARS
+                          pastedText.length > nextValue.length
                         ) {
                           setSendError(
                             `SMS replies are limited to ${SMS_REPLY_MAX_CHARS} characters, so the pasted text was shortened.`,
@@ -1862,10 +1904,9 @@ export default function InboxPage() {
                       }}
                     />
                     <button
+                      ref={replySendButtonRef}
                       onClick={() => void handleSend()}
-                      disabled={
-                        sending || !replyText.trim() || Boolean(serviceWindowClosed) || smsTooLong
-                      }
+                      disabled={sending || Boolean(serviceWindowClosed)}
                       style={{
                         padding: "0.6rem 1rem",
                         borderRadius: 8,
@@ -1878,14 +1919,8 @@ export default function InboxPage() {
                         fontWeight: 700,
                         fontSize: "0.82rem",
                         border: "none",
-                        cursor:
-                          sending || !replyText.trim() || Boolean(serviceWindowClosed) || smsTooLong
-                            ? "not-allowed"
-                            : "pointer",
-                        opacity:
-                          sending || !replyText.trim() || Boolean(serviceWindowClosed) || smsTooLong
-                            ? 0.7
-                            : 1,
+                        cursor: sending || Boolean(serviceWindowClosed) ? "not-allowed" : "pointer",
+                        opacity: sending || Boolean(serviceWindowClosed) ? 0.7 : 1,
                       }}
                     >
                       {sending ? t("sending") : t("send")}
@@ -1893,14 +1928,17 @@ export default function InboxPage() {
                   </div>
                   {activeThread.channel === "sms" ? (
                     <p
+                      ref={replyMetaRef}
+                      className="notranslate"
+                      translate="no"
                       style={{
                         margin: "0.55rem 0 0",
-                        color: smsTooLong ? "#dc2626" : "#64748b",
+                        color: "#64748b",
                         fontSize: "0.76rem",
                       }}
                     >
-                      {smsCharacterCount}/459 characters, {smsSegmentCount} SMS segment
-                      {smsSegmentCount === 1 ? "" : "s"}. Keep it short for cost and clarity.
+                      0/{SMS_REPLY_MAX_CHARS} characters, 0 SMS segments. Keep it short for cost and
+                      clarity.
                     </p>
                   ) : null}
                   {sendError ? (
