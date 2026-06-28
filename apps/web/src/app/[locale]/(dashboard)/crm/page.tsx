@@ -1686,6 +1686,7 @@ export default function CrmPage() {
     setOpenTasks((tasks) => tasks.filter((task) => task.id !== taskId));
     await trpc.contacts.updateTaskStatus
       .mutate({ taskId, done: true })
+      .then(() => refreshCrm())
       .catch(() => loadOpenTasks());
   }
 

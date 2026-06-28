@@ -5,6 +5,12 @@ This guide is for checking the CRM without long browser automation. Follow each 
 - **Customer**: a visitor using the published Abdi Restaurant page.
 - **Tenant staff**: the restaurant owner or staff member using the SaaS dashboard.
 
+Before continuing a live walkthrough, check the current state tracker:
+
+```text
+crm-documentaion/12-current-crm-walkthrough-state.md
+```
+
 Use simple screenshots while testing:
 
 - public form before submit

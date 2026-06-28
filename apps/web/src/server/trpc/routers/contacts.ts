@@ -429,18 +429,63 @@ export const contactsRouter = router({
     .mutation(async ({ ctx, input }) => {
       const { tenantId } = ctx.tenantCtx;
       const now = new Date();
+
+      const [targetTask] = await db
+        .select()
+        .from(crmTasks)
+        .where(and(eq(crmTasks.tenantId, tenantId), eq(crmTasks.id, input.taskId)));
+
+      if (!targetTask) throw new TRPCError({ code: "NOT_FOUND", message: "Task not found." });
+
+      if (!input.done) {
+        const [task] = await db
+          .update(crmTasks)
+          .set({
+            status: "open",
+            completedAt: null,
+            updatedAt: now,
+          })
+          .where(and(eq(crmTasks.tenantId, tenantId), eq(crmTasks.id, input.taskId)))
+          .returning();
+
+        return task!;
+      }
+
+      const targetGroupKey = openTaskGroupKey(targetTask);
+      const openSiblingTasks = await db
+        .select({
+          id: crmTasks.id,
+          contactId: crmTasks.contactId,
+          title: crmTasks.title,
+          meta: crmTasks.meta,
+        })
+        .from(crmTasks)
+        .where(
+          and(
+            eq(crmTasks.tenantId, tenantId),
+            eq(crmTasks.contactId, targetTask.contactId),
+            eq(crmTasks.title, targetTask.title),
+            eq(crmTasks.status, "open"),
+          ),
+        );
+
+      const taskIds = openSiblingTasks
+        .filter((task) => openTaskGroupKey(task) === targetGroupKey)
+        .map((task) => task.id);
+
+      if (taskIds.length === 0) return targetTask;
+
       const [task] = await db
         .update(crmTasks)
         .set({
-          status: input.done ? "done" : "open",
-          completedAt: input.done ? now : null,
+          status: "done",
+          completedAt: now,
           updatedAt: now,
         })
-        .where(and(eq(crmTasks.tenantId, tenantId), eq(crmTasks.id, input.taskId)))
+        .where(and(eq(crmTasks.tenantId, tenantId), inArray(crmTasks.id, taskIds)))
         .returning();
 
-      if (!task) throw new TRPCError({ code: "NOT_FOUND", message: "Task not found." });
-      return task;
+      return task ?? targetTask;
     }),
 
   updateTask: tenantProcedure
