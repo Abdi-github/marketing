@@ -17,14 +17,6 @@ export default function LoginPage() {
     const form = new FormData(e.currentTarget);
 
     try {
-      await fetch("/api/auth/sign-out", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-        credentials: "include",
-        cache: "no-store",
-      }).catch(() => null);
-
       const res = await fetch("/api/auth/sign-in/email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

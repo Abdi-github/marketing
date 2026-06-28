@@ -14,6 +14,15 @@ The active scenario is:
 Scenario 4: Private dining / quote request -> create a Deal
 ```
 
+Temporary blocker:
+
+- Production session/login became unstable again during Scenario 4.
+- The browser redirected to login.
+- Email/password login returned `POST /api/auth/sign-in/email 500`.
+- The login page has been simplified so it no longer makes a pre-login sign-out request.
+- The auth route now logs Better Auth handler failures on the server so Vercel logs can reveal the real backend exception.
+- CRM walkthrough should resume at Scenario 4 after production login is stable again.
+
 Scenario 3 is completed. Scenario 4 is now in progress. The latest confirmed Scenario 4 result is:
 
 - Staff created a private/family dinner deal from the customer request.
