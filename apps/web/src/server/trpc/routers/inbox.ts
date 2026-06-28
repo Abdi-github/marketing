@@ -5,22 +5,33 @@ import {
   businessProfiles,
   contacts,
   crmTasks,
+  integrationConnections,
   leads,
   messages,
   outbox,
+  subscriptions,
   tenants,
+  usageRecords,
 } from "@marketing/db";
-import { getSmsProviderHealth } from "@marketing/integrations";
+import { getPlanCaps, smsUsageMonthStart } from "@marketing/billing";
+import {
+  getSmsProviderHealth,
+  isSmsPlatformTestModeEnabled,
+  resolveSmsCredentials,
+  sendSmsViaConfiguredProvider,
+  SMS_MAX_RECOMMENDED_CHARS,
+} from "@marketing/integrations";
 import {
   buildLeadConfirmationCopy,
   computeWhatsappConversationState,
   env,
+  evaluateSmsEntitlement,
   normalizeSmsPhone,
   normalizeLeadCaptureSettings,
   reservationStatusChangedV1,
 } from "@marketing/shared";
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, or, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { enqueueSmsSendJob, enqueueSmsSequenceTriggerJob } from "../../queues/sms";
@@ -253,6 +264,92 @@ async function queueReservationConfirmationSms(input: {
   if (!message) return { queued: false, reason: "Could not create SMS message." };
   await enqueueSmsSendJob({ tenantId: input.tenantId, messageId: message.id });
   return { queued: true };
+}
+
+async function resolveSmsForInboxTenant(tenantId: string) {
+  const [[tenant], [subscription], [connection], [monthlyUsage]] = await Promise.all([
+    db
+      .select({ slug: tenants.slug, plan: tenants.plan })
+      .from(tenants)
+      .where(eq(tenants.id, tenantId))
+      .limit(1),
+    db
+      .select({ plan: subscriptions.plan })
+      .from(subscriptions)
+      .where(and(eq(subscriptions.tenantId, tenantId), eq(subscriptions.status, "active")))
+      .limit(1),
+    db
+      .select({
+        oauthTokens: integrationConnections.oauthTokens,
+        meta: integrationConnections.meta,
+      })
+      .from(integrationConnections)
+      .where(
+        and(
+          eq(integrationConnections.tenantId, tenantId),
+          eq(integrationConnections.provider, "twilio"),
+          eq(integrationConnections.status, "connected"),
+        ),
+      )
+      .limit(1),
+    db
+      .select({ total: sql<number>`coalesce(sum(${usageRecords.quantity}), 0)::int` })
+      .from(usageRecords)
+      .where(
+        and(
+          eq(usageRecords.tenantId, tenantId),
+          eq(usageRecords.metric, "sms_sent"),
+          gte(usageRecords.recordedAt, smsUsageMonthStart()),
+        ),
+      ),
+  ]);
+
+  if (!tenant) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Tenant not found." });
+  }
+
+  const effectivePlan =
+    tenant.plan === "trial" && subscription?.plan ? subscription.plan : tenant.plan;
+  const providerConfigured = Boolean(connection) || getSmsProviderHealth(env).configured;
+  const entitlement = evaluateSmsEntitlement({
+    monthlyLimit: getPlanCaps(effectivePlan).monthlySmsLimit,
+    monthlyUsed: Number(monthlyUsage?.total ?? 0),
+    providerConfigured,
+    demoModeAllowed: isSmsPlatformTestModeEnabled(env),
+  });
+
+  if (!entitlement.allowed) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message:
+        entitlement.reason === "monthly_limit_reached"
+          ? "Monthly SMS limit reached. Upgrade or wait until next month."
+          : entitlement.reason === "plan_not_included"
+            ? "SMS automation is not included in this plan."
+            : "Platform SMS provider is not configured.",
+    });
+  }
+
+  const credentials = resolveSmsCredentials({
+    tenantSlug: tenant.slug,
+    connection: connection
+      ? {
+          oauthTokens: connection.oauthTokens,
+          meta: asRecord(connection.meta),
+        }
+      : null,
+    env,
+    allowPlatformManaged: entitlement.allowed,
+  });
+
+  if (!credentials) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: "SMS credentials are not available for this tenant.",
+    });
+  }
+
+  return credentials;
 }
 
 export const inboxRouter = router({
@@ -1026,7 +1123,7 @@ export const inboxRouter = router({
     }),
 
   /**
-   * Send an SMS reply from the dashboard through aspsms.ch.
+   * Send an SMS reply from the dashboard through the resolved tenant/platform provider.
    */
   sendSms: tenantProcedure
     .input(
@@ -1038,9 +1135,6 @@ export const inboxRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const { tenantId } = ctx.tenantCtx;
-      const { SMS_MAX_RECOMMENDED_CHARS, getSmsProviderHealth } =
-        await import("@marketing/integrations");
-      const { env } = await import("@marketing/shared");
       const providerHealth = getSmsProviderHealth(env);
 
       if (input.text.trim().length > SMS_MAX_RECOMMENDED_CHARS) {
@@ -1078,6 +1172,7 @@ export const inboxRouter = router({
       }
 
       const text = input.text.trim();
+      const credentials = await resolveSmsForInboxTenant(tenantId);
       const [message] = await db
         .insert(messages)
         .values({
@@ -1085,7 +1180,7 @@ export const inboxRouter = router({
           contactId: input.contactId,
           channel: "sms",
           direction: "outbound",
-          fromAddress: providerHealth.senderLabel,
+          fromAddress: credentials.senderAddress,
           toAddress: normalizedInputPhone,
           body: text,
           messageType: "text",
@@ -1094,15 +1189,81 @@ export const inboxRouter = router({
             provider: providerHealth.provider,
             providerLabel: providerHealth.providerLabel,
             purpose: "manual_reply",
+            credentialMode: credentials.mode,
           },
         })
         .returning({ id: messages.id });
       if (!message) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
-      await enqueueSmsSendJob({ tenantId, messageId: message.id });
-      return {
-        messageId: message.id,
-        segmentCount: text.length <= 160 ? 1 : Math.ceil(text.length / 153),
-        queued: true,
-      };
+
+      try {
+        const result = await sendSmsViaConfiguredProvider(credentials, {
+          to: normalizedInputPhone,
+          text,
+        });
+        await db
+          .update(messages)
+          .set({
+            status: result.sandbox ? "delivered" : "sent",
+            externalId: result.messageId,
+            fromAddress: result.fromAddress,
+            toAddress: result.toAddress,
+            errorMessage: null,
+            meta: {
+              provider: result.provider,
+              providerLabel: result.providerLabel,
+              purpose: "manual_reply",
+              credentialMode: credentials.mode,
+              segmentCount: result.segmentCount,
+              statusCode: result.statusCode,
+              statusInfo: result.statusInfo,
+              sandbox: result.sandbox,
+            },
+          })
+          .where(and(eq(messages.tenantId, tenantId), eq(messages.id, message.id)));
+
+        if (!result.sandbox) {
+          await db.insert(usageRecords).values([
+            {
+              tenantId,
+              metric: "sms_sent",
+              quantity: 1,
+            },
+            {
+              tenantId,
+              metric: "sms_segments",
+              quantity: Math.max(1, result.segmentCount),
+            },
+          ]);
+        }
+
+        return {
+          messageId: message.id,
+          externalId: result.messageId,
+          segmentCount: Math.max(1, result.segmentCount),
+          queued: false,
+          sent: true,
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "SMS send failed.";
+        await db
+          .update(messages)
+          .set({
+            status: "failed",
+            errorMessage,
+            meta: {
+              provider: providerHealth.provider,
+              providerLabel: providerHealth.providerLabel,
+              purpose: "manual_reply",
+              credentialMode: credentials.mode,
+              sendFailedAt: new Date().toISOString(),
+            },
+          })
+          .where(and(eq(messages.tenantId, tenantId), eq(messages.id, message.id)));
+
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: errorMessage,
+        });
+      }
     }),
 });
