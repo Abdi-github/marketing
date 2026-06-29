@@ -101,6 +101,8 @@ Confirmed behavior:
 - The customer reply appeared in the Inbox and created an in-app notification.
 - Staff opened the notification drawer, but the drawer had no clear close behavior and did not close when clicking outside.
 - Refreshing the production page redirected to login again, so recurring auth/session instability is blocking the walkthrough.
+- The Deals page later showed `Could not load the pipeline. Please refresh.`
+- The pipeline failure was traced to a fragile forecast query and page loader. The fix keeps the board visible even if the forecast widget fails.
 
 Next step:
 
@@ -112,6 +114,7 @@ Next step:
 - If the customer accepts, move it to `Won` using either the stage dropdown or the Won button.
 - If the customer refuses, move it to `Lost` using either the stage dropdown or the Lost button.
 - Verify the card appears in the final Won/Lost column and the forecast updates.
+- Redeploy the latest Deals page/router fix before retrying the pipeline in production.
 
 ## Fixes Already Made During This Walkthrough
 
@@ -241,6 +244,9 @@ Outcome:
 - Deal cards now include all stages in the dropdown, including Won and Lost.
 - Choosing Won runs the safe `markWon` action; choosing Lost opens the lost-reason confirmation modal.
 - Recently closed Won/Lost deals remain visible in the board so staff can see where the card landed.
+- The pipeline loader no longer hides the whole board when the forecast query fails.
+- The server forecast query no longer passes an optional `undefined` condition into Drizzle `and()`.
+- If the session expires on the Deals page, the page now shows a sign-in recovery message instead of only a generic pipeline error.
 
 ## Notes Still To Improve
 

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { trpc } from "../../../../../lib/trpc";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -76,6 +76,15 @@ function useStageLabel() {
     const tk = map[key];
     return tk ? t(tk) : rawLabel;
   };
+}
+
+function isAuthError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return (
+    message.includes("UNAUTHORIZED") ||
+    message.includes("UNAUTHENTICATED") ||
+    message.toLowerCase().includes("unauthorized")
+  );
 }
 
 // ─── New Deal Modal ───────────────────────────────────────────────────────────
@@ -557,6 +566,7 @@ function ForecastTable({ forecast }: { forecast: Forecast }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function DealsPage() {
+  const locale = useLocale();
   const t = useTranslations("Deals");
 
   const [stages, setStages] = useState<DealStage[]>([]);
@@ -564,6 +574,7 @@ export default function DealsPage() {
   const [forecast, setForecast] = useState<Forecast | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [authExpired, setAuthExpired] = useState(false);
 
   const [showNewDeal, setShowNewDeal] = useState(false);
   const [markLostDeal, setMarkLostDeal] = useState<DealRow | null>(null);
@@ -574,16 +585,35 @@ export default function DealsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     setError(false);
+    setAuthExpired(false);
     try {
-      const [stagesRes, dealsRes, forecastRes] = await Promise.all([
+      const [stagesResult, dealsResult, forecastResult] = await Promise.allSettled([
         trpc.deals.listStages.query(),
         trpc.deals.listByPipeline.query(),
         trpc.deals.getForecast.query(),
       ]);
-      setStages(stagesRes as DealStage[]);
-      setDealsList(dealsRes as DealRow[]);
-      setForecast(forecastRes as Forecast);
-    } catch {
+
+      if (stagesResult.status === "rejected") throw stagesResult.reason;
+      if (dealsResult.status === "rejected") throw dealsResult.reason;
+
+      setStages(stagesResult.value as DealStage[]);
+      setDealsList(dealsResult.value as DealRow[]);
+      setForecast(
+        forecastResult.status === "fulfilled" ? (forecastResult.value as Forecast) : null,
+      );
+
+      if (forecastResult.status === "rejected") {
+        console.error(
+          "[deals] Forecast failed, showing pipeline without forecast",
+          forecastResult.reason,
+        );
+      }
+    } catch (err) {
+      if (isAuthError(err)) {
+        setAuthExpired(true);
+      } else {
+        console.error("[deals] Failed to load pipeline", err);
+      }
       setError(true);
     } finally {
       setLoading(false);
@@ -687,7 +717,22 @@ export default function DealsPage() {
       {/* Error */}
       {error && (
         <div className="mx-6 mt-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-600">
-          {t("loadError")}
+          {authExpired ? (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span>Your session expired. Please sign in again to continue managing deals.</span>
+              <button
+                type="button"
+                onClick={() => {
+                  window.location.href = `/${locale}/login`;
+                }}
+                className="rounded bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700"
+              >
+                Sign in again
+              </button>
+            </div>
+          ) : (
+            t("loadError")
+          )}
         </div>
       )}
 

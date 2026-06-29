@@ -368,11 +368,13 @@ export const dealsRouter = router({
             .select({ total: count(), value: sum(deals.amountChf) })
             .from(deals)
             .where(
-              and(
-                eq(deals.tenantId, tenantId),
-                eq(deals.stageId, stage.id),
-                stage.isWon ? undefined : eq(deals.status, "open"),
-              ),
+              stage.isWon
+                ? and(eq(deals.tenantId, tenantId), eq(deals.stageId, stage.id))
+                : and(
+                    eq(deals.tenantId, tenantId),
+                    eq(deals.stageId, stage.id),
+                    eq(deals.status, "open"),
+                  ),
             );
           return {
             stageId: stage.id,
