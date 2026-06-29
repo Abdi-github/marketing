@@ -15,9 +15,25 @@ function logAuthError(method: string, req: Request, error: unknown) {
   );
 }
 
+function logAuthFailureResponse(method: string, req: Request, response: Response) {
+  if (response.status < 500) return;
+
+  logger.error(
+    {
+      method,
+      path: new URL(req.url).pathname,
+      status: response.status,
+      statusText: response.statusText,
+    },
+    "Better Auth route returned an error response",
+  );
+}
+
 export async function GET(req: Request) {
   try {
-    return await handlers.GET(req);
+    const response = await handlers.GET(req);
+    logAuthFailureResponse("GET", req, response);
+    return response;
   } catch (error) {
     logAuthError("GET", req, error);
     throw error;
@@ -26,7 +42,9 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    return await handlers.POST(req);
+    const response = await handlers.POST(req);
+    logAuthFailureResponse("POST", req, response);
+    return response;
   } catch (error) {
     logAuthError("POST", req, error);
     throw error;

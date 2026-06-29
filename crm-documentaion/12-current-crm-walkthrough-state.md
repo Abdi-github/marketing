@@ -96,11 +96,17 @@ Confirmed behavior:
 - Staff sent the customer a concrete family dinner offer by SMS:
   `For 12 guests on 2026-07-12 at 20:00, we can offer a shared family menu from around CHF 60 per person...`
 - Staff reported that there was still no reliable way to move the deal to `Won` or `Lost`, and drag-and-drop was not reliable across all stages.
+- Customer replied by SMS: `Yes, that works for us. Please reserve it.`
+- The customer reply appeared in the Inbox and created an in-app notification.
+- Staff opened the notification drawer, but the drawer had no clear close behavior and did not close when clicking outside.
+- Refreshing the production page redirected to login again, so recurring auth/session instability is blocking the walkthrough.
 
 Next step:
 
-- Redeploy the improved Deal Pipeline controls.
-- Move the deal from `Qualified` to `Proposal`.
+- Redeploy the notification drawer and auth diagnostics fix.
+- Close the notification drawer using the new Close button, Escape key, or outside click.
+- If login redirects continue, check Vercel logs for `Better Auth route failed` or `Better Auth route returned an error response`.
+- Move the deal from `Proposal` to `Won` after production session/login is stable.
 - If the customer accepts, move it to `Won` using either the stage dropdown or the Won button.
 - If the customer refuses, move it to `Lost` using either the stage dropdown or the Lost button.
 - Verify the card appears in the final Won/Lost column and the forecast updates.
@@ -185,8 +191,21 @@ Outcome:
 
 - CRM now shows a clear "Your session expired" recovery panel instead of a generic failed-contacts error.
 - The notification bell catches expired-session errors and shows a sign-in prompt instead of failing roughly.
-- The login form now clears stale auth cookies before attempting a new email/password sign-in.
-- The stale-cookie cleanup now sends a valid JSON `POST /api/auth/sign-out` request, fixing the production `415 Unsupported Media Type` regression seen before sign-in.
+- The login form no longer makes a pre-login sign-out request, so sign-in is a single clean Better Auth call.
+- The Better Auth route now logs thrown failures and returned 5xx responses so Vercel can show the real server-side cause of `POST /api/auth/sign-in/email 500`.
+
+### Notification drawer behavior
+
+Problem:
+
+- The notification drawer showed a Refresh button but no obvious Close button.
+- Clicking outside the drawer did not close it.
+
+Outcome:
+
+- The drawer now has a Close button.
+- Clicking outside the drawer closes it.
+- Pressing Escape closes it.
 
 ### Inbox load failure
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 
 type NotificationRow = Awaited<ReturnType<typeof trpc.notifications.list.query>>[number];
@@ -60,6 +60,7 @@ function isAuthError(error: unknown): boolean {
 }
 
 export function NotificationBell() {
+  const panelRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
   const [rows, setRows] = useState<NotificationRow[]>([]);
   const [unread, setUnread] = useState(0);
@@ -104,6 +105,31 @@ export function NotificationBell() {
     return () => window.clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    if (!open) return;
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target;
+      if (target instanceof Node && panelRef.current?.contains(target)) return;
+      setOpen(false);
+      setSettingsOpen(false);
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setOpen(false);
+        setSettingsOpen(false);
+      }
+    }
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
   const visibleRows = useMemo(() => rows.filter((row) => !row.dismissedAt), [rows]);
 
   async function markRead(notificationId: string) {
@@ -141,7 +167,7 @@ export function NotificationBell() {
   }
 
   return (
-    <div className="fixed right-4 top-4 z-40">
+    <div ref={panelRef} className="fixed right-4 top-4 z-40">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
@@ -174,13 +200,26 @@ export function NotificationBell() {
               <p className="text-sm font-semibold text-slate-950">Staff notifications</p>
               <p className="text-xs text-slate-500">New leads and follow-up work appear here.</p>
             </div>
-            <button
-              type="button"
-              onClick={() => void load()}
-              className="rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
-            >
-              {loading ? "Refreshing" : "Refresh"}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void load()}
+                className="rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                {loading ? "Refreshing" : "Refresh"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  setSettingsOpen(false);
+                }}
+                className="rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                aria-label="Close notifications"
+              >
+                Close
+              </button>
+            </div>
           </div>
 
           <div className="border-b border-slate-100 px-4 py-2">
