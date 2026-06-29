@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
+import { usePathname } from "next/navigation";
 import { trpc } from "../../../../../lib/trpc";
 
 type Channel = "email" | "sms" | "whatsapp";
@@ -184,6 +185,72 @@ function formatDateTime(value: string | Date | null | undefined): string {
   });
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function textValue(value: unknown): string | null {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return null;
+}
+
+function messageBusinessLabel(message: Message): string {
+  if (message.messageType === "website_form_request") return "Website form request";
+  if (message.direction === "inbound") return "Customer";
+  if (
+    message.messageType === "reservation_confirmation" ||
+    message.messageType === "sequence" ||
+    message.messageType.includes("automation")
+  ) {
+    return "Automation";
+  }
+  return "Staff";
+}
+
+function websiteRequestFields(message: Message): Array<{ label: string; value: string }> {
+  const meta = asRecord(message.meta);
+  const structuredData = asRecord(meta.structuredData);
+  const facts = asRecord(structuredData.facts);
+  const possibleUpdates = asRecord(meta.possibleUpdatedCustomerDetails);
+  const rows = [
+    { label: "Name", value: textValue(facts.customerName) ?? textValue(structuredData.name) },
+    { label: "Email", value: textValue(facts.customerEmail) ?? textValue(structuredData.email) },
+    { label: "Phone", value: textValue(facts.customerPhone) ?? textValue(structuredData.phone) },
+    {
+      label: "Date",
+      value: textValue(facts.reservationDate) ?? textValue(structuredData.date),
+    },
+    {
+      label: "Time",
+      value: textValue(facts.reservationTime) ?? textValue(structuredData.time),
+    },
+    {
+      label: "Guests",
+      value:
+        textValue(facts.partySize) ??
+        textValue(structuredData.partySize) ??
+        textValue(structuredData.guests),
+    },
+    { label: "Preferred channel", value: textValue(meta.preferredChannel) },
+    {
+      label: "Missing fields",
+      value: Array.isArray(meta.missingFields) ? meta.missingFields.join(", ") : null,
+    },
+    { label: "Source", value: textValue(meta.sourceUrl) },
+  ].filter((row): row is { label: string; value: string } => Boolean(row.value));
+
+  const updates = Object.entries(possibleUpdates)
+    .map(([key, value]) => `${key}: ${String(value)}`)
+    .join(", ");
+  if (updates) {
+    rows.push({ label: "Possible updated customer details", value: updates });
+  }
+  return rows;
+}
+
 function getFacts(context: ThreadContext | null): Array<{ label: string; value: string }> {
   const structured = context?.structuredData ?? {};
   const facts =
@@ -352,8 +419,11 @@ function ThreadItem({
 
 function MessageBubble({ message, t }: { message: Message; t: (key: string) => string }) {
   const isOut = message.direction === "outbound";
+  const label = messageBusinessLabel(message);
+  const isWebsiteRequest = message.messageType === "website_form_request";
   const bubbleTone = message.status === "failed" ? "#fef2f2" : isOut ? "#2563eb" : "#f3f4f6";
   const bubbleText = message.status === "failed" ? "#991b1b" : isOut ? "#fff" : "#111827";
+  const requestFields = isWebsiteRequest ? websiteRequestFields(message) : [];
 
   return (
     <div
@@ -365,18 +435,25 @@ function MessageBubble({ message, t }: { message: Message; t: (key: string) => s
     >
       <div
         style={{
-          maxWidth: "72%",
+          maxWidth: isWebsiteRequest ? "86%" : "72%",
           padding: "0.7rem 0.9rem",
           borderRadius: isOut ? "14px 14px 6px 14px" : "14px 14px 14px 6px",
-          background: bubbleTone,
-          color: bubbleText,
+          background: isWebsiteRequest ? "#fff7ed" : bubbleTone,
+          color: isWebsiteRequest ? "#7c2d12" : bubbleText,
           fontSize: "0.875rem",
           lineHeight: 1.5,
-          border: message.status === "failed" ? "1px solid #fecaca" : "none",
+          border: isWebsiteRequest
+            ? "1px solid #fed7aa"
+            : message.status === "failed"
+              ? "1px solid #fecaca"
+              : "none",
         }}
       >
         <div style={{ display: "flex", gap: "0.35rem", marginBottom: "0.35rem", flexWrap: "wrap" }}>
-          <TinyBadge label={message.messageType} tone={isOut ? "#dbeafe" : "#475569"} />
+          <TinyBadge
+            label={label}
+            tone={isOut ? "#dbeafe" : isWebsiteRequest ? "#c2410c" : "#475569"}
+          />
           {message.policyState ? (
             <TinyBadge label={message.policyState} tone={isOut ? "#dbeafe" : "#7c3aed"} />
           ) : null}
@@ -388,6 +465,43 @@ function MessageBubble({ message, t }: { message: Message; t: (key: string) => s
           ) : null}
         </div>
         <p style={{ margin: 0 }}>{message.body}</p>
+        {requestFields.length > 0 ? (
+          <div
+            style={{
+              display: "grid",
+              gap: "0.35rem",
+              gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+              marginTop: "0.65rem",
+            }}
+          >
+            {requestFields.map((field) => (
+              <div
+                key={field.label}
+                style={{
+                  background: "#fffbeb",
+                  border: "1px solid #fde68a",
+                  borderRadius: 8,
+                  padding: "0.45rem 0.55rem",
+                }}
+              >
+                <p
+                  style={{
+                    color: "#92400e",
+                    fontSize: "0.65rem",
+                    fontWeight: 800,
+                    margin: 0,
+                    textTransform: "uppercase",
+                  }}
+                >
+                  {field.label}
+                </p>
+                <p style={{ color: "#451a03", fontSize: "0.78rem", margin: "0.1rem 0 0" }}>
+                  {field.value}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : null}
         {message.errorMessage ? (
           <p style={{ margin: "0.45rem 0 0", fontSize: "0.72rem", color: "#b91c1c" }}>
             {message.errorMessage}
@@ -401,7 +515,7 @@ function MessageBubble({ message, t }: { message: Message; t: (key: string) => s
             textAlign: "right",
           }}
         >
-          {isOut ? t("you") : "Lead"} {formatDateTime(message.occurredAt)}
+          {isOut ? t("you") : label} {formatDateTime(message.occurredAt)}
         </p>
       </div>
     </div>
@@ -622,6 +736,8 @@ function ClearAttentionConfirmationModal({
 
 export default function InboxPage() {
   const t = useTranslations("Inbox");
+  const pathname = usePathname();
+  const locale = pathname.split("/").filter(Boolean)[0] || "en";
   const [channelFilter, setChannelFilter] = useState<Channel | undefined>(undefined);
   const [threads, setThreads] = useState<Thread[]>([]);
   const [threadsLoading, setThreadsLoading] = useState(true);
@@ -865,12 +981,20 @@ export default function InboxPage() {
       }
       if (replyInputRef.current) replyInputRef.current.value = "";
       updateReplyComposerMeta("");
-      await refreshActiveThread(activeThread);
+      await refreshInboxAfterWorkflowAction(activeThread);
     } catch (err) {
       setSendError(err instanceof Error ? err.message : "Send failed.");
     } finally {
       setSending(false);
     }
+  }
+
+  function setReplyDraft(text: string) {
+    if (replyInputRef.current) {
+      replyInputRef.current.value = text;
+      replyInputRef.current.focus();
+    }
+    updateReplyComposerMeta(text);
   }
 
   const channelTabs: Array<{ key: Channel | undefined; label: string }> = [
@@ -897,8 +1021,15 @@ export default function InboxPage() {
   const waitingThreadCount = threads.filter((thread) => thread.lastDirection === "inbound").length;
   const workflowState = threadContext?.workflowState ?? null;
   const isConfirmedReservation = workflowState === "confirmed";
+  const isMissingDetailsReservation = workflowState === "missing_details";
+  const isDeclinedReservation = workflowState === "declined";
+  const isCancelledReservation = workflowState === "cancelled";
   const isClosedReservation =
     workflowState === "confirmed" || workflowState === "declined" || workflowState === "cancelled";
+  const canConfirmReservation =
+    threadContext?.workflowKind === "booking" &&
+    !isClosedReservation &&
+    !isMissingDetailsReservation;
 
   function toggleThreadSelection(thread: Thread) {
     const key = threadKey(thread);
@@ -1714,19 +1845,56 @@ export default function InboxPage() {
                     }}
                   >
                     {isConfirmedReservation ? (
-                      <div
-                        style={{
-                          background: "#ecfdf5",
-                          border: "1px solid #bbf7d0",
-                          borderRadius: 8,
-                          color: "#166534",
-                          fontSize: "0.82rem",
-                          fontWeight: 800,
-                          padding: "0.55rem 0.75rem",
-                        }}
+                      <>
+                        <div
+                          style={{
+                            background: "#ecfdf5",
+                            border: "1px solid #bbf7d0",
+                            borderRadius: 8,
+                            color: "#166534",
+                            fontSize: "0.82rem",
+                            fontWeight: 800,
+                            padding: "0.55rem 0.75rem",
+                          }}
+                        >
+                          Reservation confirmed. Customer confirmation was sent by SMS.
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setReplyDraft(
+                              "Abdi Restaurant: Thanks again. We look forward to welcoming you.",
+                            )
+                          }
+                          style={workflowButtonStyle("#2563eb")}
+                        >
+                          Send follow-up
+                        </button>
+                        <a
+                          href={`/${locale}/crm?contactId=${activeThread?.contactId ?? ""}`}
+                          style={{
+                            ...workflowButtonStyle("#0f172a"),
+                            textDecoration: "none",
+                            display: "inline-flex",
+                            alignItems: "center",
+                          }}
+                        >
+                          Open contact
+                        </a>
+                      </>
+                    ) : null}
+                    {isMissingDetailsReservation ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setReplyDraft(
+                            "Abdi Restaurant: Thanks for your request. What date, time, and number of guests should we reserve?",
+                          )
+                        }
+                        style={workflowButtonStyle("#2563eb")}
                       >
-                        Reservation confirmed. Customer confirmation was sent by SMS.
-                      </div>
+                        Ask for missing details
+                      </button>
                     ) : null}
                     {!isClosedReservation ? (
                       <>
@@ -1753,17 +1921,25 @@ export default function InboxPage() {
                         </button>
                         <button
                           type="button"
-                          disabled={workflowActionInProgress}
+                          disabled={workflowActionInProgress || !canConfirmReservation}
                           onClick={() =>
                             void updateWorkflowStatus({
                               status: "confirmed",
                               workflowState: "confirmed",
                             })
                           }
+                          title={
+                            isMissingDetailsReservation
+                              ? "Ask for the missing reservation details before confirming."
+                              : undefined
+                          }
                           style={{
                             ...workflowButtonStyle("#16a34a"),
-                            cursor: workflowActionInProgress ? "not-allowed" : "pointer",
-                            opacity: workflowActionInProgress ? 0.65 : 1,
+                            cursor:
+                              workflowActionInProgress || !canConfirmReservation
+                                ? "not-allowed"
+                                : "pointer",
+                            opacity: workflowActionInProgress || !canConfirmReservation ? 0.65 : 1,
                           }}
                         >
                           Confirm
@@ -1787,27 +1963,29 @@ export default function InboxPage() {
                         </button>
                       </>
                     ) : null}
-                    <button
-                      type="button"
-                      disabled={workflowActionInProgress || workflowState === "cancelled"}
-                      onClick={() =>
-                        void updateWorkflowStatus({
-                          status: "archived",
-                          workflowState: "cancelled",
-                        })
-                      }
-                      style={{
-                        ...workflowButtonStyle("#64748b"),
-                        cursor:
-                          workflowActionInProgress || workflowState === "cancelled"
-                            ? "not-allowed"
-                            : "pointer",
-                        opacity:
-                          workflowActionInProgress || workflowState === "cancelled" ? 0.65 : 1,
-                      }}
-                    >
-                      Cancel
-                    </button>
+                    {!isDeclinedReservation && !isCancelledReservation ? (
+                      <button
+                        type="button"
+                        disabled={workflowActionInProgress || workflowState === "cancelled"}
+                        onClick={() =>
+                          void updateWorkflowStatus({
+                            status: "archived",
+                            workflowState: "cancelled",
+                          })
+                        }
+                        style={{
+                          ...workflowButtonStyle("#64748b"),
+                          cursor:
+                            workflowActionInProgress || workflowState === "cancelled"
+                              ? "not-allowed"
+                              : "pointer",
+                          opacity:
+                            workflowActionInProgress || workflowState === "cancelled" ? 0.65 : 1,
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    ) : null}
                   </div>
                 ) : null}
               </div>

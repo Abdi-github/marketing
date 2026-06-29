@@ -260,7 +260,7 @@ function RuleBuilder({
   }
 
   function addLeaf() {
-    const field: SegmentField = "lifecycle_stage";
+    const field: SegmentField = "tags";
     onChange({
       ...rule,
       children: [
@@ -290,6 +290,11 @@ function RuleBuilder({
 
   return (
     <div className="space-y-3">
+      <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs leading-relaxed text-blue-900">
+        Restaurant labels such as <strong>reservation-guest</strong> are tags. Lifecycle stages stay
+        generic, for example lead, qualified lead, or customer.
+      </div>
+
       {/* Match operator toggle */}
       <div className="flex items-center gap-2 text-sm">
         <span className="text-gray-600">{t("match")}</span>

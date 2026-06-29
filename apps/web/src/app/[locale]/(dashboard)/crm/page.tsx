@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { missingReservationFactNames } from "@marketing/shared";
 import { useTranslations } from "next-intl";
 import { useSearchParams } from "next/navigation";
 import { trpc } from "../../../../lib/trpc";
@@ -522,6 +523,31 @@ function leadImportantFields(lead: LeadEntry): Array<{ label: string; value: str
   return [...fields, ...extraFields].slice(0, 10);
 }
 
+function reservationFactsFromLead(lead: LeadEntry) {
+  const data = leadPayloadRecord(lead);
+  const partySizeText = valueFromKeys(data, ["partySize", "party_size", "guests", "people"]);
+  const partySize = partySizeText ? Number.parseInt(partySizeText, 10) : undefined;
+  return {
+    date:
+      valueFromKeys(data, ["date", "preferredDate", "preferred_date", "reservationDate"]) ??
+      undefined,
+    time:
+      valueFromKeys(data, ["time", "preferredTime", "preferred_time", "reservationTime"]) ??
+      undefined,
+    partySize: Number.isFinite(partySize) ? partySize : undefined,
+  };
+}
+
+function reservationMissingFields(lead: LeadEntry): string[] {
+  if (lead.workflowKind !== "booking") return [];
+  return missingReservationFactNames(reservationFactsFromLead(lead));
+}
+
+function possibleUpdatedCustomerDetails(lead: LeadEntry): Record<string, unknown> {
+  const structuredData = asObject(lead.structuredData);
+  return asObject(structuredData.possibleUpdatedCustomerDetails);
+}
+
 function workflowLabel(lead: LeadEntry): string {
   const kind = lead.workflowKind === "booking" ? "reservation" : (lead.workflowKind ?? "lead");
   const state = (lead.workflowState ?? lead.status ?? "new").replaceAll("_", " ");
@@ -577,14 +603,25 @@ function LatestLeadSummary({
 }) {
   const fields = leadImportantFields(lead);
   const openTasks = tasks.filter((task) => task.status === "open");
-  const canConfirm = lead.workflowKind === "booking" && lead.workflowState !== "confirmed";
+  const missingFields = reservationMissingFields(lead);
+  const isBooking = lead.workflowKind === "booking";
+  const isConfirmed = lead.workflowState === "confirmed";
+  const isMissingDetails = lead.workflowState === "missing_details";
+  const canConfirm = isBooking && !isConfirmed && missingFields.length === 0;
+  const updatedDetails = possibleUpdatedCustomerDetails(lead);
+  const hasUpdatedDetails = Object.keys(updatedDetails).length > 0;
+  const reservationFacts = reservationFactsFromLead(lead);
 
   return (
-    <section className="rounded-xl border border-violet-100 bg-violet-50/70 p-4 shadow-sm">
+    <section
+      className={`rounded-xl border p-4 shadow-sm ${
+        isConfirmed ? "border-emerald-100 bg-emerald-50/70" : "border-violet-100 bg-violet-50/70"
+      }`}
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">
-            Latest customer request
+            {isConfirmed ? "Confirmed reservation" : "Action needed"}
           </p>
           <h3 className="mt-1 text-base font-semibold capitalize text-slate-950">
             {workflowLabel(lead)}
@@ -598,6 +635,28 @@ function LatestLeadSummary({
           {(lead.workflowState ?? lead.status ?? "new").replaceAll("_", " ")}
         </span>
       </div>
+
+      {isConfirmed && (
+        <div className="mt-4 rounded-lg border border-emerald-100 bg-white p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+            Reservation summary
+          </p>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            <div className="rounded bg-emerald-50 px-3 py-2 text-sm">
+              Date: {reservationFacts.date ?? "Not recorded"}
+            </div>
+            <div className="rounded bg-emerald-50 px-3 py-2 text-sm">
+              Time: {reservationFacts.time ?? "Not recorded"}
+            </div>
+            <div className="rounded bg-emerald-50 px-3 py-2 text-sm">
+              Guests: {reservationFacts.partySize ?? "Not recorded"}
+            </div>
+            <div className="rounded bg-emerald-50 px-3 py-2 text-sm">
+              Channel: {valueFromKeys(leadPayloadRecord(lead), ["preferredChannel"]) ?? "CRM"}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="mt-4 rounded-lg border border-violet-100 bg-white p-3">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -621,6 +680,24 @@ function LatestLeadSummary({
         </div>
       )}
 
+      {hasUpdatedDetails && (
+        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+          <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+            Possible updated customer details
+          </p>
+          <p className="mt-1">
+            The same phone number submitted different contact details. Review before changing the
+            saved customer identity.
+          </p>
+        </div>
+      )}
+
+      {missingFields.length > 0 && (
+        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+          Missing before confirmation: {missingFields.join(", ")}.
+        </div>
+      )}
+
       <div className="mt-4 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2">
         <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
           Recommended next step
@@ -634,6 +711,18 @@ function LatestLeadSummary({
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">
+        {isMissingDetails && (
+          <button
+            type="button"
+            onClick={() => {
+              const locale = window.location.pathname.split("/").filter(Boolean)[0] || "en";
+              window.location.href = `/${locale}/crm/inbox`;
+            }}
+            className="rounded bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white"
+          >
+            Ask for missing details
+          </button>
+        )}
         <button
           type="button"
           onClick={() =>
@@ -658,6 +747,16 @@ function LatestLeadSummary({
             }
             disabled={updatingLeadId === lead.id}
             className="rounded bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+          >
+            Confirm reservation
+          </button>
+        )}
+        {isBooking && !isConfirmed && !canConfirm && (
+          <button
+            type="button"
+            disabled
+            title="Ask for the missing reservation details before confirming."
+            className="rounded bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white opacity-50"
           >
             Confirm reservation
           </button>
@@ -1168,16 +1267,21 @@ function DetailPanel({
           </section>
 
           {/* Leads history */}
-          <section>
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
-              {t("leadsHistory")}
-            </h3>
+          <details className="rounded-lg border border-gray-100 bg-white p-3">
+            <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-gray-500">
+              {t("leadsHistory")} ({detail.leads.length})
+            </summary>
             {detail.leads.length === 0 ? (
-              <p className="text-sm text-gray-400">{t("noLeads")}</p>
+              <p className="mt-3 text-sm text-gray-400">{t("noLeads")}</p>
             ) : (
-              <div className="space-y-3">
+              <div className="mt-3 space-y-3">
                 {detail.leads.map((lead) => {
                   const fields = leadImportantFields(lead);
+                  const leadMissingFields = reservationMissingFields(lead);
+                  const leadCanConfirm =
+                    lead.workflowKind === "booking" &&
+                    lead.workflowState !== "confirmed" &&
+                    leadMissingFields.length === 0;
                   return (
                     <div key={lead.id} className="rounded-lg border bg-gray-50 p-3 text-sm">
                       <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
@@ -1231,7 +1335,12 @@ function DetailPanel({
                                   workflowState: "confirmed",
                                 })
                               }
-                              disabled={updatingLeadId === lead.id}
+                              disabled={updatingLeadId === lead.id || !leadCanConfirm}
+                              title={
+                                leadCanConfirm
+                                  ? undefined
+                                  : `Missing before confirmation: ${leadMissingFields.join(", ")}`
+                              }
                               className="rounded bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50"
                             >
                               Confirm reservation
@@ -1290,17 +1399,17 @@ function DetailPanel({
                 })}
               </div>
             )}
-          </section>
+          </details>
 
           {/* Unified CRM timeline */}
-          <section>
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
-              {t("timelineTitle")}
-            </h3>
+          <details className="rounded-lg border border-gray-100 bg-white p-3">
+            <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-gray-500">
+              Activity history ({timeline.length})
+            </summary>
             {timeline.length === 0 ? (
-              <p className="text-sm text-gray-400">{t("timelineEmpty")}</p>
+              <p className="mt-3 text-sm text-gray-400">{t("timelineEmpty")}</p>
             ) : (
-              <div className="space-y-2">
+              <div className="mt-3 space-y-2">
                 {timeline.map((item) => {
                   const occurredAt = new Date(item.occurredAt);
                   const pageUrl = typeof item.meta.pageUrl === "string" ? item.meta.pageUrl : null;
@@ -1369,7 +1478,7 @@ function DetailPanel({
                 })}
               </div>
             )}
-          </section>
+          </details>
         </div>
       )}
     </div>

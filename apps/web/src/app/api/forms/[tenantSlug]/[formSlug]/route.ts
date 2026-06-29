@@ -12,6 +12,7 @@ import {
   crmTasks,
   events,
   emailPreferences,
+  messages,
   smsPreferences,
 } from "@marketing/db";
 import {
@@ -19,6 +20,7 @@ import {
   buildLeadWorkflowPlan,
   buildPhoneLeadPlaceholderEmail,
   logger,
+  missingReservationFactNames,
   splitContactName,
 } from "@marketing/shared";
 import { and, desc, eq, isNull } from "drizzle-orm";
@@ -115,6 +117,89 @@ function appendLeadId(meta: Record<string, unknown>, leadId: string): string[] {
     ? meta["leadIds"].filter((value): value is string => typeof value === "string")
     : [];
   return Array.from(new Set([...existing, leadId]));
+}
+
+function preferredConversationChannel(payload: Record<string, unknown>): "sms" | "whatsapp" | null {
+  const raw = firstStringValue(payload, [
+    "preferredChannel",
+    "preferred_channel",
+    "channel",
+    "contactMethod",
+    "contact_method",
+    "replyBy",
+    "reply_by",
+  ]);
+  const normalized = raw?.toLowerCase().replace(/[\s_-]+/g, "") ?? "";
+  if (["sms", "text", "textmessage"].includes(normalized)) return "sms";
+  if (["whatsapp", "wa"].includes(normalized)) return "whatsapp";
+  return null;
+}
+
+function possibleUpdatedCustomerDetails(input: {
+  existingContact: {
+    email: string | null;
+    firstName: string | null;
+    lastName: string | null;
+    phone: string | null;
+  } | null;
+  submittedName: string | null;
+  submittedEmail: string | null;
+  submittedPhone: string | null;
+}): Record<string, unknown> | null {
+  if (!input.existingContact) return null;
+  const existingName = [input.existingContact.firstName, input.existingContact.lastName]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+  const changes: Record<string, unknown> = {};
+  if (
+    input.submittedName &&
+    existingName &&
+    input.submittedName.toLowerCase() !== existingName.toLowerCase()
+  ) {
+    changes["name"] = { current: existingName, submitted: input.submittedName };
+  }
+  if (
+    input.submittedEmail &&
+    input.existingContact.email &&
+    input.submittedEmail.toLowerCase() !== input.existingContact.email.toLowerCase()
+  ) {
+    changes["email"] = { current: input.existingContact.email, submitted: input.submittedEmail };
+  }
+  if (
+    input.submittedPhone &&
+    input.existingContact.phone &&
+    input.submittedPhone.replace(/\s+/g, "") !== input.existingContact.phone.replace(/\s+/g, "")
+  ) {
+    changes["phone"] = { current: input.existingContact.phone, submitted: input.submittedPhone };
+  }
+  return Object.keys(changes).length > 0 ? changes : null;
+}
+
+function buildWebsiteFormRequestBody(input: {
+  tenantName: string;
+  workflowKind: "booking" | "callback" | "quote" | "generic";
+  structuredData: Record<string, unknown>;
+  preferredChannel: "sms" | "whatsapp";
+  missingFields: string[];
+}): string {
+  const lines = [`Website form request for ${input.tenantName}`];
+  const name = input.structuredData["name"];
+  const message = input.structuredData["message"];
+  if (typeof name === "string" && name) lines.push(`Name: ${name}`);
+  lines.push(`Intent: ${input.workflowKind === "booking" ? "reservation" : input.workflowKind}`);
+  const date = input.structuredData["reservationDate"];
+  const time = input.structuredData["reservationTime"];
+  const partySize = input.structuredData["partySize"];
+  if (typeof date === "string" && date) lines.push(`Date: ${date}`);
+  if (typeof time === "string" && time) lines.push(`Time: ${time}`);
+  if (typeof partySize === "string" && partySize) lines.push(`Party size: ${partySize}`);
+  lines.push(`Preferred reply: ${input.preferredChannel.toUpperCase()}`);
+  if (input.missingFields.length > 0) {
+    lines.push(`Missing: ${input.missingFields.join(", ")}`);
+  }
+  if (typeof message === "string" && message) lines.push(`Message: ${message}`);
+  return lines.join("\n");
 }
 
 // ─── Turnstile verification ────────────────────────────────────────────────────
@@ -223,6 +308,8 @@ export async function POST(
   const contactName = splitContactName(sanitizedPayload);
   const sourceChannel = form.landingPageId ? "landing_page_form" : "form";
   const workflowState = parseWorkflowState(workflowPlan.kind, sanitizedPayload);
+  const structuredLeadData = buildStructuredLeadData(sanitizedPayload);
+  const preferredChannel = preferredConversationChannel(sanitizedPayload);
   let createdLeadId: string | null = null;
   let createdContactId: string | null = null;
   const leadCapturedEventId = randomUUID();
@@ -238,7 +325,7 @@ export async function POST(
           workflowKind: workflowPlan.kind,
           workflowState,
           sourceChannel,
-          structuredData: buildStructuredLeadData(sanitizedPayload),
+          structuredData: structuredLeadData,
           sourceUrl,
         })
         .returning({ id: leads.id });
@@ -254,6 +341,7 @@ export async function POST(
       const email =
         typeof rawEmail === "string" && rawEmail.trim() ? rawEmail.toLowerCase().trim() : null;
       const placeholderEmail = rawPhone ? buildPhoneLeadPlaceholderEmail(rawPhone) : null;
+      const submittedName = firstStringValue(sanitizedPayload, ["name", "full_name"]);
 
       if (email || rawPhone) {
         const [existingByEmail] = email
@@ -287,6 +375,18 @@ export async function POST(
             : [];
 
         const existingContact = existingByEmail ?? existingByPhone ?? null;
+        const updatedCustomerDetails = possibleUpdatedCustomerDetails({
+          existingContact,
+          submittedName,
+          submittedEmail: email,
+          submittedPhone: rawPhone,
+        });
+        const effectiveStructuredData = updatedCustomerDetails
+          ? {
+              ...structuredLeadData,
+              possibleUpdatedCustomerDetails: updatedCustomerDetails,
+            }
+          : structuredLeadData;
         let contactId: string | null = existingContact?.id ?? null;
         if (contactId) {
           const shouldAdoptRealEmail =
@@ -321,7 +421,10 @@ export async function POST(
         if (contactId) {
           await tx
             .update(leads)
-            .set({ contactId })
+            .set({
+              contactId,
+              structuredData: effectiveStructuredData,
+            })
             .where(and(eq(leads.tenantId, tenant.id), eq(leads.id, lead!.id)));
 
           capturedContactId = contactId;
@@ -333,7 +436,7 @@ export async function POST(
             workflowState,
             leadId: lead!.id,
             latestLeadId: lead!.id,
-            structuredData: buildStructuredLeadData(sanitizedPayload),
+            structuredData: effectiveStructuredData,
           };
           const [existingOpenWorkflowTask] = await tx
             .select({
@@ -472,6 +575,44 @@ export async function POST(
                 ),
               );
           }
+
+          if (preferredChannel && rawPhone) {
+            const missingFields =
+              workflowPlan.kind === "booking"
+                ? missingReservationFactNames(effectiveStructuredData)
+                : [];
+            await tx.insert(messages).values({
+              tenantId: tenant.id,
+              contactId,
+              channel: preferredChannel,
+              direction: "inbound",
+              fromAddress: rawPhone,
+              toAddress: tenant.name,
+              body: buildWebsiteFormRequestBody({
+                tenantName: tenant.name,
+                workflowKind: workflowPlan.kind,
+                structuredData: effectiveStructuredData,
+                preferredChannel,
+                missingFields,
+              }),
+              messageType: "website_form_request",
+              status: "delivered",
+              meta: {
+                leadId: lead!.id,
+                formId: form.id,
+                formSlug,
+                landingPageId: form.landingPageId,
+                sourceChannel,
+                sourceUrl,
+                workflowKind: workflowPlan.kind,
+                workflowState,
+                preferredChannel,
+                missingFields,
+                structuredData: effectiveStructuredData,
+                possibleUpdatedCustomerDetails: updatedCustomerDetails,
+              },
+            });
+          }
         }
       }
 
@@ -539,9 +680,11 @@ export async function POST(
       metadata: {
         formId: form.id,
         formSlug,
+        contactId: createdContactId,
         workflowKind: workflowPlan.kind,
         workflowState,
         sourceChannel,
+        groupKey: createdLeadId,
       },
       staffSms: {
         text: staffSmsText,

@@ -25,6 +25,35 @@ function priorityTone(priority: string): string {
   return "border-blue-200 bg-blue-50 text-blue-700";
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function notificationGroupKey(row: NotificationRow): string {
+  const metadata = asRecord(row.metadata);
+  const explicitGroup = metadata.groupKey;
+  if (typeof explicitGroup === "string" && explicitGroup.trim()) return explicitGroup.trim();
+  if (row.entityType && row.entityId) return `${row.entityType}:${row.entityId}`;
+  if (row.actionUrl) return `action:${row.actionUrl}`;
+  return `notification:${row.id}`;
+}
+
+function groupNewestNotifications(rows: NotificationRow[]): NotificationRow[] {
+  const grouped = new Map<string, NotificationRow>();
+  for (const row of rows) {
+    const key = notificationGroupKey(row);
+    const existing = grouped.get(key);
+    if (!existing || new Date(row.createdAt).getTime() > new Date(existing.createdAt).getTime()) {
+      grouped.set(key, row);
+    }
+  }
+  return [...grouped.values()].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
+}
+
 function currentLocale(): string {
   if (typeof window === "undefined") return "en";
   const segment = window.location.pathname.split("/").filter(Boolean)[0];
@@ -131,7 +160,23 @@ export function NotificationBell() {
     };
   }, [open]);
 
-  const visibleRows = useMemo(() => rows.filter((row) => !row.dismissedAt), [rows]);
+  const activeRows = useMemo(
+    () =>
+      rows.filter(
+        (row) => !row.dismissedAt && row.status !== "handled" && row.status !== "expired",
+      ),
+    [rows],
+  );
+  const visibleRows = useMemo(() => groupNewestNotifications(activeRows), [activeRows]);
+  const hasHandledRows = useMemo(
+    () =>
+      rows.some(
+        (row) =>
+          !row.dismissedAt &&
+          (row.status === "read" || row.status === "handled" || row.status === "expired"),
+      ),
+    [rows],
+  );
 
   async function markRead(notificationId: string) {
     setRows((current) =>
@@ -263,7 +308,7 @@ export function NotificationBell() {
               >
                 {settingsOpen ? "Hide alert settings" : "Alert settings"}
               </button>
-              {visibleRows.length > 0 && (
+              {(visibleRows.length > 0 || hasHandledRows) && (
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"

@@ -12,6 +12,7 @@ import {
 import {
   buildPhoneLeadPlaceholderEmail,
   classifySmsKeyword,
+  extractReservationFactsFromText,
   logger,
   normalizeSmsPhone,
 } from "@marketing/shared";
@@ -40,18 +41,7 @@ function mapTwilioStatus(
 }
 
 function extractReplyFacts(body: string): Record<string, string> {
-  const facts: Record<string, string> = {};
-  const party = body.match(/\b(?:party|people|persons|guests?)\s*(?:of|:)?\s*(\d{1,2})\b/i);
-  const time = body.match(/\b([01]?\d|2[0-3])[:.](\d{2})\b/);
-  const date = body.match(/\b(20\d{2})-(\d{2})-(\d{2})\b|\b(\d{1,2})[./](\d{1,2})[./](20\d{2})\b/);
-  if (party?.[1]) facts["partySize"] = party[1];
-  if (time) facts["reservationTime"] = `${time[1]!.padStart(2, "0")}:${time[2]}`;
-  if (date) {
-    facts["reservationDate"] = date[1]
-      ? `${date[1]}-${date[2]}-${date[3]}`
-      : `${date[6]}-${date[5]!.padStart(2, "0")}-${date[4]!.padStart(2, "0")}`;
-  }
-  return facts;
+  return extractReservationFactsFromText(body) as Record<string, string>;
 }
 
 async function processStatus(event: typeof webhookEvents.$inferSelect): Promise<void> {

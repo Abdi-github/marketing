@@ -38,6 +38,36 @@ Next Scenario 6 action after the updated app is deployed or restarted:
 5. Confirm it matches `1` contact.
 6. Download the CSV again; it should include `Abdi CRM Manual Guest`.
 
+Latest CRM improvement pass before Scenario 8:
+
+- Website and landing-page form submissions now create a first-class Inbox message when the customer chooses SMS or WhatsApp. It appears as a customer-side `Website form request` with submitted name, email, phone, date, time, party size, message, preferred channel, missing fields, and source context.
+- Returning phone numbers that submit different name/email details now expose `Possible updated customer details` in CRM context instead of silently hiding the difference.
+- The contact drawer now starts with a clearer action panel. Missing-detail reservations prioritize asking for details; confirmed reservations show a clean confirmed-state panel with date, time, party size, channel, and next actions.
+- Older form submissions and technical event logs are collapsed by default so staff can focus on the latest request first.
+- Inbox actions are now reservation-state-aware. Missing-detail threads show `Ask for missing details`; confirmed threads hide normal confirmation work and offer follow-up, cancel, reminder, and contact navigation actions.
+- Inbox messages now label website requests, customer replies, staff replies, and automation messages more clearly.
+- Inbox send/confirm/decline/cancel actions now refetch the thread, messages, notifications, and list data so the UI updates immediately.
+- Notifications are grouped by related lead/contact/task/thread and show the newest actionable item first.
+- Related notifications are marked handled when a reservation is confirmed/declined/cancelled, staff replies in Inbox, staff completes a task, or a deal is won/lost.
+- The drawer keeps `Clear handled`, `Dismiss visible`, Close button, outside-click close, and Escape close behavior.
+- Lead intent classification now detects callback language before reservation language, and also distinguishes quote/private dining requests more reliably.
+- Inbound SMS detail extraction now understands replies such as `Tomorrow at 20:00 for 4 people`.
+- Segments now make the difference clearer: lifecycle stages are generic CRM stages; `reservation-guest` is a tag. Restaurant-friendly shortcuts and helper copy remain the preferred path.
+
+Verification for this pass:
+
+- `pnpm.cmd --filter @marketing/shared typecheck` passed.
+- `pnpm.cmd --filter @marketing/workers typecheck` passed.
+- `pnpm.cmd --filter @marketing/web typecheck` passed.
+- Focused `eslint --max-warnings 0` passed for all touched CRM, Inbox, notification, segment, SMS extraction, and form-submission files.
+
+Browser verification still needed after deploy/restart:
+
+- Submit one new reservation from the public page and confirm the first Inbox message is `Website form request`.
+- Open the contact drawer and confirm the top panel is action-focused rather than event-log-heavy.
+- Reply/confirm from Inbox and verify notifications disappear or move out of the active list.
+- Recheck the `Reservation guests` segment export after using the tag-based rule.
+
 Scenario 4 is completed. The latest confirmed Scenario 4 result is:
 
 - Staff created a private/family dinner deal from the customer request.
@@ -275,18 +305,14 @@ Outcome:
 - The server forecast query no longer passes an optional `undefined` condition into Drizzle `and()`.
 - If the session expires on the Deals page, the page now shows a sign-in recovery message instead of only a generic pipeline error.
 
-## Notes Still To Improve
+## Remaining Notes
 
-These are not forgotten. They should be handled as we continue the walkthrough and after the scenario documentation is complete.
+These are the remaining follow-ups after the CRM improvement pass.
 
-- The contact drawer still shows too much activity noise. It should prioritize the latest customer request, current task, recommended next step, and recent customer/staff messages.
-- Old notifications can remain visible after the staff has handled the work. Notifications need clearer lifecycle behavior: unread, read, handled, dismissed, expired.
-- Notification drawer needs grouping and bulk cleanup. A staff user should not have to dismiss every old alert one by one after completing the related work.
-- Related notifications should be auto-marked handled when a reservation is confirmed, a conversation is replied to, a task is completed, or a deal is won/lost.
-- Inbox status sometimes needs refresh/update after an action. The UI should update more predictably after confirm/decline/cancel/send.
-- The Inbox should show both customer and staff messages clearly, with better visual distinction and less confusion around old messages.
 - Scenario documentation should include the actual screenshots from the user's walkthrough once each scenario is finished.
-- The Segments page now has restaurant shortcuts and tag-based rules, but the production app must be redeployed before the user sees them.
+- Production must be redeployed before the user sees the latest Inbox, Contacts, Notifications, form-submission, and Segment improvements.
+- After redeploy, complete a short browser regression for Scenarios 1-7 before starting Scenario 8.
+- Consider a later dedicated CRM archive/history view if old activity events are still useful but too long for the daily staff drawer.
 
 ## Next Ordered Scenarios
 
@@ -294,7 +320,8 @@ These are not forgotten. They should be handled as we continue the walkthrough a
 2. Scenario 5: Inbox reply and follow-up -> show daily conversation workflow.
 3. Scenario 6: Segments for reservation leads.
 4. Scenario 7: Duplicates and returning customers.
-5. Scenario 8: Email or SMS sequence follow-up.
+5. Regression checkpoint: confirm the CRM improvement pass in browser after deploy/restart.
+6. Scenario 8: Email or SMS sequence follow-up.
 
 ## Rule For The Assistant
 

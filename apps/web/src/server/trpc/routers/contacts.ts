@@ -16,6 +16,7 @@ import {
   emailSuppressions,
   emailTemplates,
   messages,
+  notifications,
 } from "@marketing/db";
 import { TRPCError } from "@trpc/server";
 import {
@@ -28,6 +29,7 @@ import {
   gte,
   ilike,
   inArray,
+  isNull,
   or,
   sql,
 } from "drizzle-orm";
@@ -84,6 +86,45 @@ function openTaskGroupKey(task: { contactId: string; title: string; meta?: unkno
   const meta = readRecord(task.meta);
   const workflowKind = typeof meta["workflowKind"] === "string" ? meta["workflowKind"] : "";
   return `${task.contactId}:${task.title}:${workflowKind}`;
+}
+
+async function markTaskNotificationsHandled(input: {
+  tenantId: string;
+  contactId: string;
+  taskIds: string[];
+  leadIds: string[];
+}): Promise<void> {
+  const filters = [
+    and(eq(notifications.entityType, "contact"), eq(notifications.entityId, input.contactId)),
+    sql`${notifications.metadata}->>'contactId' = ${input.contactId}`,
+  ];
+
+  if (input.taskIds.length > 0) {
+    filters.push(
+      and(eq(notifications.entityType, "task"), inArray(notifications.entityId, input.taskIds)),
+    );
+  }
+
+  for (const leadId of input.leadIds) {
+    filters.push(sql`${notifications.metadata}->>'leadId' = ${leadId}`);
+    filters.push(sql`${notifications.metadata}->>'groupKey' = ${leadId}`);
+  }
+
+  const relationFilter = or(...filters);
+  if (!relationFilter) return;
+
+  const now = new Date();
+  await db
+    .update(notifications)
+    .set({ status: "handled", readAt: now, updatedAt: now })
+    .where(
+      and(
+        eq(notifications.tenantId, input.tenantId),
+        isNull(notifications.dismissedAt),
+        sql`${notifications.status} not in ('handled', 'dismissed', 'expired')`,
+        relationFilter,
+      ),
+    );
 }
 
 async function assertContactBelongsToTenant(tenantId: string, contactId: string): Promise<void> {
@@ -474,6 +515,17 @@ export const contactsRouter = router({
         .map((task) => task.id);
 
       if (taskIds.length === 0) return targetTask;
+      const leadIds = openSiblingTasks
+        .filter((task) => taskIds.includes(task.id))
+        .map((task) => {
+          const meta = readRecord(task.meta);
+          return typeof meta["leadId"] === "string"
+            ? meta["leadId"]
+            : typeof meta["latestLeadId"] === "string"
+              ? meta["latestLeadId"]
+              : null;
+        })
+        .filter((leadId): leadId is string => Boolean(leadId));
 
       const [task] = await db
         .update(crmTasks)
@@ -484,6 +536,13 @@ export const contactsRouter = router({
         })
         .where(and(eq(crmTasks.tenantId, tenantId), inArray(crmTasks.id, taskIds)))
         .returning();
+
+      await markTaskNotificationsHandled({
+        tenantId,
+        contactId: targetTask.contactId,
+        taskIds,
+        leadIds,
+      });
 
       return task ?? targetTask;
     }),

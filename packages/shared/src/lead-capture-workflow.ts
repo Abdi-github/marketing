@@ -219,6 +219,22 @@ export function inferLeadWorkflowKind(
   const hasSignal = (...keys: string[]) =>
     keys.some((key) => fieldNames.has(key) || payloadKeys.has(key));
 
+  const explicitCallback =
+    /\b(call\s?back|call me|phone me|telephone me|please call|prefer a phone call|callback|telefon|appel)\b/.test(
+      signalText,
+    );
+  if (explicitCallback) {
+    return "callback";
+  }
+
+  const explicitQuote =
+    /\b(private dining|family dinner|catering|event|banquet|group menu|quote|offer|estimate|pricing|devis|offre|angebot)\b/.test(
+      signalText,
+    );
+  if (explicitQuote) {
+    return "quote";
+  }
+
   if (
     hasSignal("date", "time", "party_size", "guests", "guest_count", "reservation_date") ||
     /\b(book|booking|reservation|reserve|table|guests?|party|appointment|termin|rendez|prenot)\b/.test(
@@ -228,10 +244,7 @@ export function inferLeadWorkflowKind(
     return "booking";
   }
 
-  if (
-    hasSignal("preferred_time", "callback_time", "best_time", "phone") &&
-    /\b(callback|call\s?back|call me|telephone|telefon|appel|richiam|whatsapp)\b/.test(signalText)
-  ) {
+  if (hasSignal("preferred_time", "callback_time", "best_time", "phone") && explicitCallback) {
     return "callback";
   }
 

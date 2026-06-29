@@ -49,6 +49,12 @@ export {
   normalizeSmsPhone,
 } from "./sms-automation";
 export type { SmsPurpose, SmsTriggerFilter } from "./sms-automation";
+export {
+  extractReservationFactsFromText,
+  formatIsoDate,
+  missingReservationFactNames,
+} from "./crm-reservation";
+export type { ReservationFacts } from "./crm-reservation";
 export { evaluateSmsEntitlement } from "./sms-entitlements";
 export type { SmsEntitlement, SmsEntitlementInput, SmsEntitlementReason } from "./sms-entitlements";
 export {

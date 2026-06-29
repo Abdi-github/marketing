@@ -32,7 +32,7 @@ import {
   reservationStatusChangedV1,
 } from "@marketing/shared";
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, gte, inArray, isNotNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { enqueueSmsSequenceTriggerJob } from "../../queues/sms";
@@ -65,7 +65,7 @@ function valueFromAnyKey(source: Record<string, unknown>, keys: string[]): strin
   return null;
 }
 
-async function dismissContactNotifications(input: {
+async function markContactNotificationsHandled(input: {
   tenantId: string;
   contactId: string | null;
   leadId?: string | null;
@@ -84,12 +84,13 @@ async function dismissContactNotifications(input: {
           : null;
   if (!entityFilter) return;
 
-  const dismissedAt = new Date();
+  const handledAt = new Date();
   const filters = [
     eq(notifications.tenantId, input.tenantId),
     isNotNull(notifications.id),
     entityFilter,
-    sql`${notifications.dismissedAt} is null`,
+    isNull(notifications.dismissedAt),
+    sql`${notifications.status} not in ('handled', 'dismissed', 'expired')`,
   ];
   if (input.types?.length) {
     filters.push(inArray(notifications.type, input.types));
@@ -98,10 +99,9 @@ async function dismissContactNotifications(input: {
   await db
     .update(notifications)
     .set({
-      status: "dismissed",
-      readAt: dismissedAt,
-      dismissedAt,
-      updatedAt: dismissedAt,
+      status: "handled",
+      readAt: handledAt,
+      updatedAt: handledAt,
     })
     .where(and(...filters));
 }
@@ -1078,7 +1078,7 @@ export const inboxRouter = router({
           : { queued: false };
 
       if (["confirmed", "declined", "cancelled"].includes(input.workflowState)) {
-        await dismissContactNotifications({
+        await markContactNotificationsHandled({
           tenantId,
           contactId: lead.contactId,
           leadId: lead.id,
@@ -1218,6 +1218,12 @@ export const inboxRouter = router({
           status: "sent",
           policyState: conversationState.policy,
           externalId: result.messageId,
+        });
+
+        await markContactNotificationsHandled({
+          tenantId,
+          contactId: input.contactId,
+          types: ["inbox.reply_needed"],
         });
 
         return { messageId: result.messageId };
@@ -1370,7 +1376,7 @@ export const inboxRouter = router({
           ]);
         }
 
-        await dismissContactNotifications({
+        await markContactNotificationsHandled({
           tenantId,
           contactId: input.contactId,
           types: ["inbox.reply_needed"],

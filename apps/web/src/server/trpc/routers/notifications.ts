@@ -1,7 +1,7 @@
 import { db, notificationPreferences, notifications } from "@marketing/db";
 import { logger, normalizeSmsPhone } from "@marketing/shared";
 import { TRPCError } from "@trpc/server";
-import { and, count, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import { z } from "zod";
 import { requires, router, tenantProcedure } from "../trpc";
 
@@ -130,7 +130,11 @@ export const notificationsRouter = router({
       .where(
         and(
           eq(notifications.tenantId, ctx.tenantCtx.tenantId),
-          eq(notifications.status, "read"),
+          or(
+            eq(notifications.status, "read"),
+            eq(notifications.status, "handled"),
+            eq(notifications.status, "expired"),
+          ),
           isNull(notifications.dismissedAt),
         ),
       )

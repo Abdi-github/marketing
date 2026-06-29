@@ -9,10 +9,11 @@ import {
   deals,
   dealStages,
   DEFAULT_DEAL_STAGES,
+  notifications,
   outbox,
 } from "@marketing/db";
 import { TRPCError } from "@trpc/server";
-import { and, asc, count, desc, eq, sql, sum } from "drizzle-orm";
+import { and, asc, count, desc, eq, isNull, or, sql, sum } from "drizzle-orm";
 import { z } from "zod";
 import { tenantProcedure, router } from "../trpc";
 
@@ -44,6 +45,37 @@ async function assertContactBelongsToTenant(
   if (!contact) {
     throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid contact." });
   }
+}
+
+async function markDealNotificationsHandled(input: {
+  tenantId: string;
+  dealId: string;
+  contactId: string | null;
+}): Promise<void> {
+  const filters = [
+    and(eq(notifications.entityType, "deal"), eq(notifications.entityId, input.dealId)),
+    sql`${notifications.metadata}->>'dealId' = ${input.dealId}`,
+  ];
+
+  if (input.contactId) {
+    filters.push(sql`${notifications.metadata}->>'contactId' = ${input.contactId}`);
+  }
+
+  const relationFilter = or(...filters);
+  if (!relationFilter) return;
+
+  const now = new Date();
+  await db
+    .update(notifications)
+    .set({ status: "handled", readAt: now, updatedAt: now })
+    .where(
+      and(
+        eq(notifications.tenantId, input.tenantId),
+        isNull(notifications.dismissedAt),
+        sql`${notifications.status} not in ('handled', 'dismissed', 'expired')`,
+        relationFilter,
+      ),
+    );
 }
 
 // ─── Router ───────────────────────────────────────────────────────────────────
@@ -236,6 +268,12 @@ export const dealsRouter = router({
     .input(z.object({ dealId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const { tenantId } = ctx.tenantCtx;
+      const [deal] = await db
+        .select({ id: deals.id, contactId: deals.contactId })
+        .from(deals)
+        .where(and(eq(deals.tenantId, tenantId), eq(deals.id, input.dealId)));
+
+      if (!deal) throw new TRPCError({ code: "NOT_FOUND", message: "Deal not found." });
 
       // Find the won stage.
       const [wonStage] = await db
@@ -268,6 +306,12 @@ export const dealsRouter = router({
           payload: { dealId: input.dealId, tenantId },
         });
       });
+
+      await markDealNotificationsHandled({
+        tenantId,
+        dealId: input.dealId,
+        contactId: deal.contactId,
+      });
     }),
 
   // Mark a deal as lost with an optional reason.
@@ -275,6 +319,12 @@ export const dealsRouter = router({
     .input(z.object({ dealId: z.string().uuid(), reason: z.string().max(300).optional() }))
     .mutation(async ({ ctx, input }) => {
       const { tenantId } = ctx.tenantCtx;
+      const [deal] = await db
+        .select({ id: deals.id, contactId: deals.contactId })
+        .from(deals)
+        .where(and(eq(deals.tenantId, tenantId), eq(deals.id, input.dealId)));
+
+      if (!deal) throw new TRPCError({ code: "NOT_FOUND", message: "Deal not found." });
 
       const [lostStage] = await db
         .select({ id: dealStages.id })
@@ -305,6 +355,12 @@ export const dealsRouter = router({
           type: "deal.lost",
           payload: { dealId: input.dealId, tenantId, reason: input.reason },
         });
+      });
+
+      await markDealNotificationsHandled({
+        tenantId,
+        dealId: input.dealId,
+        contactId: deal.contactId,
       });
     }),
 
