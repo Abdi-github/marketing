@@ -1,6 +1,7 @@
 import {
   SMS_AUTOMATION_QUEUE_NAME,
   SMS_SEND_QUEUE_NAME,
+  SMS_SEQUENCE_TICK_QUEUE_NAME,
   SMS_SEQUENCE_TRIGGER_QUEUE_NAME,
   SMS_WEBHOOK_QUEUE_NAME,
   type SmsAutomationJob,
@@ -85,6 +86,19 @@ export function enqueueSmsSequenceTriggerJob(
     jobId: `sms-trigger-${data.eventId}`,
     ...options,
   });
+}
+
+export function enqueueSmsSequenceTickJob(options?: JobsOptions): Promise<void> {
+  return addJob(
+    SMS_SEQUENCE_TICK_QUEUE_NAME,
+    "tick",
+    {},
+    {
+      jobId: `sms-sequence-tick-${Date.now()}`,
+      attempts: 1,
+      ...options,
+    },
+  );
 }
 
 export function enqueueSmsWebhookJob(webhookEventId: string, options?: JobsOptions): Promise<void> {

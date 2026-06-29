@@ -11,8 +11,54 @@ We are in the manual CRM walkthrough for **Abdi Restaurant**.
 The active scenario is:
 
 ```text
-Scenario 6: Segments and reusable customer lists
+Scenario 8: Email/SMS sequence follow-up
 ```
+
+Scenario 8 working rule:
+
+- Continue the walkthrough now with Email/SMS sequence follow-up.
+- For each Scenario 8 step, record practical notes in this file:
+  - what worked
+  - what confused the tenant/staff experience
+  - what UI copy should be improved
+  - what logic or automation should be fixed
+  - whether the issue is blocking or can wait
+- After the full application walkthrough is complete, come back and run a browser retest of Scenarios 1-7 to confirm the new CRM UX still behaves correctly after the latest UI changes.
+
+Latest Scenario 8 checkpoint:
+
+- Staff opened **Sequences** and saw the email sequence dashboard.
+- The page shows `Email sender not ready`, because email automation still depends on finalizing sender/domain configuration after Resend domain verification.
+- Decision: continue Scenario 8 through **SMS automation** first, because the application is multi-channel and SMS is already working in the restaurant walkthrough.
+- Email automation remains in scope, but it will be finalized after the broader application walkthrough and after the verified sender setup is wired into the product experience.
+- Staff opened **SMS automation**.
+- SMS automation is available on the Starter plan with visible usage: `30/50` monthly SMS used and `20` remaining.
+- The verified business phone is visible: `+41762147690`.
+- Restaurant SMS presets are already installed and active:
+  - `Reservation details recovery`
+  - `Confirmed reservation follow-up`
+- The screen supports:
+  - creating SMS templates
+  - drafting with AI
+  - building a manual sequence
+  - pausing active sequences
+  - manually enrolling a phone contact
+  - viewing recent enrollments
+- Staff opened manual enrollment dropdowns:
+  - `Choose manual sequence` only showed the placeholder and no usable sequence.
+  - `Choose phone contact` showed `Abdi CRM Manual Guest (+41762147690)`.
+- Conclusion: contact selection works, but manual enrollment is not usable until there is a manual/enrollable sequence. The UI should explain this or provide a shortcut to create one.
+- Staff created an SMS template named `Post-visit thank you`.
+- The `Choose template` dropdown now shows two `Post-visit thank you` options, plus `Missing reservation details`, `Reservation confirmed`, and `Reservation reminder`.
+- Conclusion: template creation works, but duplicate template names are not distinguished. The UI should prevent duplicate names or show creation date/status/purpose so staff can pick the right one.
+- Fix implemented: SMS template dropdown labels now include category and source, for example preset/custom, so duplicate names are easier to distinguish.
+- Staff created and activated a manual sequence named `Manual post-visit thank you`.
+- Staff enrolled `Abdi CRM Manual Guest (+41762147690)` and saw `Contact enrollment queued`.
+- Important observation: the Inbox messages visible after enrollment were old reservation/automation messages. The expected post-visit message beginning `Abdi Restaurant: Thank you for visiting us...` was not present.
+- Fix implemented: manual SMS enrollment now creates or restarts a real due enrollment, requires an active manual sequence, wakes the SMS sequence worker, and returns a clearer scheduled first-step message.
+- Safety behavior: if the selected manual sequence contains marketing SMS steps, enrollment is blocked unless the contact has explicit SMS marketing opt-in. The UI should explain this instead of silently showing a queued state.
+- Verification: `pnpm.cmd --filter @marketing/web typecheck` passed after the manual SMS enrollment fix.
+- The walkthrough should explain sequence concepts in plain restaurant-owner language: who receives the messages, when they are sent, what consent is needed, and what staff should review before activation.
 
 Latest Scenario 6 checkpoint:
 
@@ -61,8 +107,9 @@ Verification for this pass:
 - `pnpm.cmd --filter @marketing/web typecheck` passed.
 - Focused `eslint --max-warnings 0` passed for all touched CRM, Inbox, notification, segment, SMS extraction, and form-submission files.
 
-Browser verification still needed after deploy/restart:
+Post-walkthrough browser regression checkpoint:
 
+- After the broader application walkthrough is complete, retest Scenarios 1-7 in the browser to confirm the new CRM UX behaves correctly after the latest UI modification.
 - Submit one new reservation from the public page and confirm the first Inbox message is `Website form request`.
 - Open the contact drawer and confirm the top panel is action-focused rather than event-log-heavy.
 - Reply/confirm from Inbox and verify notifications disappear or move out of the active list.
@@ -311,8 +358,62 @@ These are the remaining follow-ups after the CRM improvement pass.
 
 - Scenario documentation should include the actual screenshots from the user's walkthrough once each scenario is finished.
 - Production must be redeployed before the user sees the latest Inbox, Contacts, Notifications, form-submission, and Segment improvements.
-- After redeploy, complete a short browser regression for Scenarios 1-7 before starting Scenario 8.
+- After the full walkthrough, complete a browser regression for Scenarios 1-7 so the new Contacts, Inbox, Notifications, Deals, Segments, and Duplicates UX is confirmed in the real tenant flow.
 - Consider a later dedicated CRM archive/history view if old activity events are still useful but too long for the daily staff drawer.
+
+## Scenario 8 Notes To Capture
+
+Use this section during the Email/SMS sequence walkthrough.
+
+- Sequence setup notes:
+  - The current `Sequences` page is email-first. For a multi-channel SaaS, this may confuse tenants who want SMS-first automation.
+  - Need to verify whether SMS sequences live only under `SMS automation` or whether the main `Sequences` page should become multi-channel.
+  - SMS automation screen already has the core objects needed for restaurant follow-up: templates, sequences, AI draft, manual enrollment, active presets, and enrollment history.
+  - Recent enrollments show `Completed`, but the displayed `next run` timestamps are in the past. This wording is confusing; completed enrollments should say `Completed on ...` or hide `next run`.
+- Template/preset notes:
+  - Email template/preset review is deferred until email sender setup is finalized.
+  - SMS presets should be reviewed first for restaurant use cases such as reservation confirmation, reminder, missing details, and post-visit follow-up.
+  - Restaurant presets appear installed already. Need to verify what templates they created and whether the wording is appropriate.
+  - Duplicate template names are possible or visible. `Post-visit thank you` appeared twice after saving, likely because a preset template already existed.
+- Consent and opt-out notes:
+  - SMS marketing/nurture sequences should require explicit SMS consent.
+  - Transactional reservation follow-up can be allowed for the active customer request, but opt-out behavior must remain visible and reliable.
+- Manual enrollment notes:
+  - Phone contact selection works; `Abdi CRM Manual Guest (+41762147690)` appears.
+  - Manual sequence selection is empty. This is confusing because the page shows active sequences above, but none are available for manual enrollment.
+  - Improvement needed: show only manually enrollable sequences, explain why automatic trigger sequences cannot be manually selected, or add a `Create manual sequence` shortcut.
+  - Manual sequence creation supports `Manual enrollment` as a trigger, so the empty manual enrollment dropdown is likely because no manual sequence had been saved yet.
+  - The sequence-level intent dropdown offers `Reservation`, `Callback`, `Quote`, and `General inquiry`.
+  - The step-level purpose dropdown offers `Marketing (consent required)` for post-visit follow-up, which is the correct safety model for nurture messages.
+  - A paused manual sequence named `Manual post-visit thank you` was created successfully and appears in the manual enrollment dropdown.
+  - Manual enrollment correctly requires choosing both a manual sequence and a phone contact before enrollment.
+  - The sequence remains paused after saving, so enrollment should not be tested until activation/consent behavior is understood.
+  - After activation, `Manual post-visit thank you` changed to Active and the `Enroll contact` button became enabled.
+  - Clicking `Enroll contact` showed `Contact enrollment queued`, but no SMS arrived immediately and the recent enrollments area did not visibly add the new manual enrollment without further checking.
+  - The Inbox messages visible after enrollment were old messages. The new post-visit thank-you SMS was not present.
+  - Fix implemented: manual enrollment now validates active/manual sequence state, checks marketing SMS consent, creates or restarts the enrollment, and triggers the sequence tick worker immediately.
+  - Expected after redeploy/restart: enrollment should either show a clear marketing-consent blocker or schedule the first step and produce a new Inbox/SMS message when the worker runs.
+  - Improvement needed: after manual enrollment, the page should show a clear queued/scheduled row with sequence name, contact, next run time, send status, and a refresh/check status action.
+  - After refreshing, the SMS automation page still did not show a `Manual post-visit thank you` row under Recent enrollments, and monthly usage stayed at `30/50`.
+  - The Inbox thread did show automation messages, including queued automation bubbles and at least one delivered automation bubble, so the staff-facing status is split across pages.
+  - Improvement needed: SMS automation, Inbox, and Integrations should show the same send/enrollment status so staff can trust whether a sequence actually sent.
+- AI-assisted drafting notes:
+  - AI-assisted sequence drafting should not auto-activate sends. Staff should review and activate manually.
+- Sending/delivery/status notes:
+  - SMS delivery status should be checked in Inbox/SMS automation before judging a sequence successful.
+- UI or wording improvements:
+  - The email sequence dashboard should say clearly that email is unavailable until sender setup is complete, but SMS automation can still be used from the SMS automation area.
+  - Consider renaming the sidebar item from `Sequences` to `Email sequences` or creating a unified `Automations` page with Email and SMS tabs.
+  - SMS automation should explain the difference between transactional messages and marketing messages in more ordinary language.
+  - Manual enrollment should explain which contacts are eligible and why some contacts may not appear in the phone contact dropdown.
+  - The `Install restaurant presets` button still appears even though presets are already installed. It should become `Restaurant presets installed`, `Reinstall presets`, or hide after install.
+  - Template dropdowns should show more context than name only, for example `Post-visit thank you - custom` vs `Post-visit thank you - preset`.
+- Logic/functionality fixes:
+  - Need to verify whether SMS sequence creation, activation, enrollment, pausing, and delivery tracking are all available from the tenant UI.
+  - Need to verify that pausing a sequence stops future scheduled sends.
+  - Need to verify that manual enrollment respects consent, suppression, monthly limits, and duplicate enrollment protection.
+  - Manual enrollment currently appears blocked because no manual sequence is available in the dropdown. Need to verify whether this is missing data, missing UI support, or trigger filtering that excludes the existing active restaurant presets.
+  - Template creation should either block duplicate names per tenant or clearly distinguish duplicates in dropdowns.
 
 ## Next Ordered Scenarios
 
@@ -320,8 +421,8 @@ These are the remaining follow-ups after the CRM improvement pass.
 2. Scenario 5: Inbox reply and follow-up -> show daily conversation workflow.
 3. Scenario 6: Segments for reservation leads.
 4. Scenario 7: Duplicates and returning customers.
-5. Regression checkpoint: confirm the CRM improvement pass in browser after deploy/restart.
-6. Scenario 8: Email or SMS sequence follow-up.
+5. Scenario 8: Email or SMS sequence follow-up.
+6. Later checkpoint: retest Scenarios 1-7 in browser after the broader walkthrough and latest UI modifications.
 
 ## Rule For The Assistant
 

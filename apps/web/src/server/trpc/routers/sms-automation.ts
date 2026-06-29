@@ -3,6 +3,7 @@ import {
   contacts,
   db,
   smsAutomationJobs,
+  smsPreferences,
   smsSequenceEnrollments,
   smsSequences,
   smsTemplates,
@@ -13,7 +14,7 @@ import { TRPCError } from "@trpc/server";
 import { and, desc, eq, isNotNull } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { enqueueSmsAutomationJob, enqueueSmsSequenceTriggerJob } from "../../queues/sms";
+import { enqueueSmsAutomationJob, enqueueSmsSequenceTickJob } from "../../queues/sms";
 import { requires, router, tenantProcedure } from "../trpc";
 
 const stepSchema = z.object({
@@ -181,7 +182,13 @@ export const smsAutomationRouter = router({
       const tenantId = ctx.tenantCtx.tenantId;
       const [[sequence], [contact]] = await Promise.all([
         db
-          .select({ id: smsSequences.id })
+          .select({
+            id: smsSequences.id,
+            name: smsSequences.name,
+            triggerEvent: smsSequences.triggerEvent,
+            status: smsSequences.status,
+            steps: smsSequences.steps,
+          })
           .from(smsSequences)
           .where(and(eq(smsSequences.tenantId, tenantId), eq(smsSequences.id, input.sequenceId)))
           .limit(1),
@@ -194,17 +201,101 @@ export const smsAutomationRouter = router({
       if (!sequence || !contact?.phone) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Sequence or phone contact missing." });
       }
-      normalizeSmsPhone(contact.phone);
-      const eventId = randomUUID();
-      await enqueueSmsSequenceTriggerJob({
-        tenantId,
-        eventId,
-        eventType: "manual",
-        sequenceId: sequence.id,
-        contactId: contact.id,
-        payload: {},
-      });
-      return { queued: true };
+      if (sequence.triggerEvent !== "manual") {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "Only manual SMS sequences can be enrolled from this control.",
+        });
+      }
+      if (sequence.status !== "active") {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "Activate the SMS sequence before enrolling a contact.",
+        });
+      }
+
+      const steps = z.array(stepSchema).min(1).parse(sequence.steps);
+      const phone = normalizeSmsPhone(contact.phone);
+      const hasMarketingStep = steps.some((step) => step.purpose === "marketing");
+
+      if (hasMarketingStep) {
+        const [preference] = await db
+          .select({
+            marketingOptIn: smsPreferences.marketingOptIn,
+            status: smsPreferences.status,
+          })
+          .from(smsPreferences)
+          .where(and(eq(smsPreferences.tenantId, tenantId), eq(smsPreferences.phone, phone)))
+          .limit(1);
+
+        if (!preference || preference.status !== "active" || !preference.marketingOptIn) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message:
+              "This sequence includes marketing SMS. The contact must opt in to SMS marketing before enrollment.",
+          });
+        }
+      }
+
+      const now = new Date();
+      const nextRunAt = new Date(now.getTime() + steps[0]!.delay_minutes * 60_000);
+      const [existing] = await db
+        .select({ id: smsSequenceEnrollments.id })
+        .from(smsSequenceEnrollments)
+        .where(
+          and(
+            eq(smsSequenceEnrollments.tenantId, tenantId),
+            eq(smsSequenceEnrollments.sequenceId, sequence.id),
+            eq(smsSequenceEnrollments.contactId, contact.id),
+          ),
+        )
+        .limit(1);
+
+      const [enrollment] = existing
+        ? await db
+            .update(smsSequenceEnrollments)
+            .set({
+              currentStep: 0,
+              status: "enrolled",
+              nextRunAt,
+              enrolledAt: now,
+              completedAt: null,
+              leadId: null,
+              updatedAt: now,
+            })
+            .where(
+              and(
+                eq(smsSequenceEnrollments.tenantId, tenantId),
+                eq(smsSequenceEnrollments.id, existing.id),
+              ),
+            )
+            .returning()
+        : await db
+            .insert(smsSequenceEnrollments)
+            .values({
+              tenantId,
+              sequenceId: sequence.id,
+              contactId: contact.id,
+              nextRunAt,
+              enrolledAt: now,
+            })
+            .returning();
+
+      if (!enrollment) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Could not create SMS sequence enrollment.",
+        });
+      }
+
+      await enqueueSmsSequenceTickJob({ delay: 0 });
+      return {
+        queued: true,
+        enrollmentId: enrollment.id,
+        status: enrollment.status,
+        nextRunAt: enrollment.nextRunAt,
+        firstStepPurpose: steps[0]!.purpose,
+      };
     }),
 
   installRestaurantPresets: requires("editor").mutation(async ({ ctx }) => {

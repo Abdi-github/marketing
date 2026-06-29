@@ -10,6 +10,32 @@ type SequenceStepDraft = {
   delayMinutes: number;
   purpose: "transactional" | "marketing";
 };
+type SmsTemplate = NonNullable<Overview>["templates"][number];
+type SmsEnrollment = NonNullable<Overview>["enrollments"][number];
+
+function formatSmsCategory(category: string | null | undefined) {
+  return category ? category.replace(/_/g, " ") : "custom";
+}
+
+function templateOptionLabel(template: SmsTemplate) {
+  const source = template.presetKey ? "preset" : "custom";
+  return `${template.name} (${formatSmsCategory(template.category)}, ${source})`;
+}
+
+function formatEnrollmentTiming(enrollment: SmsEnrollment) {
+  if (enrollment.status === "completed") {
+    return enrollment.completedAt
+      ? `Completed ${new Date(enrollment.completedAt).toLocaleString()}`
+      : "Completed";
+  }
+  if (enrollment.status === "exited") return "Exited";
+  if (enrollment.status === "paused") {
+    return `Paused, next run ${new Date(enrollment.nextRunAt).toLocaleString()}`;
+  }
+  return `Step ${enrollment.currentStep + 1}, next run ${new Date(
+    enrollment.nextRunAt,
+  ).toLocaleString()}`;
+}
 
 export default function SmsAutomationPage() {
   const [overview, setOverview] = useState<Overview | null>(null);
@@ -55,6 +81,13 @@ export default function SmsAutomationPage() {
   const templateMap = useMemo(
     () => new Map((overview?.templates ?? []).map((template) => [template.id, template])),
     [overview],
+  );
+  const manualSequences = useMemo(
+    () => (overview?.sequences ?? []).filter((sequence) => sequence.triggerEvent === "manual"),
+    [overview],
+  );
+  const selectedManualSequence = manualSequences.find(
+    (sequence) => sequence.id === selectedSequence,
   );
 
   async function run(action: () => Promise<unknown>, success: string) {
@@ -138,6 +171,28 @@ export default function SmsAutomationPage() {
       throw new Error("AI drafting is still running. Refresh this page shortly.");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "AI drafting failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function enrollSelectedContact() {
+    if (!selectedSequence || !selectedContact) return;
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await trpc.smsAutomation.enrollContact.mutate({
+        sequenceId: selectedSequence,
+        contactId: selectedContact,
+      });
+      const due = result.nextRunAt ? new Date(result.nextRunAt).toLocaleString() : "shortly";
+      setNotice(
+        `Contact enrolled. First SMS step is scheduled for ${due}. Refresh Inbox shortly to see the send status.`,
+      );
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not enroll contact.");
     } finally {
       setBusy(false);
     }
@@ -369,7 +424,7 @@ export default function SmsAutomationPage() {
                         <option value="">Choose template</option>
                         {(overview?.templates ?? []).map((template) => (
                           <option key={template.id} value={template.id}>
-                            {template.name}
+                            {templateOptionLabel(template)}
                           </option>
                         ))}
                       </select>
@@ -523,13 +578,22 @@ export default function SmsAutomationPage() {
               onChange={(event) => setSelectedSequence(event.target.value)}
             >
               <option value="">Choose manual sequence</option>
-              {(overview?.sequences ?? [])
-                .filter((sequence) => sequence.triggerEvent === "manual")
-                .map((sequence) => (
-                  <option key={sequence.id} value={sequence.id}>
+              {manualSequences.length === 0 ? (
+                <option value="" disabled>
+                  No manual sequences yet
+                </option>
+              ) : (
+                manualSequences.map((sequence) => (
+                  <option
+                    key={sequence.id}
+                    value={sequence.id}
+                    disabled={sequence.status !== "active"}
+                  >
                     {sequence.name}
+                    {sequence.status !== "active" ? ` (${sequence.status})` : ""}
                   </option>
-                ))}
+                ))
+              )}
             </select>
             <select
               className={inputClass}
@@ -547,20 +611,20 @@ export default function SmsAutomationPage() {
             <button
               type="button"
               className={buttonClass}
-              disabled={busy || !selectedSequence || !selectedContact}
-              onClick={() =>
-                void run(
-                  () =>
-                    trpc.smsAutomation.enrollContact.mutate({
-                      sequenceId: selectedSequence,
-                      contactId: selectedContact,
-                    }),
-                  "Contact enrollment queued.",
-                )
+              disabled={
+                busy ||
+                !selectedSequence ||
+                !selectedContact ||
+                selectedManualSequence?.status !== "active"
               }
+              onClick={() => void enrollSelectedContact()}
             >
               Enroll contact
             </button>
+            <p className="text-xs leading-5 text-gray-500">
+              Only active manual sequences can be enrolled. Marketing SMS steps require the
+              contact's explicit SMS marketing opt-in.
+            </p>
           </div>
         </div>
 
@@ -577,10 +641,7 @@ export default function SmsAutomationPage() {
                     {overview?.sequences.find((sequence) => sequence.id === enrollment.sequenceId)
                       ?.name ?? "SMS sequence"}
                   </div>
-                  <div className="text-gray-500">
-                    Step {enrollment.currentStep + 1}, next run{" "}
-                    {new Date(enrollment.nextRunAt).toLocaleString()}
-                  </div>
+                  <div className="text-gray-500">{formatEnrollmentTiming(enrollment)}</div>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="capitalize text-gray-600">{enrollment.status}</span>
