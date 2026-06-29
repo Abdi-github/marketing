@@ -8,6 +8,7 @@ import {
   integrationConnections,
   leads,
   messages,
+  notifications,
   outbox,
   subscriptions,
   tenants,
@@ -34,7 +35,7 @@ import { TRPCError } from "@trpc/server";
 import { and, desc, eq, gte, inArray, isNotNull, or, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { enqueueSmsSendJob, enqueueSmsSequenceTriggerJob } from "../../queues/sms";
+import { enqueueSmsSequenceTriggerJob } from "../../queues/sms";
 import { tenantProcedure, router } from "../trpc";
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -62,6 +63,47 @@ function valueFromAnyKey(source: Record<string, unknown>, keys: string[]): strin
     }
   }
   return null;
+}
+
+async function dismissContactNotifications(input: {
+  tenantId: string;
+  contactId: string | null;
+  leadId?: string | null;
+  types?: string[];
+}) {
+  const entityFilter =
+    input.contactId && input.leadId
+      ? or(
+          and(eq(notifications.entityType, "contact"), eq(notifications.entityId, input.contactId)),
+          and(eq(notifications.entityType, "lead"), eq(notifications.entityId, input.leadId)),
+        )
+      : input.contactId
+        ? and(eq(notifications.entityType, "contact"), eq(notifications.entityId, input.contactId))
+        : input.leadId
+          ? and(eq(notifications.entityType, "lead"), eq(notifications.entityId, input.leadId))
+          : null;
+  if (!entityFilter) return;
+
+  const dismissedAt = new Date();
+  const filters = [
+    eq(notifications.tenantId, input.tenantId),
+    isNotNull(notifications.id),
+    entityFilter,
+    sql`${notifications.dismissedAt} is null`,
+  ];
+  if (input.types?.length) {
+    filters.push(inArray(notifications.type, input.types));
+  }
+
+  await db
+    .update(notifications)
+    .set({
+      status: "dismissed",
+      readAt: dismissedAt,
+      dismissedAt,
+      updatedAt: dismissedAt,
+    })
+    .where(and(...filters));
 }
 
 function leadChannelPreference(lead: {
@@ -155,7 +197,7 @@ async function queueReservationConfirmationSms(input: {
   tenantId: string;
   leadId: string;
   contactId: string | null;
-}): Promise<{ queued: boolean; reason?: string }> {
+}): Promise<{ queued: boolean; sent?: boolean; reason?: string }> {
   if (!input.contactId) return { queued: false, reason: "Lead has no contact." };
 
   const [[lead], [contact], [profile]] = await Promise.all([
@@ -220,7 +262,7 @@ async function queueReservationConfirmationSms(input: {
       ),
     )
     .limit(1);
-  if (existing) return { queued: false, reason: "Reservation confirmation already queued." };
+  if (existing) return { queued: false, reason: "Reservation confirmation already exists." };
 
   const payload = { ...asRecord(lead.payload), ...asRecord(lead.structuredData) };
   const copy = buildLeadConfirmationCopy({
@@ -236,6 +278,15 @@ async function queueReservationConfirmationSms(input: {
     payload,
   });
   const providerHealth = getSmsProviderHealth(env);
+  let credentials: Awaited<ReturnType<typeof resolveSmsForInboxTenant>>;
+  try {
+    credentials = await resolveSmsForInboxTenant(input.tenantId);
+  } catch (error) {
+    return {
+      queued: false,
+      reason: error instanceof Error ? error.message : "SMS provider is not ready.",
+    };
+  }
 
   const [message] = await db
     .insert(messages)
@@ -244,7 +295,7 @@ async function queueReservationConfirmationSms(input: {
       contactId: input.contactId,
       channel: "sms",
       direction: "outbound",
-      fromAddress: providerHealth.senderLabel,
+      fromAddress: credentials.senderAddress,
       toAddress,
       body,
       messageType: "reservation_confirmation",
@@ -256,14 +307,81 @@ async function queueReservationConfirmationSms(input: {
         trigger: "reservation_confirmed",
         provider: providerHealth.provider,
         providerLabel: providerHealth.providerLabel,
+        credentialMode: credentials.mode,
         acknowledgementSubject: copy.subject,
       },
     })
     .returning({ id: messages.id });
 
   if (!message) return { queued: false, reason: "Could not create SMS message." };
-  await enqueueSmsSendJob({ tenantId: input.tenantId, messageId: message.id });
-  return { queued: true };
+  try {
+    const result = await sendSmsViaConfiguredProvider(credentials, {
+      to: toAddress,
+      text: body,
+    });
+    await db
+      .update(messages)
+      .set({
+        status: result.sandbox ? "delivered" : "sent",
+        externalId: result.messageId,
+        fromAddress: result.fromAddress,
+        toAddress: result.toAddress,
+        errorMessage: null,
+        meta: {
+          automated: true,
+          leadId: input.leadId,
+          purpose: "sequence_transactional",
+          trigger: "reservation_confirmed",
+          provider: result.provider,
+          providerLabel: result.providerLabel,
+          credentialMode: credentials.mode,
+          acknowledgementSubject: copy.subject,
+          segmentCount: result.segmentCount,
+          statusCode: result.statusCode,
+          statusInfo: result.statusInfo,
+          sandbox: result.sandbox,
+        },
+      })
+      .where(and(eq(messages.tenantId, input.tenantId), eq(messages.id, message.id)));
+
+    if (!result.sandbox) {
+      await db.insert(usageRecords).values([
+        {
+          tenantId: input.tenantId,
+          metric: "sms_sent",
+          quantity: 1,
+        },
+        {
+          tenantId: input.tenantId,
+          metric: "sms_segments",
+          quantity: Math.max(1, result.segmentCount),
+        },
+      ]);
+    }
+
+    return { queued: false, sent: true };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "SMS send failed.";
+    await db
+      .update(messages)
+      .set({
+        status: "failed",
+        errorMessage,
+        meta: {
+          automated: true,
+          leadId: input.leadId,
+          purpose: "sequence_transactional",
+          trigger: "reservation_confirmed",
+          provider: providerHealth.provider,
+          providerLabel: providerHealth.providerLabel,
+          credentialMode: credentials.mode,
+          sendFailedAt: new Date().toISOString(),
+        },
+      })
+      .where(and(eq(messages.tenantId, input.tenantId), eq(messages.id, message.id)));
+
+    return { queued: false, reason: errorMessage };
+  }
 }
 
 async function resolveSmsForInboxTenant(tenantId: string) {
@@ -959,12 +1077,21 @@ export const inboxRouter = router({
             })
           : { queued: false };
 
+      if (["confirmed", "declined", "cancelled"].includes(input.workflowState)) {
+        await dismissContactNotifications({
+          tenantId,
+          contactId: lead.contactId,
+          leadId: lead.id,
+        });
+      }
+
       return {
         leadId: lead.id,
         workflowKind: lead.workflowKind,
         workflowState: input.workflowState,
         status: input.status,
         confirmationSmsQueued: confirmation.queued,
+        confirmationSmsSent: confirmation.sent ?? false,
         confirmationSmsReason: confirmation.reason ?? null,
       };
     }),
@@ -1242,6 +1369,12 @@ export const inboxRouter = router({
             },
           ]);
         }
+
+        await dismissContactNotifications({
+          tenantId,
+          contactId: input.contactId,
+          types: ["inbox.reply_needed"],
+        });
 
         return {
           messageId: message.id,

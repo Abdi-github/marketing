@@ -70,6 +70,7 @@ export function NotificationBell() {
   const [preferences, setPreferences] = useState<NotificationPreferences | null>(null);
   const [staffSmsPhone, setStaffSmsPhone] = useState("");
   const [savingPreferences, setSavingPreferences] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -149,6 +150,37 @@ export function NotificationBell() {
     await trpc.notifications.dismiss.mutate({ notificationId }).catch(() => void load());
   }
 
+  async function dismissHandled() {
+    setBulkBusy(true);
+    try {
+      await trpc.notifications.dismissHandled.mutate();
+      await load();
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  async function dismissVisible() {
+    const notificationIds = visibleRows.map((row) => row.id);
+    if (notificationIds.length === 0) return;
+    const confirmed = window.confirm(
+      `Dismiss ${notificationIds.length} visible staff notification${
+        notificationIds.length === 1 ? "" : "s"
+      }? This hides them from the drawer but does not delete CRM history.`,
+    );
+    if (!confirmed) return;
+    setBulkBusy(true);
+    setRows((current) => current.filter((row) => !notificationIds.includes(row.id)));
+    try {
+      await trpc.notifications.dismissMany.mutate({ notificationIds });
+      await load();
+    } catch {
+      await load();
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
   async function savePreferences() {
     if (!preferences) return;
     setSavingPreferences(true);
@@ -223,13 +255,35 @@ export function NotificationBell() {
           </div>
 
           <div className="border-b border-slate-100 px-4 py-2">
-            <button
-              type="button"
-              onClick={() => setSettingsOpen((value) => !value)}
-              className="text-xs font-semibold text-slate-600 hover:text-slate-950"
-            >
-              {settingsOpen ? "Hide alert settings" : "Alert settings"}
-            </button>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => setSettingsOpen((value) => !value)}
+                className="text-xs font-semibold text-slate-600 hover:text-slate-950"
+              >
+                {settingsOpen ? "Hide alert settings" : "Alert settings"}
+              </button>
+              {visibleRows.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void dismissHandled()}
+                    disabled={bulkBusy}
+                    className="rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    Clear handled
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void dismissVisible()}
+                    disabled={bulkBusy}
+                    className="rounded-md border border-red-200 px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
+                  >
+                    Dismiss visible
+                  </button>
+                </div>
+              )}
+            </div>
             {settingsOpen && preferences && (
               <div className="mt-3 space-y-3 rounded-lg bg-slate-50 p-3">
                 <label className="flex items-center justify-between gap-3 text-xs font-medium text-slate-700">

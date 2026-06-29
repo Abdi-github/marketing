@@ -883,11 +883,13 @@ function DetailPanel({
       .catch(() => null);
     if (result && input.workflowState === "confirmed") {
       setLeadActionNotice(
-        result.confirmationSmsQueued
-          ? "Reservation confirmed. A customer confirmation SMS is queued and will appear in the Inbox timeline."
-          : `Reservation confirmed. No SMS was queued: ${
-              result.confirmationSmsReason ?? "the customer or tenant settings did not choose SMS"
-            }.`,
+        result.confirmationSmsSent
+          ? "Reservation confirmed. A customer confirmation SMS was sent and will appear in the Inbox timeline."
+          : result.confirmationSmsQueued
+            ? "Reservation confirmed. A customer confirmation SMS is queued and will appear in the Inbox timeline."
+            : `Reservation confirmed. No SMS was queued: ${
+                result.confirmationSmsReason ?? "the customer or tenant settings did not choose SMS"
+              }.`,
       );
     } else if (result) {
       setLeadActionNotice("Lead status updated.");

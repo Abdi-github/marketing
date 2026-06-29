@@ -1,7 +1,7 @@
 import { db, notificationPreferences, notifications } from "@marketing/db";
 import { logger, normalizeSmsPhone } from "@marketing/shared";
 import { TRPCError } from "@trpc/server";
-import { and, count, desc, eq, isNull } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { requires, router, tenantProcedure } from "../trpc";
 
@@ -85,6 +85,62 @@ export const notificationsRouter = router({
       );
       return { ok: true };
     }),
+
+  dismissMany: tenantProcedure
+    .input(
+      z.object({
+        notificationIds: z.array(z.string().uuid()).min(1).max(100),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const dismissedAt = new Date();
+      const rows = await db
+        .update(notifications)
+        .set({
+          status: "dismissed",
+          dismissedAt,
+          readAt: dismissedAt,
+          updatedAt: dismissedAt,
+        })
+        .where(
+          and(
+            eq(notifications.tenantId, ctx.tenantCtx.tenantId),
+            inArray(notifications.id, input.notificationIds),
+            isNull(notifications.dismissedAt),
+          ),
+        )
+        .returning({ id: notifications.id });
+      logger.info(
+        { tenantId: ctx.tenantCtx.tenantId, count: rows.length },
+        "[notifications] dismissed many",
+      );
+      return { ok: true, count: rows.length };
+    }),
+
+  dismissHandled: tenantProcedure.mutation(async ({ ctx }) => {
+    const dismissedAt = new Date();
+    const rows = await db
+      .update(notifications)
+      .set({
+        status: "dismissed",
+        dismissedAt,
+        readAt: dismissedAt,
+        updatedAt: dismissedAt,
+      })
+      .where(
+        and(
+          eq(notifications.tenantId, ctx.tenantCtx.tenantId),
+          eq(notifications.status, "read"),
+          isNull(notifications.dismissedAt),
+        ),
+      )
+      .returning({ id: notifications.id });
+    logger.info(
+      { tenantId: ctx.tenantCtx.tenantId, count: rows.length },
+      "[notifications] dismissed handled",
+    );
+    return { ok: true, count: rows.length };
+  }),
 
   getPreferences: tenantProcedure.query(async ({ ctx }) => {
     const [existing] = await db

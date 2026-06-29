@@ -11,32 +11,30 @@ We are in the manual CRM walkthrough for **Abdi Restaurant**.
 The active scenario is:
 
 ```text
-Scenario 4: Private dining / quote request -> create a Deal
+Scenario 5: Inbox follow-up and daily conversation workflow
 ```
 
-Temporary blocker:
-
-- Production session/login became unstable again during Scenario 4.
-- The browser redirected to login.
-- Email/password login returned `POST /api/auth/sign-in/email 500`.
-- The login page has been simplified so it no longer makes a pre-login sign-out request.
-- The auth route now logs Better Auth handler failures on the server so Vercel logs can reveal the real backend exception.
-- Production auth now derives a non-localhost Better Auth base URL from the deployed app URL when `BETTER_AUTH_URL` is missing or accidentally still points to localhost.
-- CRM walkthrough should resume at Scenario 4 after production login is stable again.
-
-Scenario 3 is completed. Scenario 4 is now in progress. The latest confirmed Scenario 4 result is:
+Scenario 4 is completed. The latest confirmed Scenario 4 result is:
 
 - Staff created a private/family dinner deal from the customer request.
-- The deal appears in the **Inquiry** column.
-- The deal value is `CHF 720`.
-- The pipeline forecast shows `Total open: CHF 720`.
+- The deal value was `CHF 720`.
 - Staff sent an SMS follow-up from Inbox.
 - The customer received the SMS on `+41762147690`.
+- The customer replied by SMS that the proposed offer works and asked the restaurant to reserve it.
+- Staff moved/closed the deal as **Won**.
+- The deal appears in the **Won** column.
+- The pipeline forecast shows `Total open: CHF 0`, `Win rate: 100%`, and the Won column shows `CHF 720`.
+- In Scenario 5, staff opened the Inbox thread and confirmed the customer acceptance message is visible:
+  `Yes, that works for us. Please reserve it.`
+- Inbox top counters show `Needs staff attention: 0`, so the conversation itself is not asking for staff action anymore.
+- The notification drawer still shows old `Customer replied by SMS`, `New reservation request`, and `Reservation request needs details` alerts, even after related work was handled.
+- A fix has now been implemented so staff can clear handled notifications in bulk, dismiss all visible notifications, and future staff replies / reservation final actions auto-dismiss related alerts.
+- A fix has also been implemented so future staff reservation confirmation SMS sends update the Inbox message immediately as sent/delivered/failed instead of relying only on the background queue.
 
 So Scenario 4 has reached:
 
 ```text
-Customer request -> CRM contact -> deal created -> SMS follow-up sent -> customer received SMS
+Customer request -> CRM contact -> deal created -> SMS follow-up sent -> customer accepted -> deal won
 ```
 
 ## Completed Scenarios And Steps
@@ -83,38 +81,31 @@ Confirmed behavior:
 
 ### Scenario 4: Private Dining / Quote Request
 
-Status: in progress.
+Status: completed.
 
 Confirmed behavior:
 
 - Staff created `Family dinner for 12 people - Abdi Restaurant`.
-- The deal is in the `Inquiry` stage.
 - The deal amount is `CHF 720`.
-- The pipeline forecast shows `CHF 720`.
+- The deal moved through the sales pipeline.
 - Staff sent a private-dinner SMS follow-up from Inbox.
 - Customer received the SMS.
 - Staff moved the deal from `Inquiry` to `Qualified`.
 - Staff sent the customer a concrete family dinner offer by SMS:
   `For 12 guests on 2026-07-12 at 20:00, we can offer a shared family menu from around CHF 60 per person...`
-- Staff reported that there was still no reliable way to move the deal to `Won` or `Lost`, and drag-and-drop was not reliable across all stages.
 - Customer replied by SMS: `Yes, that works for us. Please reserve it.`
 - The customer reply appeared in the Inbox and created an in-app notification.
-- Staff opened the notification drawer, but the drawer had no clear close behavior and did not close when clicking outside.
-- Refreshing the production page redirected to login again, so recurring auth/session instability is blocking the walkthrough.
-- The Deals page later showed `Could not load the pipeline. Please refresh.`
-- The pipeline failure was traced to a fragile forecast query and page loader. The fix keeps the board visible even if the forecast widget fails.
+- Staff marked the deal as `Won`.
+- The deal appears in the `Won` column.
+- The pipeline forecast shows `Total open: CHF 0`, `Win rate: 100%`, and the Won column carries the CHF 720 value.
 
 Next step:
 
-- Redeploy the notification drawer and auth diagnostics fix.
-- Close the notification drawer using the new Close button, Escape key, or outside click.
-- If login redirects continue, check Vercel logs for `Better Auth route failed` or `Better Auth route returned an error response`.
-- Confirm production env has `BETTER_AUTH_URL=https://marketing-web-pied-nine.vercel.app` and `APP_URL=https://marketing-web-pied-nine.vercel.app`; the code now falls back to the deployed URL, but explicit env values are still cleaner.
-- Move the deal from `Proposal` to `Won` after production session/login is stable.
-- If the customer accepts, move it to `Won` using either the stage dropdown or the Won button.
-- If the customer refuses, move it to `Lost` using either the stage dropdown or the Lost button.
-- Verify the card appears in the final Won/Lost column and the forecast updates.
-- Redeploy the latest Deals page/router fix before retrying the pipeline in production.
+- Continue to Scenario 5: use the Inbox as the daily staff workspace.
+- Treat the current Inbox thread as handled because `Needs staff attention` is `0`.
+- After redeploy, open the notification drawer and use `Clear handled` or `Dismiss visible` to clean old notifications.
+- Submit one fresh small test lead or reply once by SMS to verify future alerts auto-clear after staff replies or confirms.
+- Continue Scenario 5 by verifying the next confirmation SMS appears as sent/delivered/failed instead of staying queued.
 
 ## Fixes Already Made During This Walkthrough
 
@@ -254,6 +245,8 @@ These are not forgotten. They should be handled as we continue the walkthrough a
 
 - The contact drawer still shows too much activity noise. It should prioritize the latest customer request, current task, recommended next step, and recent customer/staff messages.
 - Old notifications can remain visible after the staff has handled the work. Notifications need clearer lifecycle behavior: unread, read, handled, dismissed, expired.
+- Notification drawer needs grouping and bulk cleanup. A staff user should not have to dismiss every old alert one by one after completing the related work.
+- Related notifications should be auto-marked handled when a reservation is confirmed, a conversation is replied to, a task is completed, or a deal is won/lost.
 - Inbox status sometimes needs refresh/update after an action. The UI should update more predictably after confirm/decline/cancel/send.
 - The Inbox should show both customer and staff messages clearly, with better visual distinction and less confusion around old messages.
 - Scenario documentation should include the actual screenshots from the user's walkthrough once each scenario is finished.
