@@ -11,8 +11,32 @@ We are in the manual CRM walkthrough for **Abdi Restaurant**.
 The active scenario is:
 
 ```text
-Scenario 5: Inbox follow-up and daily conversation workflow
+Scenario 6: Segments and reusable customer lists
 ```
+
+Latest Scenario 6 checkpoint:
+
+- Staff created a segment named `Reservation guests`.
+- Staff added the `reservation-guest` tag to the contact.
+- The tag is visible in the contact list and in the contact drawer.
+- The first export was empty because the segment rule still matched `lifecycle_stage = lead`, but the contact had already moved to `customer`.
+- A fix has now been implemented so Segments supports practical restaurant tag-based rules:
+  - `Customer tag has tag "reservation-guest"`
+  - restaurant shortcut: `Reservation guests`
+  - restaurant shortcut: `SMS customers`
+  - restaurant shortcut: `Private dining leads`
+  - restaurant shortcut: `Confirmed reservation customers`
+- The plain-English generator now maps reservation/booking/table prompts to the `reservation-guest` tag instead of only lifecycle status.
+
+Next Scenario 6 action after the updated app is deployed or restarted:
+
+1. Open **Segments**.
+2. Edit `Reservation guests`.
+3. Click the **Reservation guests** restaurant shortcut, or set the rule manually to:
+   `Customer tag` -> `has tag` -> `reservation-guest`.
+4. Save the segment.
+5. Confirm it matches `1` contact.
+6. Download the CSV again; it should include `Abdi CRM Manual Guest`.
 
 Scenario 4 is completed. The latest confirmed Scenario 4 result is:
 
@@ -30,6 +54,8 @@ Scenario 4 is completed. The latest confirmed Scenario 4 result is:
 - The notification drawer still shows old `Customer replied by SMS`, `New reservation request`, and `Reservation request needs details` alerts, even after related work was handled.
 - A fix has now been implemented so staff can clear handled notifications in bulk, dismiss all visible notifications, and future staff replies / reservation final actions auto-dismiss related alerts.
 - A fix has also been implemented so future staff reservation confirmation SMS sends update the Inbox message immediately as sent/delivered/failed instead of relying only on the background queue.
+- Staff verified that `Clear handled` clears old notification noise.
+- Staff verified that fresh notifications disappear automatically after staff handles the related work.
 
 So Scenario 4 has reached:
 
@@ -101,11 +127,21 @@ Confirmed behavior:
 
 Next step:
 
-- Continue to Scenario 5: use the Inbox as the daily staff workspace.
-- Treat the current Inbox thread as handled because `Needs staff attention` is `0`.
-- After redeploy, open the notification drawer and use `Clear handled` or `Dismiss visible` to clean old notifications.
-- Submit one fresh small test lead or reply once by SMS to verify future alerts auto-clear after staff replies or confirms.
-- Continue Scenario 5 by verifying the next confirmation SMS appears as sent/delivered/failed instead of staying queued.
+- Continue to Scenario 6: use Segments to create reusable customer lists.
+- Create practical restaurant segments such as reservation guests, private dining leads, and SMS-preferred customers.
+- Verify whether the Segments page is clear enough for non-technical restaurant staff.
+
+### Scenario 5: Inbox Follow-Up And Daily Conversation Workflow
+
+Status: completed.
+
+Confirmed behavior:
+
+- Staff opened the Inbox thread and saw customer/staff SMS messages in one place.
+- Staff handled the latest customer reply.
+- `Needs staff attention` returned to `0`.
+- `Clear handled` cleared old notification noise.
+- Fresh notifications now disappear automatically after staff handles the related work.
 
 ## Fixes Already Made During This Walkthrough
 
@@ -250,6 +286,7 @@ These are not forgotten. They should be handled as we continue the walkthrough a
 - Inbox status sometimes needs refresh/update after an action. The UI should update more predictably after confirm/decline/cancel/send.
 - The Inbox should show both customer and staff messages clearly, with better visual distinction and less confusion around old messages.
 - Scenario documentation should include the actual screenshots from the user's walkthrough once each scenario is finished.
+- The Segments page now has restaurant shortcuts and tag-based rules, but the production app must be redeployed before the user sees them.
 
 ## Next Ordered Scenarios
 

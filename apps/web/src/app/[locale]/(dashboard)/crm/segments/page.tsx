@@ -23,10 +23,10 @@ type SegmentRow = {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const FIELDS: { value: SegmentField; label: string }[] = [
-  { value: "lifecycle_stage", label: "Lifecycle stage" },
+  { value: "lifecycle_stage", label: "Customer status" },
   { value: "lead_score", label: "Lead score" },
-  { value: "tags", label: "Tags" },
-  { value: "source", label: "Source" },
+  { value: "tags", label: "Customer tag" },
+  { value: "source", label: "First contact source" },
   { value: "email", label: "Email" },
 ];
 
@@ -54,11 +54,55 @@ const OPS_BY_FIELD: Record<SegmentField, { value: SegmentOp; label: string }[]> 
 
 const LIFECYCLE_VALUES = ["subscriber", "lead", "mql", "sql", "customer", "evangelist"];
 const SOURCE_VALUES = ["form", "landing_page", "manual", "api"];
+const TAG_SUGGESTIONS = [
+  "reservation-guest",
+  "sms-preferred",
+  "private-dining-lead",
+  "callback-request",
+  "confirmed-reservation",
+];
+
+const RESTAURANT_PRESETS: {
+  name: string;
+  description: string;
+  rule: GroupRule;
+}[] = [
+  {
+    name: "Reservation guests",
+    description: "People tagged as reservation guests, even after they become customers.",
+    rule: { op: "and", children: [{ field: "tags", op: "contains", value: "reservation-guest" }] },
+  },
+  {
+    name: "SMS customers",
+    description: "People staff can follow up with by SMS.",
+    rule: { op: "and", children: [{ field: "tags", op: "contains", value: "sms-preferred" }] },
+  },
+  {
+    name: "Private dining leads",
+    description: "Larger event, catering, or private dining opportunities.",
+    rule: {
+      op: "and",
+      children: [{ field: "tags", op: "contains", value: "private-dining-lead" }],
+    },
+  },
+  {
+    name: "Confirmed reservation customers",
+    description: "Reservation guests whose contact status is now Customer.",
+    rule: {
+      op: "and",
+      children: [
+        { field: "tags", op: "contains", value: "reservation-guest" },
+        { field: "lifecycle_stage", op: "eq", value: "customer" },
+      ],
+    },
+  },
+];
 
 function defaultValueForField(field: SegmentField): string {
   if (field === "lifecycle_stage") return "lead";
   if (field === "lead_score") return "50";
   if (field === "source") return "form";
+  if (field === "tags") return "reservation-guest";
   return "";
 }
 
@@ -68,6 +112,48 @@ function defaultOpForField(field: SegmentField): SegmentOp {
 
 function emptyRule(): GroupRule {
   return { op: "and", children: [] };
+}
+
+function lifecycleLabel(value: string): string {
+  const labels: Record<string, string> = {
+    subscriber: "Subscriber",
+    lead: "New enquiry",
+    mql: "Interested lead",
+    sql: "Ready for staff follow-up",
+    customer: "Customer",
+    evangelist: "Loyal regular",
+  };
+  return labels[value] ?? value;
+}
+
+function conditionLabel(leaf: LeafRule): string {
+  if (leaf.field === "tags") {
+    return leaf.op === "not_contains"
+      ? `Does not have tag "${leaf.value}"`
+      : `Has tag "${leaf.value}"`;
+  }
+  if (leaf.field === "lifecycle_stage") {
+    return leaf.op === "neq"
+      ? `Customer status is not ${lifecycleLabel(leaf.value)}`
+      : `Customer status is ${lifecycleLabel(leaf.value)}`;
+  }
+  if (leaf.field === "lead_score") {
+    const op = leaf.op === "gte" ? "at least" : leaf.op === "lte" ? "at most" : "exactly";
+    return `Lead score is ${op} ${leaf.value}`;
+  }
+  if (leaf.field === "source") {
+    if (leaf.op === "contains") return `First contact source contains "${leaf.value}"`;
+    return leaf.op === "neq"
+      ? `First contact source is not "${leaf.value}"`
+      : `First contact source is "${leaf.value}"`;
+  }
+  if (leaf.field === "email") return `Email contains "${leaf.value}"`;
+  return `${leaf.field} ${leaf.op} "${leaf.value}"`;
+}
+
+function ruleLabel(rule: GroupRule, fallback: string): string {
+  if (rule.children.length === 0) return fallback;
+  return rule.children.map(conditionLabel).join(rule.op === "and" ? " and " : " or ");
 }
 
 // ─── ValueInput ───────────────────────────────────────────────────────────────
@@ -90,10 +176,29 @@ function ValueInput({
       >
         {LIFECYCLE_VALUES.map((v) => (
           <option key={v} value={v}>
-            {v}
+            {lifecycleLabel(v)}
           </option>
         ))}
       </select>
+    );
+  }
+  if (field === "tags") {
+    return (
+      <div className="flex gap-1">
+        <input
+          type="text"
+          list="tag-options"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="reservation-guest"
+          className="w-44 rounded border px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+        />
+        <datalist id="tag-options">
+          {TAG_SUGGESTIONS.map((v) => (
+            <option key={v} value={v} />
+          ))}
+        </datalist>
+      </div>
     );
   }
   if (field === "source") {
@@ -369,7 +474,7 @@ function BulkActionPanel({ segment, onDone }: { segment: SegmentRow; onDone: () 
         >
           {LIFECYCLE_VALUES.map((v) => (
             <option key={v} value={v}>
-              {v}
+              {lifecycleLabel(v)}
             </option>
           ))}
         </select>
@@ -566,6 +671,28 @@ function SegmentEditor({
         </div>
       </div>
 
+      <div>
+        <label className="mb-2 block text-xs font-medium text-gray-600">Restaurant shortcuts</label>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {RESTAURANT_PRESETS.map((preset) => (
+            <button
+              key={preset.name}
+              type="button"
+              onClick={() => {
+                setName((current) => current || preset.name);
+                setRule(preset.rule);
+              }}
+              className="rounded-lg border bg-white p-3 text-left text-sm transition hover:border-blue-300 hover:bg-blue-50"
+            >
+              <span className="block font-medium text-gray-900">{preset.name}</span>
+              <span className="mt-1 block text-xs leading-relaxed text-gray-500">
+                {preset.description}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Rule builder */}
       <div>
         <label className="mb-2 block text-xs font-medium text-gray-600">{t("ruleBuilder")}</label>
@@ -736,12 +863,7 @@ export default function SegmentsPage() {
             </thead>
             <tbody>
               {rows.map((seg) => {
-                const ruleStr =
-                  seg.ruleJson.children.length > 0
-                    ? seg.ruleJson.children
-                        .map((l) => `${l.field} ${l.op} "${l.value}"`)
-                        .join(seg.ruleJson.op === "and" ? " AND " : " OR ")
-                    : t("noConditions");
+                const ruleStr = ruleLabel(seg.ruleJson, t("noConditions"));
                 return (
                   <tr key={seg.id} className="border-b last:border-0 hover:bg-gray-50">
                     <td className="px-4 py-3 font-medium text-gray-900">{seg.name}</td>

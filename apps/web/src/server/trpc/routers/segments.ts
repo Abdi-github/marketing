@@ -138,6 +138,15 @@ function echoSegmentRule(prompt: string): SegmentGroupRule {
   const children: SegmentLeafRule[] = [];
 
   // Simple keyword heuristics for testing without AI.
+  if (lower.includes("reservation") || lower.includes("booking") || lower.includes("table")) {
+    children.push({ field: "tags", op: "contains", value: "reservation-guest" });
+  }
+  if (lower.includes("sms")) {
+    children.push({ field: "tags", op: "contains", value: "sms-preferred" });
+  }
+  if (lower.includes("private dining") || lower.includes("event") || lower.includes("catering")) {
+    children.push({ field: "tags", op: "contains", value: "private-dining-lead" });
+  }
   if (lower.includes("lead")) children.push({ field: "lifecycle_stage", op: "eq", value: "lead" });
   if (lower.includes("customer"))
     children.push({ field: "lifecycle_stage", op: "eq", value: "customer" });
