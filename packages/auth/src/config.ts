@@ -50,9 +50,48 @@ const trustedOrigins = Array.from(
   ),
 );
 
+function isLocalhostUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "::1";
+  } catch {
+    return false;
+  }
+}
+
+function getProductionAuthBaseUrl(): string {
+  const candidates = [
+    env.BETTER_AUTH_URL,
+    env.APP_URL,
+    process.env["VERCEL_PROJECT_PRODUCTION_URL"],
+    process.env["VERCEL_URL"],
+  ];
+
+  for (const candidate of candidates) {
+    const origin = toTrustedOrigin(candidate);
+    if (!origin) continue;
+    if (env.NODE_ENV === "production" && isLocalhostUrl(origin)) continue;
+    return origin;
+  }
+
+  return env.BETTER_AUTH_URL;
+}
+
+const authBaseURL = getProductionAuthBaseUrl();
+
+if (env.NODE_ENV === "production" && authBaseURL !== env.BETTER_AUTH_URL) {
+  logger.warn(
+    {
+      configuredAuthUrl: env.BETTER_AUTH_URL,
+      effectiveAuthUrl: authBaseURL,
+    },
+    "Using production app URL as Better Auth base URL",
+  );
+}
+
 export const auth = betterAuth({
   secret: env.BETTER_AUTH_SECRET,
-  baseURL: env.BETTER_AUTH_URL,
+  baseURL: authBaseURL,
   trustedOrigins,
 
   database: drizzleAdapter(db, {

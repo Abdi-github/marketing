@@ -21,6 +21,7 @@ Temporary blocker:
 - Email/password login returned `POST /api/auth/sign-in/email 500`.
 - The login page has been simplified so it no longer makes a pre-login sign-out request.
 - The auth route now logs Better Auth handler failures on the server so Vercel logs can reveal the real backend exception.
+- Production auth now derives a non-localhost Better Auth base URL from the deployed app URL when `BETTER_AUTH_URL` is missing or accidentally still points to localhost.
 - CRM walkthrough should resume at Scenario 4 after production login is stable again.
 
 Scenario 3 is completed. Scenario 4 is now in progress. The latest confirmed Scenario 4 result is:
@@ -106,6 +107,7 @@ Next step:
 - Redeploy the notification drawer and auth diagnostics fix.
 - Close the notification drawer using the new Close button, Escape key, or outside click.
 - If login redirects continue, check Vercel logs for `Better Auth route failed` or `Better Auth route returned an error response`.
+- Confirm production env has `BETTER_AUTH_URL=https://marketing-web-pied-nine.vercel.app` and `APP_URL=https://marketing-web-pied-nine.vercel.app`; the code now falls back to the deployed URL, but explicit env values are still cleaner.
 - Move the deal from `Proposal` to `Won` after production session/login is stable.
 - If the customer accepts, move it to `Won` using either the stage dropdown or the Won button.
 - If the customer refuses, move it to `Lost` using either the stage dropdown or the Lost button.
@@ -193,6 +195,7 @@ Outcome:
 - The notification bell catches expired-session errors and shows a sign-in prompt instead of failing roughly.
 - The login form no longer makes a pre-login sign-out request, so sign-in is a single clean Better Auth call.
 - The Better Auth route now logs thrown failures and returned 5xx responses so Vercel can show the real server-side cause of `POST /api/auth/sign-in/email 500`.
+- Better Auth now avoids using a localhost base URL in production when the deployed app URL is available.
 
 ### Notification drawer behavior
 

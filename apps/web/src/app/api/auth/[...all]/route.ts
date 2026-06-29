@@ -15,8 +15,15 @@ function logAuthError(method: string, req: Request, error: unknown) {
   );
 }
 
-function logAuthFailureResponse(method: string, req: Request, response: Response) {
+async function logAuthFailureResponse(method: string, req: Request, response: Response) {
   if (response.status < 500) return;
+
+  let body: string | null = null;
+  try {
+    body = await response.clone().text();
+  } catch {
+    body = null;
+  }
 
   logger.error(
     {
@@ -24,6 +31,7 @@ function logAuthFailureResponse(method: string, req: Request, response: Response
       path: new URL(req.url).pathname,
       status: response.status,
       statusText: response.statusText,
+      body,
     },
     "Better Auth route returned an error response",
   );
@@ -32,7 +40,7 @@ function logAuthFailureResponse(method: string, req: Request, response: Response
 export async function GET(req: Request) {
   try {
     const response = await handlers.GET(req);
-    logAuthFailureResponse("GET", req, response);
+    await logAuthFailureResponse("GET", req, response);
     return response;
   } catch (error) {
     logAuthError("GET", req, error);
@@ -43,7 +51,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const response = await handlers.POST(req);
-    logAuthFailureResponse("POST", req, response);
+    await logAuthFailureResponse("POST", req, response);
     return response;
   } catch (error) {
     logAuthError("POST", req, error);
