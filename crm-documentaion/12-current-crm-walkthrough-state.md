@@ -1,6 +1,6 @@
 # Current CRM Walkthrough State
 
-Last updated: 2026-06-29
+Last updated: 2026-06-30
 
 This file prevents the CRM walkthrough from losing track while we test, fix, and document the restaurant workflows.
 
@@ -405,6 +405,10 @@ Use this section during the Email/SMS sequence walkthrough.
   - After refreshing, the SMS automation page still did not show a `Manual post-visit thank you` row under Recent enrollments, and monthly usage stayed at `30/50`.
   - The Inbox thread did show automation messages, including queued automation bubbles and at least one delivered automation bubble, so the staff-facing status is split across pages.
   - Improvement needed: SMS automation, Inbox, and Integrations should show the same send/enrollment status so staff can trust whether a sequence actually sent.
+  - Fix implemented: SMS automation overview now attaches each recent enrollment's latest related SMS message from Inbox metadata, and the Recent enrollments UI shows `Latest SMS queued/sent/delivered/failed ...` or the failure reason.
+  - Verification: `pnpm.cmd --filter @marketing/web typecheck` passed.
+  - Verification: focused `eslint --max-warnings 0` passed for the SMS automation router and page.
+  - Next walkthrough action: retest the SMS automation page after redeploy/restart and confirm Recent enrollments now shows the same latest send status that staff sees in Inbox.
 - AI-assisted drafting notes:
   - AI-assisted sequence drafting should not auto-activate sends. Staff should review and activate manually.
 - Sending/delivery/status notes:

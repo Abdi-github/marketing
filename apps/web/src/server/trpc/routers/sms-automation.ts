@@ -2,6 +2,7 @@ import {
   businessProfiles,
   contacts,
   db,
+  messages,
   smsAutomationJobs,
   smsPreferences,
   smsSequenceEnrollments,
@@ -11,7 +12,7 @@ import {
 } from "@marketing/db";
 import { normalizeSmsPhone } from "@marketing/shared";
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, isNotNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { enqueueSmsAutomationJob, enqueueSmsSequenceTickJob } from "../../queues/sms";
@@ -53,7 +54,7 @@ const aiResultSchema = z.object({
 export const smsAutomationRouter = router({
   overview: tenantProcedure.query(async ({ ctx }) => {
     const tenantId = ctx.tenantCtx.tenantId;
-    const [templates, sequences, enrollments, contactsWithPhones] = await Promise.all([
+    const [templates, sequences, rawEnrollments, contactsWithPhones] = await Promise.all([
       db
         .select()
         .from(smsTemplates)
@@ -82,6 +83,37 @@ export const smsAutomationRouter = router({
         .orderBy(desc(contacts.updatedAt))
         .limit(100),
     ]);
+    const enrollmentIds = rawEnrollments.map((enrollment) => enrollment.id);
+    const enrollmentMessages =
+      enrollmentIds.length > 0
+        ? await db
+            .select({
+              id: messages.id,
+              enrollmentId: sql<string>`${messages.meta}->>'enrollmentId'`,
+              status: messages.status,
+              errorMessage: messages.errorMessage,
+              occurredAt: messages.occurredAt,
+            })
+            .from(messages)
+            .where(
+              and(
+                eq(messages.tenantId, tenantId),
+                eq(messages.channel, "sms"),
+                inArray(sql<string>`${messages.meta}->>'enrollmentId'`, enrollmentIds),
+              ),
+            )
+            .orderBy(desc(messages.occurredAt))
+        : [];
+    const latestMessageByEnrollment = new Map<string, (typeof enrollmentMessages)[number]>();
+    for (const message of enrollmentMessages) {
+      if (!latestMessageByEnrollment.has(message.enrollmentId)) {
+        latestMessageByEnrollment.set(message.enrollmentId, message);
+      }
+    }
+    const enrollments = rawEnrollments.map((enrollment) => ({
+      ...enrollment,
+      latestMessage: latestMessageByEnrollment.get(enrollment.id) ?? null,
+    }));
     return { templates, sequences, enrollments, contacts: contactsWithPhones };
   }),
 

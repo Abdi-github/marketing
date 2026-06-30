@@ -40,6 +40,19 @@ function formatEnrollmentTiming(enrollment: SmsEnrollment) {
   ).toLocaleString()}`;
 }
 
+function formatLatestMessageStatus(enrollment: SmsEnrollment) {
+  const message = enrollment.latestMessage;
+  if (!message) {
+    return enrollment.status === "enrolled" ? "No SMS queued yet" : "No SMS send recorded";
+  }
+
+  const when = new Date(message.occurredAt).toLocaleString();
+  if (message.status === "failed") {
+    return message.errorMessage ? `SMS failed: ${message.errorMessage}` : `SMS failed ${when}`;
+  }
+  return `Latest SMS ${message.status} ${when}`;
+}
+
 export default function SmsAutomationPage() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [smsSettings, setSmsSettings] = useState<BusinessSmsSettings | null>(null);
@@ -645,6 +658,15 @@ export default function SmsAutomationPage() {
                       ?.name ?? "SMS sequence"}
                   </div>
                   <div className="text-gray-500">{formatEnrollmentTiming(enrollment)}</div>
+                  <div
+                    className={
+                      enrollment.latestMessage?.status === "failed"
+                        ? "mt-1 text-xs font-medium text-red-700"
+                        : "mt-1 text-xs text-gray-500"
+                    }
+                  >
+                    {formatLatestMessageStatus(enrollment)}
+                  </div>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="capitalize text-gray-600">{enrollment.status}</span>
