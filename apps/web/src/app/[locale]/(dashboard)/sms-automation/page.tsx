@@ -18,8 +18,11 @@ function formatSmsCategory(category: string | null | undefined) {
 }
 
 function templateOptionLabel(template: SmsTemplate) {
-  const source = template.presetKey ? "preset" : "custom";
-  return `${template.name} (${formatSmsCategory(template.category)}, ${source})`;
+  if (!template.presetKey) {
+    return `${template.name} (custom template)`;
+  }
+
+  return `${template.name} (${formatSmsCategory(template.category)}, preset)`;
 }
 
 function formatEnrollmentTiming(enrollment: SmsEnrollment) {

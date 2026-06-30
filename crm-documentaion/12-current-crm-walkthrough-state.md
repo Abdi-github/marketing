@@ -393,6 +393,14 @@ Use this section during the Email/SMS sequence walkthrough.
   - The Inbox messages visible after enrollment were old messages. The new post-visit thank-you SMS was not present.
   - Fix implemented: manual enrollment now validates active/manual sequence state, checks marketing SMS consent, creates or restarts the enrollment, and triggers the sequence tick worker immediately.
   - Expected after redeploy/restart: enrollment should either show a clear marketing-consent blocker or schedule the first step and produce a new Inbox/SMS message when the worker runs.
+  - Live result after redeploy: enrolling `Abdi CRM Manual Guest` into `Manual post-visit thank you` now shows:
+    `This sequence includes marketing SMS. The contact must opt in to SMS marketing before enrollment.`
+  - Conclusion: this is correct production safety behavior, not a broken send. A customer choosing SMS for one reservation means staff may contact them about that request; it does not automatically mean they agreed to marketing or post-visit nurture SMS.
+  - Next walkthrough choice:
+    - To test marketing SMS correctly, the customer must explicitly opt in to SMS marketing first.
+    - To test a request-specific operational follow-up now, create a transactional manual sequence instead of a marketing post-visit sequence.
+  - Improvement needed: the SMS automation UI should make the opt-in path obvious by showing each contact's SMS marketing consent status and by explaining how consent can be collected from public forms or a customer `START` reply.
+  - Improvement needed: generated forms should include a clear optional SMS marketing consent checkbox when a tenant wants to use marketing SMS sequences.
   - Improvement needed: after manual enrollment, the page should show a clear queued/scheduled row with sequence name, contact, next run time, send status, and a refresh/check status action.
   - After refreshing, the SMS automation page still did not show a `Manual post-visit thank you` row under Recent enrollments, and monthly usage stayed at `30/50`.
   - The Inbox thread did show automation messages, including queued automation bubbles and at least one delivered automation bubble, so the staff-facing status is split across pages.
