@@ -15,6 +15,41 @@ export type SmsTriggerFilter = {
   requireSmsConsent?: boolean;
 };
 
+export type SmsSequenceTriggerEvent = "lead.captured" | "reservation.status_changed" | "manual";
+
+export function normalizeSmsSequenceTriggerEvent(value: unknown): SmsSequenceTriggerEvent {
+  if (value === "lead.captured" || value === "reservation.status_changed" || value === "manual") {
+    return value;
+  }
+
+  if (typeof value !== "string") return "manual";
+
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+  if (
+    normalized.includes("reservation_inquiry") ||
+    normalized.includes("missing_detail") ||
+    normalized.includes("no_reply") ||
+    normalized.includes("lead_captured") ||
+    normalized.includes("lead.captured")
+  ) {
+    return "lead.captured";
+  }
+
+  if (
+    normalized.includes("reservation_status") ||
+    normalized.includes("status_changed") ||
+    normalized.includes("confirmed_reservation") ||
+    normalized.includes("reservation_confirmed")
+  ) {
+    return "reservation.status_changed";
+  }
+
+  return "manual";
+}
+
 export function normalizeSmsPhone(value: string): string {
   const normalized = value.trim().replace(/[\s()-]/g, "");
   if (!/^\+\d{7,15}$/.test(normalized)) {

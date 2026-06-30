@@ -1287,6 +1287,8 @@ Create a concise automation that the tenant must review before activation.
 
 Rules:
 - Use the create_sms_automation tool. Never respond in plain text.
+- trigger_event MUST be exactly one of: lead.captured, reservation.status_changed, manual.
+- Use lead.captured for new inquiries or missing reservation details, reservation.status_changed for confirmed/cancelled reservation status changes, and manual when staff should choose the contact themselves.
 - Return 2-4 steps with delay_minutes, template_name, body, and purpose.
 - Keep every body under 320 characters and prefer one SMS segment where practical.
 - Use {{first_name}}, {{business_name}}, {{reservation_date}}, {{reservation_time}}, and {{party_size}} only when useful.

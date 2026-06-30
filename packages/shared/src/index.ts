@@ -47,8 +47,9 @@ export {
   localMinutesAt,
   matchesSmsTriggerFilter,
   normalizeSmsPhone,
+  normalizeSmsSequenceTriggerEvent,
 } from "./sms-automation";
-export type { SmsPurpose, SmsTriggerFilter } from "./sms-automation";
+export type { SmsPurpose, SmsSequenceTriggerEvent, SmsTriggerFilter } from "./sms-automation";
 export {
   extractReservationFactsFromText,
   formatIsoDate,

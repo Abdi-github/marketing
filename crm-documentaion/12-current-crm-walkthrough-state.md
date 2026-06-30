@@ -413,9 +413,19 @@ Use this section during the Email/SMS sequence walkthrough.
   - Fix implemented: manual re-enrollment now creates a fresh enrollment run by replacing the old enrollment row before inserting the new due enrollment. Old Inbox messages remain as conversation history, but the new run gets a new `enrollmentId`, so step `0` can create and send a fresh SMS.
   - Verification: `pnpm.cmd --filter @marketing/web typecheck` passed after the fresh-enrollment fix.
   - Verification: focused `eslint --max-warnings 0` passed for the SMS automation router after the fresh-enrollment fix.
-  - Next walkthrough action: redeploy/restart, enroll `Abdi CRM Manual Guest` into `Manual reservation service follow-up` again, and confirm a new Inbox automation bubble appears with the current time and a new customer SMS is received.
+  - Live verification after redeploy/restart: staff re-enrolled `Abdi CRM Manual Guest` into `Manual reservation service follow-up` at about 14:54. The customer received the new SMS, and Inbox showed a new delivered automation bubble at 14:54.
+  - Conclusion: the fresh-enrollment fix worked. Manual re-enrollment now creates and sends a new SMS instead of reusing the previous 08:19 enrollment/message.
+  - Follow-up observation: SMS automation showed the latest message as `sent` at 14:54, while Inbox showed it as `delivered` a minute later. If SMS automation does not update to `delivered` after refresh, add a small refresh/status-sync improvement later; this is not blocking the send workflow.
+  - Pause test verified: staff created `Manual pause test sequence` with two transactional steps: `Pause test first message` at 0 minutes and `Pause test second message` at 5 minutes. Staff enrolled `Abdi CRM Manual Guest`, received only the first SMS on the phone, saw the first automation message in Inbox, then paused the enrollment from Recent enrollments. The second SMS did not arrive. This confirms enrollment pause stops the future scheduled step.
 - AI-assisted drafting notes:
   - AI-assisted sequence drafting should not auto-activate sends. Staff should review and activate manually.
+  - Live AI draft test result: staff entered a two-step prompt for restaurant guests who asked for reservation details but did not reply. The page showed `AI is drafting the SMS automation...`, then failed with a raw validation error because the AI returned `trigger_event: "reservation_inquiry_no_reply"` instead of one of the product-supported trigger events.
+  - Root cause found: the AI tool result allowed free-form `trigger_event` strings, while the dashboard apply step only accepted `lead.captured`, `reservation.status_changed`, or `manual`.
+  - Fix implemented: SMS trigger normalization now maps known AI aliases such as `reservation_inquiry_no_reply` to supported product events before applying the draft. The AI tool schema and prompt now also explicitly constrain `trigger_event` to `lead.captured`, `reservation.status_changed`, or `manual`.
+  - Safety behavior preserved: AI drafts still create paused sequences only. They must not enroll contacts, send SMS, or increase SMS usage until staff activates/enrolls.
+  - Verification: shared SMS automation tests passed, including AI trigger alias normalization.
+  - Verification: `@marketing/shared`, `@marketing/web`, `@marketing/workers`, and `@marketing/ai-router` typechecks passed.
+  - Verification: focused `eslint --max-warnings 0` passed for the touched shared, web, worker, and AI-router files.
 - Sending/delivery/status notes:
   - SMS delivery status should be checked in Inbox/SMS automation before judging a sequence successful.
 - UI or wording improvements:
@@ -427,7 +437,7 @@ Use this section during the Email/SMS sequence walkthrough.
   - Template dropdowns should show more context than name only, for example `Post-visit thank you - custom` vs `Post-visit thank you - preset`.
 - Logic/functionality fixes:
   - Need to verify whether SMS sequence creation, activation, enrollment, pausing, and delivery tracking are all available from the tenant UI.
-  - Need to verify that pausing a sequence stops future scheduled sends.
+  - Verified: pausing an active enrollment stops the future scheduled SMS step.
   - Need to verify that manual enrollment respects consent, suppression, monthly limits, and duplicate enrollment protection.
   - Manual enrollment currently appears blocked because no manual sequence is available in the dropdown. Need to verify whether this is missing data, missing UI support, or trigger filtering that excludes the existing active restaurant presets.
   - Template creation should either block duplicate names per tenant or clearly distinguish duplicates in dropdowns.
@@ -453,3 +463,16 @@ Next action:
 ```
 
 Do not jump to another scenario until the current one is explicitly finished.
+
+For every next walkthrough action, guide the user like an operator runbook, not a summary. Include:
+
+- Purpose: why this tenant/staff scenario matters and what product capability it demonstrates.
+- Page to open: exact sidebar item or route, for example `SMS automation`, `Inbox`, `Contacts`, `Segments`, or `Deals`.
+- Exact controls: which dropdown, form, field, checkbox, tab, or button to use.
+- Data to enter: concrete names, phone numbers, message text, dates, amounts, tags, or selections when the step requires input.
+- What to submit/click: the final button or action, with the visible label.
+- Expected result: what should happen on-screen, what the customer should receive, what counts should change, and what Inbox/CRM state should appear.
+- What to watch for: common confusion, consent/quiet-hours/monthly-limit behavior, stale status, or expected delays.
+- Pass/fail checkpoint: what the user should report back before moving to the next step.
+
+The purpose of this walkthrough is to teach and verify every relevant tenant-facing CRM/SMS/email automation feature across realistic scenarios. Never assume the user already knows which page, button, or form to use.

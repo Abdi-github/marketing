@@ -4,6 +4,7 @@ import {
   interpolateSmsTemplate,
   isInsideQuietHours,
   matchesSmsTriggerFilter,
+  normalizeSmsSequenceTriggerEvent,
 } from "../sms-automation";
 
 describe("SMS automation helpers", () => {
@@ -46,5 +47,13 @@ describe("SMS automation helpers", () => {
     expect(classifySmsKeyword(" stop ")).toBe("stop");
     expect(classifySmsKeyword("START")).toBe("start");
     expect(classifySmsKeyword("help")).toBe("help");
+  });
+
+  it("normalizes AI trigger aliases to supported product events", () => {
+    expect(normalizeSmsSequenceTriggerEvent("reservation_inquiry_no_reply")).toBe("lead.captured");
+    expect(normalizeSmsSequenceTriggerEvent("reservation-confirmed")).toBe(
+      "reservation.status_changed",
+    );
+    expect(normalizeSmsSequenceTriggerEvent("staff manually selected this")).toBe("manual");
   });
 });

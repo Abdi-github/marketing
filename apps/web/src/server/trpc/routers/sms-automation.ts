@@ -10,7 +10,7 @@ import {
   smsTemplates,
   tenants,
 } from "@marketing/db";
-import { normalizeSmsPhone } from "@marketing/shared";
+import { normalizeSmsPhone, normalizeSmsSequenceTriggerEvent } from "@marketing/shared";
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
@@ -36,7 +36,10 @@ const filterSchema = z.object({
 const aiResultSchema = z.object({
   name: z.string().min(1).max(120),
   category: z.string().min(1).max(80),
-  trigger_event: z.enum(["lead.captured", "reservation.status_changed", "manual"]),
+  trigger_event: z.preprocess(
+    normalizeSmsSequenceTriggerEvent,
+    z.enum(["lead.captured", "reservation.status_changed", "manual"]),
+  ),
   trigger_filter: filterSchema.default({}),
   steps: z
     .array(
@@ -497,7 +500,14 @@ export const smsAutomationRouter = router({
       if (!job || job.status !== "completed") {
         throw new TRPCError({ code: "PRECONDITION_FAILED", message: "AI draft is not ready." });
       }
-      const draft = aiResultSchema.parse(job.result);
+      const parsedDraft = aiResultSchema.safeParse(job.result);
+      if (!parsedDraft.success) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "AI draft could not be applied. Please create a new draft and try again.",
+        });
+      }
+      const draft = parsedDraft.data;
       return db.transaction(async (tx) => {
         const templates = await tx
           .insert(smsTemplates)

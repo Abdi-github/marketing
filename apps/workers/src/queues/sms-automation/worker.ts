@@ -26,7 +26,12 @@ const CREATE_SMS_AUTOMATION_TOOL: ToolDefinition = {
     properties: {
       name: { type: "string", maxLength: 120 },
       category: { type: "string", maxLength: 80 },
-      trigger_event: { type: "string" },
+      trigger_event: {
+        type: "string",
+        enum: ["lead.captured", "reservation.status_changed", "manual"],
+        description:
+          "Use lead.captured for new/missing-details inquiries, reservation.status_changed for confirmed/cancelled reservation state changes, or manual for staff-selected follow-up.",
+      },
       trigger_filter: { type: "object" },
       steps: {
         type: "array",
