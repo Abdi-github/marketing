@@ -283,35 +283,29 @@ export const smsAutomationRouter = router({
         )
         .limit(1);
 
-      const [enrollment] = existing
-        ? await db
-            .update(smsSequenceEnrollments)
-            .set({
-              currentStep: 0,
-              status: "enrolled",
-              nextRunAt,
-              enrolledAt: now,
-              completedAt: null,
-              leadId: null,
-              updatedAt: now,
-            })
+      const [enrollment] = await db.transaction(async (tx) => {
+        if (existing) {
+          await tx
+            .delete(smsSequenceEnrollments)
             .where(
               and(
                 eq(smsSequenceEnrollments.tenantId, tenantId),
                 eq(smsSequenceEnrollments.id, existing.id),
               ),
-            )
-            .returning()
-        : await db
-            .insert(smsSequenceEnrollments)
-            .values({
-              tenantId,
-              sequenceId: sequence.id,
-              contactId: contact.id,
-              nextRunAt,
-              enrolledAt: now,
-            })
-            .returning();
+            );
+        }
+
+        return tx
+          .insert(smsSequenceEnrollments)
+          .values({
+            tenantId,
+            sequenceId: sequence.id,
+            contactId: contact.id,
+            nextRunAt,
+            enrolledAt: now,
+          })
+          .returning();
+      });
 
       if (!enrollment) {
         throw new TRPCError({

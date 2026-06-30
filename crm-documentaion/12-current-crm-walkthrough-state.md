@@ -408,7 +408,12 @@ Use this section during the Email/SMS sequence walkthrough.
   - Fix implemented: SMS automation overview now attaches each recent enrollment's latest related SMS message from Inbox metadata, and the Recent enrollments UI shows `Latest SMS queued/sent/delivered/failed ...` or the failure reason.
   - Verification: `pnpm.cmd --filter @marketing/web typecheck` passed.
   - Verification: focused `eslint --max-warnings 0` passed for the SMS automation router and page.
-  - Next walkthrough action: retest the SMS automation page after redeploy/restart and confirm Recent enrollments now shows the same latest send status that staff sees in Inbox.
+  - Live retest result at 2026-06-30 14:18: staff enrolled `Abdi CRM Manual Guest` into `Manual reservation service follow-up`. The page showed `Contact enrolled. First SMS step is scheduled for 6/30/2026, 2:18:10 PM`, and the enrollment completed at 14:18, but no new customer SMS arrived and Inbox still showed the previous 08:19 delivered automation message.
+  - Root cause found: manual re-enrollment reused the existing `(sequence_id, contact_id)` enrollment row. The SMS sequence worker then tried to create step `0` again for the same `enrollmentId`, but the existing message uniqueness guard on `(meta->>'enrollmentId', meta->>'stepIndex')` treated the old 08:19 SMS as the same step. The enrollment advanced/completed without creating a new Inbox message or sending a new SMS.
+  - Fix implemented: manual re-enrollment now creates a fresh enrollment run by replacing the old enrollment row before inserting the new due enrollment. Old Inbox messages remain as conversation history, but the new run gets a new `enrollmentId`, so step `0` can create and send a fresh SMS.
+  - Verification: `pnpm.cmd --filter @marketing/web typecheck` passed after the fresh-enrollment fix.
+  - Verification: focused `eslint --max-warnings 0` passed for the SMS automation router after the fresh-enrollment fix.
+  - Next walkthrough action: redeploy/restart, enroll `Abdi CRM Manual Guest` into `Manual reservation service follow-up` again, and confirm a new Inbox automation bubble appears with the current time and a new customer SMS is received.
 - AI-assisted drafting notes:
   - AI-assisted sequence drafting should not auto-activate sends. Staff should review and activate manually.
 - Sending/delivery/status notes:
