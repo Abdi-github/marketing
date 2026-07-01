@@ -180,6 +180,15 @@ export default function NewFormPage() {
           </button>
           {genError && <p className="text-sm text-red-500">{genError}</p>}
         </form>
+        <div className="mt-5 rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
+          <p className="font-semibold">Useful restaurant examples</p>
+          <ul className="mt-2 list-disc space-y-1 pl-5">
+            <li>Table booking form for date, time, guests, phone, and dietary notes.</li>
+            <li>Private dining request for group size, budget, preferred date, and message.</li>
+            <li>Callback request for guests who want staff to phone them back.</li>
+            <li>Newsletter signup with clear marketing consent.</li>
+          </ul>
+        </div>
       </div>
 
       {/* Step 2 — Review + save */}

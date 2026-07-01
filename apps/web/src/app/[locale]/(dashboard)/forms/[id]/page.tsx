@@ -1371,6 +1371,25 @@ export default function FormDetailPage() {
         </div>
       </div>
 
+      <div className="mb-6 rounded-xl border border-blue-100 bg-blue-50 p-5 text-sm text-blue-950">
+        <h2 className="font-semibold">What this form does</h2>
+        <p className="mt-2 max-w-4xl text-blue-900">
+          Guests fill out this form from a landing page, your website, or an embedded form. Each
+          submission becomes a lead, updates or creates a CRM contact, and can create staff work
+          such as a reservation task, callback, quote follow-up, Inbox message, notification, or SMS
+          automation trigger.
+        </p>
+        <div className="mt-3 grid gap-2 md:grid-cols-4">
+          {["Guest submits", "Lead is saved", "CRM task appears", "Staff follows up"].map(
+            (label) => (
+              <div key={label} className="rounded-lg bg-white px-3 py-2 font-medium text-blue-900">
+                {label}
+              </div>
+            ),
+          )}
+        </div>
+      </div>
+
       <form
         onSubmit={handleSave}
         className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_390px]"
@@ -1588,7 +1607,7 @@ export default function FormDetailPage() {
                             </label>
                             <label className="block">
                               <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                Field key
+                                Internal field key
                               </span>
                               <input
                                 value={field.name}
@@ -1599,6 +1618,10 @@ export default function FormDetailPage() {
                                 }
                                 className="w-full rounded-lg border border-gray-300 px-3 py-2 font-mono text-sm"
                               />
+                              <span className="mt-1 block text-xs text-gray-500">
+                                Used by the system to connect answers to CRM fields. Staff usually
+                                only edit the label above.
+                              </span>
                             </label>
                             <label className="block">
                               <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">

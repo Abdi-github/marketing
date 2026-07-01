@@ -11,8 +11,21 @@ We are in the manual CRM walkthrough for **Abdi Restaurant**.
 The active scenario is:
 
 ```text
-Scenario 8: Email/SMS sequence follow-up
+Forms module walkthrough
 ```
+
+Current non-email walkthrough direction:
+
+- CRM and SMS automation modules are finalized enough for now.
+- Email settings, Email templates, and email Sequences are deferred because email automation is not finished yet.
+- Continue with the **Forms** module next.
+- Forms should be explained in plain English for non-technical restaurant staff:
+  - what a form is
+  - why the restaurant uses it
+  - how staff creates/edits one
+  - how it connects to landing pages/websites
+  - how submissions become leads, contacts, CRM tasks, Inbox messages, notifications, consent records, and automation triggers
+  - what practical scenarios a tenant might encounter
 
 Scenario 8 working rule:
 
@@ -31,6 +44,8 @@ Latest Scenario 8 checkpoint:
 - The page shows `Email sender not ready`, because email automation still depends on finalizing sender/domain configuration after Resend domain verification.
 - Decision: continue Scenario 8 through **SMS automation** first, because the application is multi-channel and SMS is already working in the restaurant walkthrough.
 - Email automation remains in scope, but it will be finalized after the broader application walkthrough and after the verified sender setup is wired into the product experience.
+- Updated correction 2026-07-02: email automation is **not finished yet**, so do not continue the walkthrough through Email settings, Email templates, or email Sequences right now. Testing unfinished email automation will only land on expected errors. Return to email-related automation after the non-email walkthrough is complete and after the missing email automation functionality has been implemented.
+- Walkthrough teaching rule: explain every page, feature, and scenario in plain English for non-technical tenant/staff users. The current tenant lens is a restaurant owner, so each step should explain the restaurant benefit, while still noting that the feature can apply to other business types.
 - Staff opened **SMS automation**.
 - SMS automation is available on the Starter plan with visible usage: `30/50` monthly SMS used and `20` remaining.
 - The verified business phone is visible: `+41762147690`.
@@ -73,16 +88,12 @@ Latest Scenario 6 checkpoint:
   - restaurant shortcut: `Private dining leads`
   - restaurant shortcut: `Confirmed reservation customers`
 - The plain-English generator now maps reservation/booking/table prompts to the `reservation-guest` tag instead of only lifecycle status.
+- Production retest note: user confirmed the Segments part was already finalized and should not be repeated as the next walkthrough step unless a new regression appears.
 
-Next Scenario 6 action after the updated app is deployed or restarted:
+Scenario 6 status:
 
-1. Open **Segments**.
-2. Edit `Reservation guests`.
-3. Click the **Reservation guests** restaurant shortcut, or set the rule manually to:
-   `Customer tag` -> `has tag` -> `reservation-guest`.
-4. Save the segment.
-5. Confirm it matches `1` contact.
-6. Download the CSV again; it should include `Abdi CRM Manual Guest`.
+- Completed for the walkthrough.
+- Do not prompt the user to repeat Segments unless the user reports a fresh Segment issue or asks for a dedicated Segment regression.
 
 Latest CRM improvement pass before Scenario 8:
 
@@ -114,6 +125,24 @@ Post-walkthrough browser regression checkpoint:
 - Open the contact drawer and confirm the top panel is action-focused rather than event-log-heavy.
 - Reply/confirm from Inbox and verify notifications disappear or move out of the active list.
 - Recheck the `Reservation guests` segment export after using the tag-based rule.
+- Regression retest started 2026-07-01: submitted a new production public-page reservation:
+  - Name: `Regression Reservation Guest`
+  - Email: `regression.reservation@example.test`
+  - Phone: `+41762147690`
+  - Date/time: `2026-07-08 19:00`
+  - Party size: `2`
+  - Preferred channel: `SMS`
+  - Message: `Please reserve a table for two and confirm by SMS.`
+- Regression result so far: Contacts shows a `Today` follow-up task `Confirm reservation request`; notification drawer shows `New reservation request`; Inbox shows the new `Website Form Request`; contact drawer top panel is action-focused and shows `Reservation - Awaiting Confirmation` with `Confirm reservation`, `Decline`, and `Mark contacted`.
+- Regression UI/UX issue spotted: Inbox `Website Form Request` shows `Possible updated customer details` with `name: [object Object]` and `email: [object Object]`. This should render human-readable before/after values, not raw object strings.
+- Next regression action: click `Confirm reservation` for the latest request and verify the customer receives the confirmation SMS, notification clears, and no failed-SMS warning returns.
+- Regression confirmation result: staff clicked `Confirm reservation`. Contacts showed `Reservation confirmed. A customer confirmation SMS was sent and will appear in the Inbox timeline.` The right-side panel changed to `Reservation - Confirmed`, the follow-up queue became clear (`No open tasks`), and the latest open task was completed.
+- Inbox regression result: the same thread shows status chips `Reservation` and `Confirmed`, the top action panel says `Reservation confirmed. Customer confirmation was sent by SMS.`, `Automation issues` stayed `0`, and the previous failed-SMS test remained only as historical failed-message state (`Failed messages: 1`).
+- Follow-up verification still useful: confirm on the physical phone that the latest confirmation SMS arrived and contains the current regression reservation details (`2026-07-08`, `19:00`, `2 guests`). The visible Inbox timeline screenshot still shows older confirmation messages in the scrolled history, so inspect/scroll for the newest 2026-07-01 00:27 confirmation bubble if needed.
+- Next pending regression action: verify notification cleanup after the confirmed reservation. Open the notification bell, use `Clear handled` if the old `New reservation request` alert is still visible, and confirm the bell badge disappears while the reservation remains confirmed.
+- Notification cleanup regression passed: user reported that once the notification drawer was opened, the handled reservation notification was automatically removed from the drawer. This is acceptable and beginner-friendly because staff does not need to manually clear already-handled reservation work.
+- Confirmation SMS content regression passed: user confirmed the phone SMS and the newest Inbox confirmation message both matched the latest regression reservation details (`2026-07-08`, `19:00`, `2 guests`).
+- Broad production retest note: user reported that all previously tried CRM scenarios seem to be working. Treat the normal reservation, missing-details reservation, callback/follow-up, private dining deal, Inbox follow-up, SMS automation, and failed automation checks as healthy unless a later screenshot shows a regression.
 
 Scenario 4 is completed. The latest confirmed Scenario 4 result is:
 
@@ -219,6 +248,28 @@ Confirmed behavior:
 - `Needs staff attention` returned to `0`.
 - `Clear handled` cleared old notification noise.
 - Fresh notifications now disappear automatically after staff handles the related work.
+
+### Scenario 6: Segments For Reservation Leads
+
+Status: completed.
+
+Confirmed behavior:
+
+- Staff created and reviewed reservation-focused segments.
+- The `reservation-guest` tag path was verified as the right restaurant-friendly rule.
+- Segment fixes were implemented so restaurant shortcuts and tag-based rules are clearer than generic lifecycle-stage rules.
+- User confirmed the Segments part was already finalized and should not be repeated unless a new Segment regression appears.
+
+### Scenario 7: Duplicates And Returning Customers
+
+Status: completed.
+
+Confirmed behavior:
+
+- Duplicate/similar CRM task completion was verified in production.
+- Completing one matching task now completes duplicate matching tasks for the same customer, title, and workflow kind.
+- The follow-up queue reloads after task completion so staff do not see old duplicate work as still open.
+- User confirmed the Duplicates scenario is already taken care of and should not be repeated unless a new duplicate/customer-merge issue appears.
 
 ## Fixes Already Made During This Walkthrough
 
@@ -357,6 +408,7 @@ Outcome:
 These are the remaining follow-ups after the CRM improvement pass.
 
 - Scenario documentation should include the actual screenshots from the user's walkthrough once each scenario is finished.
+- Production Twilio is still in trial-mode constraints during the walkthrough: successful SMS send/receive tests use the verified phone `+41762147690`. Failed automation visibility should be tested with a separate CRM contact using an unverified/bad phone number so the app can surface send failure without risking the main walkthrough contact.
 - Production must be redeployed before the user sees the latest Inbox, Contacts, Notifications, form-submission, and Segment improvements.
 - After the full walkthrough, complete a browser regression for Scenarios 1-7 so the new Contacts, Inbox, Notifications, Deals, Segments, and Duplicates UX is confirmed in the real tenant flow.
 - Consider a later dedicated CRM archive/history view if old activity events are still useful but too long for the daily staff drawer.
@@ -426,6 +478,8 @@ Use this section during the Email/SMS sequence walkthrough.
   - Verification: shared SMS automation tests passed, including AI trigger alias normalization.
   - Verification: `@marketing/shared`, `@marketing/web`, `@marketing/workers`, and `@marketing/ai-router` typechecks passed.
   - Verification: focused `eslint --max-warnings 0` passed for the touched shared, web, worker, and AI-router files.
+  - Live verification after GitHub push + automatic production deploy: staff reran the AI draft prompt. The page showed `AI draft created. Review it before activation.` A new sequence appeared: `Abdi Restaurant – Incomplete Booking Follow-Up`, trigger `lead.captured`, steps `30m: abdi_booking_missing_details_prompt -> 1440m: abdi_booking_gentle_followup`, status `Paused`. Monthly SMS stayed `33/50`, no customer SMS was sent, and Inbox did not receive a new automation message.
+  - Conclusion: AI-assisted SMS drafting now works as intended in production. It creates a reviewable paused sequence only; staff must activate/enroll before any send can happen.
 - Sending/delivery/status notes:
   - SMS delivery status should be checked in Inbox/SMS automation before judging a sequence successful.
 - UI or wording improvements:
@@ -442,14 +496,74 @@ Use this section during the Email/SMS sequence walkthrough.
   - Manual enrollment currently appears blocked because no manual sequence is available in the dropdown. Need to verify whether this is missing data, missing UI support, or trigger filtering that excludes the existing active restaurant presets.
   - Template creation should either block duplicate names per tenant or clearly distinguish duplicates in dropdowns.
 
+## Scenario 9 Notes To Capture
+
+Use this section during the failed automation visibility walkthrough.
+
+- Failed SMS test contact created successfully from Contacts:
+  - Name: `Failed SMS Test`
+  - Email: `failed.sms.test@example.test`
+  - Phone: `+41000000000`
+  - Source: Manual
+  - Contacts count increased to `2 contacts`
+  - No SMS was sent just from creating the contact.
+  - Purpose: use this contact for Twilio trial/unverified-number failure visibility without disturbing the main walkthrough contact at `+41762147690`.
+- Failed automation visibility verified:
+  - Staff enrolled `Failed SMS Test (+41000000000)` into `Manual reservation service follow-up` from SMS automation.
+  - SMS automation initially showed a scheduled/success message: `Contact enrolled. First SMS step is scheduled for 6/30/2026, 5:42:39 PM`.
+  - Inbox then showed `Open conversations: 2`, `Failed messages: 1`, and `Automation issues: 1`.
+  - Inbox displayed a `Messaging automation attention` card with `Send Failed`, contact `Failed SMS Test`, and Twilio error `Twilio API error 400: Invalid 'To' Phone Number: +410000XXXX`.
+  - The failed thread showed the outbound automation bubble in red with status `Failed` and the same Twilio error.
+  - Conclusion: failed automation is visible in Inbox and does not pretend the SMS was delivered.
+  - UI/UX improvement note: SMS automation Recent enrollments still showed `Completed` / `Latest SMS queued` for the failed enrollment at the time of the screenshot. Inbox correctly shows the failure, but SMS automation should refresh or derive the final message failure status so staff can trust either page without needing to open Inbox.
+  - Clear attention verified: staff clicked `Clear` on the `Messaging automation attention` item. The page showed `Attention item cleared. 1 item removed from the attention list.`
+  - After clearing, `Automation issues` changed to `0`, while `Failed messages` stayed `1` and the failed red conversation/message history remained visible. This is the correct behavior: clear the actionable alert, preserve the failed-message audit trail.
+
+## Forms Module Walkthrough Notes To Capture
+
+Use this section while teaching the Forms module after CRM/SMS automation.
+
+- User wants to understand the Forms page/module in plain English, restaurant-minded, including why it exists, how to use it, practical scenarios, and how it connects to other modules.
+- Current understanding from code/docs:
+  - Forms are the lead-capture layer. They collect customer requests from public pages, embedded forms, or standalone form links.
+  - Landing pages can own or embed forms. This is why the form detail page shows submissions from the public restaurant walkthrough.
+  - Form submission creates a `lead`.
+  - If the submission has email or phone, the app creates or updates a CRM `contact`.
+  - The workflow classifier turns submissions into restaurant work such as reservation, missing details, callback, quote/private dining, or generic lead.
+  - Submissions can create CRM tasks, staff notifications, staff SMS alerts, Inbox website-form messages, email/SMS consent records, and SMS automation trigger jobs.
+  - Forms have active/inactive status, lead counts, edit controls, starter templates, form builder fields, anti-spam settings, analytics, submissions table, status updates, and CSV export.
+- Teaching rule:
+  - Explain a form as "the digital front-desk slip the guest fills out."
+  - Explain landing page relationship as "the website displays the form; the Forms module stores, edits, tracks, and exports it."
+  - Avoid email automation testing until the unfinished email functionality is implemented.
+- Production screenshots 2026-07-02:
+  - Forms list shows several forms with the same visible name `Abdi Restaurant - lead capture - Booking request`, but different slugs and submission counts (`12`, `4`, `3`, `0`, `0`). This is confusing for non-technical staff because they cannot quickly tell which form belongs to which landing page/version.
+  - Forms list also shows `WhatsApp Inbox` as an inactive form with `9` submissions, which may confuse tenants because it sounds like an Inbox/system channel rather than a normal public form.
+  - New form page is very sparse: it asks staff to "Describe your form" and says AI will build the "form schema". The word `schema` is too technical; restaurant staff need examples such as "table booking form", "private dining request", "catering quote", "callback request", and "newsletter signup".
+  - Form detail page is powerful but dense: settings, submissions, starter templates, builder, preview, embed code, and analytics all appear on one long page. Non-technical tenants may not know what to touch first.
+  - Technical labels such as `slug`, `field key`, `embed code`, `iframe embed`, `honeypot`, and `Turnstile` need plain-English helper copy.
+  - The preview is useful because it shows what the guest sees, but the relationship between preview, public landing page, and CRM submission is not explained on-screen.
+  - Analytics says unavailable/loading in the screenshot. If analytics is unavailable, the UI should explain whether there is no traffic yet, tracking is disabled, or analytics failed to load.
+  - Submissions are useful and show booking/callback/quote badges and statuses, but the page should explain that changing the submission status here is administrative tracking and does not necessarily send a message to the customer.
+  - The Forms module should clearly show linked landing page/public page URL so staff know where the form is being used.
+  - Suggested improvement: add a beginner "What this form does" panel with a simple flow: Guest submits -> CRM contact/lead -> task/notification -> Inbox/SMS automation.
+- Improvement implemented immediately:
+  - English Forms copy no longer says AI creates a "form schema"; it says AI builds the questions.
+  - English `Slug` wording changed to `Public link name` with a clearer URL explanation.
+  - Anti-spam labels now explain the benefit in plain language instead of leading with `honeypot` / `Turnstile`.
+  - `Embed code` wording changed to `Add this form to another website` / `Website embed code`.
+  - New Form page now shows practical restaurant examples: table booking, private dining request, callback request, and newsletter signup.
+  - Form detail page now has a `What this form does` panel explaining the flow: guest submits -> lead is saved -> CRM task appears -> staff follows up.
+  - Form builder `Field key` label changed to `Internal field key` with helper text explaining staff usually edit the visible label instead.
+  - Verification: `pnpm.cmd --filter @marketing/web typecheck` passed.
+  - Verification: focused `eslint --max-warnings 0` passed for the changed Forms pages.
+  - Production note: these UI improvements require GitHub push + production deployment before the tenant can see them on Vercel.
+
 ## Next Ordered Scenarios
 
-1. Scenario 4: Private dining / quote request -> create a Deal.
-2. Scenario 5: Inbox reply and follow-up -> show daily conversation workflow.
-3. Scenario 6: Segments for reservation leads.
-4. Scenario 7: Duplicates and returning customers.
-5. Scenario 8: Email or SMS sequence follow-up.
-6. Later checkpoint: retest Scenarios 1-7 in browser after the broader walkthrough and latest UI modifications.
+1. Continue the walkthrough with the next non-email application area/page. Email settings, Email templates, and email Sequences are deferred until email automation functionality is implemented.
+2. Later checkpoint: return to email automation after implementation, then test Email settings -> Email templates -> email Sequences in plain restaurant-owner language.
+3. Later checkpoint: retest Scenarios 1-7 in browser only if a new regression appears or after a broader release changes CRM behavior.
 
 ## Rule For The Assistant
 
@@ -476,3 +590,11 @@ For every next walkthrough action, guide the user like an operator runbook, not 
 - Pass/fail checkpoint: what the user should report back before moving to the next step.
 
 The purpose of this walkthrough is to teach and verify every relevant tenant-facing CRM/SMS/email automation feature across realistic scenarios. Never assume the user already knows which page, button, or form to use.
+
+Production walkthrough rule:
+
+- The user verifies the walkthrough in production, not only locally.
+- If Codex changes core code that affects production behavior, clearly tell the user that the code must be pushed to GitHub and deployed before the browser retest can reflect the fix.
+- When the user reports that they pushed and production auto-deployed, record the live verification result in this file.
+- Keep taking UI/UX and beginner-friendliness notes during the walkthrough. Save practical improvements, confusing wording, missing explanations, and logic gaps in this file even when they are not blocking.
+- Before choosing the next scenario step, cross-check [11-manual-crm-scenario-playbook.md](11-manual-crm-scenario-playbook.md) so the walkthrough does not skip planned tenant scenarios such as failed automation visibility.
