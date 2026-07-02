@@ -976,6 +976,7 @@ export default function FormDetailPage() {
   const [honeypot, setHoneypot] = useState(true);
   const [turnstile, setTurnstile] = useState(false);
   const [steps, setSteps] = useState<FormStep[]>([]);
+  const [expandedFields, setExpandedFields] = useState<Set<string>>(() => new Set());
 
   const [saving, setSaving] = useState(false);
   const [saveOk, setSaveOk] = useState(false);
@@ -1156,6 +1157,18 @@ export default function FormDetailPage() {
     });
   }
 
+  function toggleFieldExpanded(fieldId: string) {
+    setExpandedFields((prev) => {
+      const next = new Set(prev);
+      if (next.has(fieldId)) {
+        next.delete(fieldId);
+      } else {
+        next.add(fieldId);
+      }
+      return next;
+    });
+  }
+
   function updateField(stepIndex: number, fieldIndex: number, patch: Partial<FormField>) {
     setSteps((prev) =>
       prev.map((step, index) =>
@@ -1172,6 +1185,7 @@ export default function FormDetailPage() {
   }
 
   function addField(stepIndex: number, type: FormFieldType = "text") {
+    const nextFieldIndex = steps[stepIndex]?.fields.length;
     setSteps((prev) =>
       prev.map((step, index) =>
         index === stepIndex && step.fields.length < 20
@@ -1179,6 +1193,9 @@ export default function FormDetailPage() {
           : step,
       ),
     );
+    if (typeof nextFieldIndex === "number" && nextFieldIndex < 20) {
+      setExpandedFields((prev) => new Set(prev).add(`${stepIndex}:${nextFieldIndex}`));
+    }
   }
 
   function duplicateField(stepIndex: number, fieldIndex: number) {
@@ -1239,6 +1256,7 @@ export default function FormDetailPage() {
   function applyTemplate(template: FormTemplate) {
     setSteps(cloneSteps(template.steps));
     setSubmitLabel(template.submitLabel);
+    setExpandedFields(new Set());
   }
 
   function addOption(stepIndex: number, fieldIndex: number) {
@@ -1497,7 +1515,7 @@ export default function FormDetailPage() {
               <div>
                 <h2 className="font-semibold text-gray-900">Form builder</h2>
                 <p className="mt-1 text-sm text-gray-500">
-                  Edit questions, steps, choices, and display logic.
+                  Review questions at a glance, then open Edit when you need the full controls.
                 </p>
               </div>
               <button
@@ -1508,6 +1526,15 @@ export default function FormDetailPage() {
               >
                 Add step
               </button>
+            </div>
+            <div className="mb-5 rounded-lg border border-amber-100 bg-amber-50 p-4 text-sm text-amber-900">
+              <p className="font-semibold">Safe editing guide</p>
+              <ul className="mt-2 list-disc space-y-1 pl-5">
+                <li>Edit the label to change what guests see.</li>
+                <li>Use Required when staff cannot handle the request without that answer.</li>
+                <li>Leave internal field keys unchanged unless you are reconnecting CRM fields.</li>
+                <li>Check the preview on the right before saving.</li>
+              </ul>
             </div>
 
             <div className="space-y-5">
@@ -1558,301 +1585,346 @@ export default function FormDetailPage() {
                         (candidate) => candidate.name !== field.name,
                       );
                       const hasChoices = field.type === "select" || field.type === "radio";
+                      const fieldId = `${stepIndex}:${fieldIndex}`;
+                      const isExpanded = expandedFields.has(fieldId);
                       return (
                         <div
                           key={`${field.name}-${fieldIndex}`}
                           className="rounded-lg border border-gray-200 bg-white p-4"
                         >
-                          <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_170px]">
-                            <label className="block">
-                              <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                Label
-                              </span>
-                              <input
-                                value={field.label}
-                                onChange={(e) =>
-                                  updateField(stepIndex, fieldIndex, { label: e.target.value })
-                                }
-                                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                              />
-                            </label>
-                            <label className="block">
-                              <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                Type
-                              </span>
-                              <select
-                                value={field.type}
-                                onChange={(e) => {
-                                  const type = e.target.value as FormFieldType;
-                                  updateField(stepIndex, fieldIndex, {
-                                    type,
-                                    options:
-                                      type === "select" || type === "radio"
-                                        ? field.options?.length
-                                          ? field.options
-                                          : [{ label: "Option 1", value: "option_1" }]
-                                        : undefined,
-                                    min: type === "number" ? field.min : undefined,
-                                    max: type === "number" ? field.max : undefined,
-                                  });
-                                }}
-                                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                              >
-                                {FORM_FIELD_TYPES.map((type) => (
-                                  <option key={type} value={type}>
-                                    {FIELD_TYPE_LABELS[type]}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                            <label className="block">
-                              <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                Internal field key
-                              </span>
-                              <input
-                                value={field.name}
-                                onChange={(e) =>
-                                  updateField(stepIndex, fieldIndex, {
-                                    name: toSlug(e.target.value),
-                                  })
-                                }
-                                className="w-full rounded-lg border border-gray-300 px-3 py-2 font-mono text-sm"
-                              />
-                              <span className="mt-1 block text-xs text-gray-500">
-                                Used by the system to connect answers to CRM fields. Staff usually
-                                only edit the label above.
-                              </span>
-                            </label>
-                            <label className="block">
-                              <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                Required
-                              </span>
-                              <select
-                                value={field.required ? "yes" : "no"}
-                                onChange={(e) =>
-                                  updateField(stepIndex, fieldIndex, {
-                                    required: e.target.value === "yes",
-                                  })
-                                }
-                                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                              >
-                                <option value="no">Optional</option>
-                                <option value="yes">Required</option>
-                              </select>
-                            </label>
-                            {field.type !== "checkbox" && (
-                              <label className="block lg:col-span-2">
-                                <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                  Placeholder
+                          <div className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-3">
+                            <div className="min-w-0">
+                              <p className="truncate font-medium text-gray-900">
+                                {field.label || "Untitled question"}
+                              </p>
+                              <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                                <span className="rounded-full bg-white px-2 py-1 font-medium text-gray-600 ring-1 ring-gray-200">
+                                  {FIELD_TYPE_LABELS[field.type]}
                                 </span>
-                                <input
-                                  value={field.placeholder ?? ""}
-                                  onChange={(e) =>
-                                    updateField(stepIndex, fieldIndex, {
-                                      placeholder: e.target.value,
-                                    })
-                                  }
-                                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                                />
-                              </label>
-                            )}
-                          </div>
-
-                          {field.type === "number" && (
-                            <div className="mt-3 grid grid-cols-2 gap-3">
-                              <label className="block">
-                                <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                  Min
+                                <span
+                                  className={`rounded-full px-2 py-1 font-medium ${
+                                    field.required
+                                      ? "bg-red-50 text-red-700 ring-1 ring-red-100"
+                                      : "bg-gray-100 text-gray-600 ring-1 ring-gray-200"
+                                  }`}
+                                >
+                                  {field.required ? "Required" : "Optional"}
                                 </span>
-                                <input
-                                  type="number"
-                                  value={field.min ?? ""}
-                                  onChange={(e) =>
-                                    updateField(stepIndex, fieldIndex, {
-                                      min: e.target.value ? Number(e.target.value) : undefined,
-                                    })
-                                  }
-                                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                                />
-                              </label>
-                              <label className="block">
-                                <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                  Max
-                                </span>
-                                <input
-                                  type="number"
-                                  value={field.max ?? ""}
-                                  onChange={(e) =>
-                                    updateField(stepIndex, fieldIndex, {
-                                      max: e.target.value ? Number(e.target.value) : undefined,
-                                    })
-                                  }
-                                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                                />
-                              </label>
-                            </div>
-                          )}
-
-                          {hasChoices && (
-                            <div className="mt-4 rounded-lg border border-gray-100 bg-gray-50 p-3">
-                              <div className="mb-2 flex items-center justify-between">
-                                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                  Choices
-                                </p>
-                                <button
-                                  type="button"
-                                  onClick={() => addOption(stepIndex, fieldIndex)}
-                                  className="text-xs font-medium text-blue-600"
-                                >
-                                  Add choice
-                                </button>
+                                {field.conditionalShowIf && (
+                                  <span className="rounded-full bg-amber-50 px-2 py-1 font-medium text-amber-700 ring-1 ring-amber-100">
+                                    Shows only sometimes
+                                  </span>
+                                )}
                               </div>
-                              <div className="space-y-2">
-                                {(field.options ?? []).map((option, optionIndex) => (
-                                  <div
-                                    key={optionIndex}
-                                    className="grid grid-cols-[1fr_1fr_auto] gap-2"
-                                  >
-                                    <input
-                                      value={option.label}
-                                      onChange={(e) =>
-                                        updateOption(stepIndex, fieldIndex, optionIndex, {
-                                          label: e.target.value,
-                                        })
-                                      }
-                                      className="rounded border border-gray-300 px-2 py-1 text-sm"
-                                    />
-                                    <input
-                                      value={option.value}
-                                      onChange={(e) =>
-                                        updateOption(stepIndex, fieldIndex, optionIndex, {
-                                          value: toSlug(e.target.value),
-                                        })
-                                      }
-                                      className="rounded border border-gray-300 px-2 py-1 font-mono text-sm"
-                                    />
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        removeOption(stepIndex, fieldIndex, optionIndex)
-                                      }
-                                      className="rounded border px-2 text-xs text-red-600"
-                                    >
-                                      Remove
-                                    </button>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          <div className="mt-4 rounded-lg border border-gray-100 bg-gray-50 p-3">
-                            <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                              <input
-                                type="checkbox"
-                                checked={Boolean(field.conditionalShowIf)}
-                                disabled={conditionTargets.length === 0}
-                                onChange={(e) =>
-                                  updateField(stepIndex, fieldIndex, {
-                                    conditionalShowIf: e.target.checked
-                                      ? {
-                                          field: conditionTargets[0]?.name ?? "",
-                                          op: "eq",
-                                          value: "",
-                                        }
-                                      : undefined,
-                                  })
-                                }
-                              />
-                              Conditional display
-                            </label>
-                            {field.conditionalShowIf && (
-                              <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-[1fr_120px_1fr]">
-                                <select
-                                  value={field.conditionalShowIf.field}
-                                  onChange={(e) =>
-                                    updateField(stepIndex, fieldIndex, {
-                                      conditionalShowIf: {
-                                        ...field.conditionalShowIf!,
-                                        field: e.target.value,
-                                      },
-                                    })
-                                  }
-                                  className="rounded border border-gray-300 px-2 py-2 text-sm"
-                                >
-                                  {conditionTargets.map((candidate) => (
-                                    <option key={candidate.name} value={candidate.name}>
-                                      {candidate.label}
-                                    </option>
-                                  ))}
-                                </select>
-                                <select
-                                  value={field.conditionalShowIf.op}
-                                  onChange={(e) =>
-                                    updateField(stepIndex, fieldIndex, {
-                                      conditionalShowIf: {
-                                        ...field.conditionalShowIf!,
-                                        op: e.target.value as "eq" | "neq" | "contains",
-                                      },
-                                    })
-                                  }
-                                  className="rounded border border-gray-300 px-2 py-2 text-sm"
-                                >
-                                  <option value="eq">is</option>
-                                  <option value="neq">is not</option>
-                                  <option value="contains">contains</option>
-                                </select>
-                                <input
-                                  value={field.conditionalShowIf.value}
-                                  onChange={(e) =>
-                                    updateField(stepIndex, fieldIndex, {
-                                      conditionalShowIf: {
-                                        ...field.conditionalShowIf!,
-                                        value: e.target.value,
-                                      },
-                                    })
-                                  }
-                                  className="rounded border border-gray-300 px-2 py-2 text-sm"
-                                  placeholder="Value"
-                                />
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="mt-4 flex flex-wrap justify-between gap-2">
-                            <div className="flex gap-2">
-                              <button
-                                type="button"
-                                onClick={() => moveField(stepIndex, fieldIndex, -1)}
-                                className="rounded border px-2 py-1 text-sm"
-                              >
-                                Up
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => moveField(stepIndex, fieldIndex, 1)}
-                                className="rounded border px-2 py-1 text-sm"
-                              >
-                                Down
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => duplicateField(stepIndex, fieldIndex)}
-                                disabled={step.fields.length >= 20}
-                                className="rounded border px-2 py-1 text-sm disabled:opacity-30"
-                              >
-                                Duplicate
-                              </button>
                             </div>
                             <button
                               type="button"
-                              onClick={() => removeField(stepIndex, fieldIndex)}
-                              disabled={step.fields.length <= 1}
-                              className="rounded border border-red-200 px-2 py-1 text-sm text-red-600 disabled:opacity-30"
+                              onClick={() => toggleFieldExpanded(fieldId)}
+                              className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
                             >
-                              Delete field
+                              {isExpanded ? "Done" : "Edit"}
                             </button>
                           </div>
+
+                          {isExpanded && (
+                            <>
+                              <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[1fr_170px]">
+                                <label className="block">
+                                  <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                    Label
+                                  </span>
+                                  <input
+                                    value={field.label}
+                                    onChange={(e) =>
+                                      updateField(stepIndex, fieldIndex, { label: e.target.value })
+                                    }
+                                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                                  />
+                                </label>
+                                <label className="block">
+                                  <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                    Type
+                                  </span>
+                                  <select
+                                    value={field.type}
+                                    onChange={(e) => {
+                                      const type = e.target.value as FormFieldType;
+                                      updateField(stepIndex, fieldIndex, {
+                                        type,
+                                        options:
+                                          type === "select" || type === "radio"
+                                            ? field.options?.length
+                                              ? field.options
+                                              : [{ label: "Option 1", value: "option_1" }]
+                                            : undefined,
+                                        min: type === "number" ? field.min : undefined,
+                                        max: type === "number" ? field.max : undefined,
+                                      });
+                                    }}
+                                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                                  >
+                                    {FORM_FIELD_TYPES.map((type) => (
+                                      <option key={type} value={type}>
+                                        {FIELD_TYPE_LABELS[type]}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                                <label className="block">
+                                  <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                    Internal field key
+                                  </span>
+                                  <input
+                                    value={field.name}
+                                    onChange={(e) =>
+                                      updateField(stepIndex, fieldIndex, {
+                                        name: toSlug(e.target.value),
+                                      })
+                                    }
+                                    className="w-full rounded-lg border border-gray-300 px-3 py-2 font-mono text-sm"
+                                  />
+                                  <span className="mt-1 block text-xs text-gray-500">
+                                    Used by the system to connect answers to CRM fields. Staff
+                                    usually only edit the label above.
+                                  </span>
+                                </label>
+                                <label className="block">
+                                  <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                    Required
+                                  </span>
+                                  <select
+                                    value={field.required ? "yes" : "no"}
+                                    onChange={(e) =>
+                                      updateField(stepIndex, fieldIndex, {
+                                        required: e.target.value === "yes",
+                                      })
+                                    }
+                                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                                  >
+                                    <option value="no">Optional</option>
+                                    <option value="yes">Required</option>
+                                  </select>
+                                </label>
+                                {field.type !== "checkbox" && (
+                                  <label className="block lg:col-span-2">
+                                    <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                      Placeholder
+                                    </span>
+                                    <input
+                                      value={field.placeholder ?? ""}
+                                      onChange={(e) =>
+                                        updateField(stepIndex, fieldIndex, {
+                                          placeholder: e.target.value,
+                                        })
+                                      }
+                                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                                    />
+                                  </label>
+                                )}
+                              </div>
+
+                              {field.type === "number" && (
+                                <div className="mt-3 grid grid-cols-2 gap-3">
+                                  <label className="block">
+                                    <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                      Min
+                                    </span>
+                                    <input
+                                      type="number"
+                                      value={field.min ?? ""}
+                                      onChange={(e) =>
+                                        updateField(stepIndex, fieldIndex, {
+                                          min: e.target.value ? Number(e.target.value) : undefined,
+                                        })
+                                      }
+                                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                                    />
+                                  </label>
+                                  <label className="block">
+                                    <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                      Max
+                                    </span>
+                                    <input
+                                      type="number"
+                                      value={field.max ?? ""}
+                                      onChange={(e) =>
+                                        updateField(stepIndex, fieldIndex, {
+                                          max: e.target.value ? Number(e.target.value) : undefined,
+                                        })
+                                      }
+                                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                                    />
+                                  </label>
+                                </div>
+                              )}
+
+                              {hasChoices && (
+                                <div className="mt-4 rounded-lg border border-gray-100 bg-gray-50 p-3">
+                                  <div className="mb-2 flex items-center justify-between">
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                      Choices
+                                    </p>
+                                    <button
+                                      type="button"
+                                      onClick={() => addOption(stepIndex, fieldIndex)}
+                                      className="text-xs font-medium text-blue-600"
+                                    >
+                                      Add choice
+                                    </button>
+                                  </div>
+                                  <div className="space-y-2">
+                                    {(field.options ?? []).map((option, optionIndex) => (
+                                      <div
+                                        key={optionIndex}
+                                        className="grid grid-cols-[1fr_1fr_auto] gap-2"
+                                      >
+                                        <input
+                                          value={option.label}
+                                          onChange={(e) =>
+                                            updateOption(stepIndex, fieldIndex, optionIndex, {
+                                              label: e.target.value,
+                                            })
+                                          }
+                                          className="rounded border border-gray-300 px-2 py-1 text-sm"
+                                        />
+                                        <input
+                                          value={option.value}
+                                          onChange={(e) =>
+                                            updateOption(stepIndex, fieldIndex, optionIndex, {
+                                              value: toSlug(e.target.value),
+                                            })
+                                          }
+                                          className="rounded border border-gray-300 px-2 py-1 font-mono text-sm"
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            removeOption(stepIndex, fieldIndex, optionIndex)
+                                          }
+                                          className="rounded border px-2 text-xs text-red-600"
+                                        >
+                                          Remove
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              <div className="mt-4 rounded-lg border border-gray-100 bg-gray-50 p-3">
+                                <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                                  <input
+                                    type="checkbox"
+                                    checked={Boolean(field.conditionalShowIf)}
+                                    disabled={conditionTargets.length === 0}
+                                    onChange={(e) =>
+                                      updateField(stepIndex, fieldIndex, {
+                                        conditionalShowIf: e.target.checked
+                                          ? {
+                                              field: conditionTargets[0]?.name ?? "",
+                                              op: "eq",
+                                              value: "",
+                                            }
+                                          : undefined,
+                                      })
+                                    }
+                                  />
+                                  Only show this question sometimes
+                                </label>
+                                <p className="mt-1 text-xs text-gray-500">
+                                  Use this for questions that depend on an earlier answer, for
+                                  example showing dietary notes only when the guest selected private
+                                  dining.
+                                </p>
+                                {field.conditionalShowIf && (
+                                  <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-[1fr_120px_1fr]">
+                                    <select
+                                      value={field.conditionalShowIf.field}
+                                      onChange={(e) =>
+                                        updateField(stepIndex, fieldIndex, {
+                                          conditionalShowIf: {
+                                            ...field.conditionalShowIf!,
+                                            field: e.target.value,
+                                          },
+                                        })
+                                      }
+                                      className="rounded border border-gray-300 px-2 py-2 text-sm"
+                                    >
+                                      {conditionTargets.map((candidate) => (
+                                        <option key={candidate.name} value={candidate.name}>
+                                          {candidate.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <select
+                                      value={field.conditionalShowIf.op}
+                                      onChange={(e) =>
+                                        updateField(stepIndex, fieldIndex, {
+                                          conditionalShowIf: {
+                                            ...field.conditionalShowIf!,
+                                            op: e.target.value as "eq" | "neq" | "contains",
+                                          },
+                                        })
+                                      }
+                                      className="rounded border border-gray-300 px-2 py-2 text-sm"
+                                    >
+                                      <option value="eq">is</option>
+                                      <option value="neq">is not</option>
+                                      <option value="contains">contains</option>
+                                    </select>
+                                    <input
+                                      value={field.conditionalShowIf.value}
+                                      onChange={(e) =>
+                                        updateField(stepIndex, fieldIndex, {
+                                          conditionalShowIf: {
+                                            ...field.conditionalShowIf!,
+                                            value: e.target.value,
+                                          },
+                                        })
+                                      }
+                                      className="rounded border border-gray-300 px-2 py-2 text-sm"
+                                      placeholder="Value"
+                                    />
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="mt-4 flex flex-wrap justify-between gap-2">
+                                <div className="flex gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => moveField(stepIndex, fieldIndex, -1)}
+                                    className="rounded border px-2 py-1 text-sm"
+                                  >
+                                    Up
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => moveField(stepIndex, fieldIndex, 1)}
+                                    className="rounded border px-2 py-1 text-sm"
+                                  >
+                                    Down
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => duplicateField(stepIndex, fieldIndex)}
+                                    disabled={step.fields.length >= 20}
+                                    className="rounded border px-2 py-1 text-sm disabled:opacity-30"
+                                  >
+                                    Duplicate
+                                  </button>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => removeField(stepIndex, fieldIndex)}
+                                  disabled={step.fields.length <= 1}
+                                  className="rounded border border-red-200 px-2 py-1 text-sm text-red-600 disabled:opacity-30"
+                                >
+                                  Delete field
+                                </button>
+                              </div>
+                            </>
+                          )}
                         </div>
                       );
                     })}

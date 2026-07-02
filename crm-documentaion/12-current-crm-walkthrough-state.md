@@ -1,6 +1,6 @@
 # Current CRM Walkthrough State
 
-Last updated: 2026-06-30
+Last updated: 2026-07-02
 
 This file prevents the CRM walkthrough from losing track while we test, fix, and document the restaurant workflows.
 
@@ -558,6 +558,20 @@ Use this section while teaching the Forms module after CRM/SMS automation.
   - Verification: `pnpm.cmd --filter @marketing/web typecheck` passed.
   - Verification: focused `eslint --max-warnings 0` passed for the changed Forms pages.
   - Production note: these UI improvements require GitHub push + production deployment before the tenant can see them on Vercel.
+  - Live deployment: user reported the Forms UX improvements have been deployed to production on 2026-07-02.
+- Form builder follow-up improvement implemented immediately:
+  - Added a `Safe editing guide` to the Form builder so non-technical staff know they can safely edit labels/options, when to use `Required`, and why internal field keys should usually stay unchanged.
+  - Changed `Conditional display` to `Only show this question sometimes` with a plain-English example.
+  - Verification: `pnpm.cmd --filter @marketing/web typecheck` passed.
+  - Verification: focused `eslint --max-warnings 0` passed for the changed Forms detail page.
+  - Production note: this Form builder helper copy requires another GitHub push + production deployment before the tenant can see it on Vercel.
+- Form builder collapsed-card improvement implemented immediately:
+  - Form fields now show as compact summary cards by default so restaurant staff can scan the questions without seeing every advanced setting at once.
+  - Each card shows the guest-facing label, field type, required/optional status, and whether it only appears sometimes.
+  - Staff can click `Edit` to open the full powerful editor for that field, including label, type, internal field key, required setting, placeholder, number min/max, choices, conditional display logic, move, duplicate, and delete controls.
+  - When staff adds a new question, the new field opens immediately so the next editing action is obvious.
+  - This keeps the builder powerful for advanced tenants while making the first view less intimidating for non-technical staff.
+  - Production note: this collapsed-card builder improvement requires GitHub push + production deployment before the tenant can see it on Vercel.
 
 ## Next Ordered Scenarios
 
