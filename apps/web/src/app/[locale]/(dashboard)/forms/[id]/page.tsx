@@ -597,7 +597,11 @@ function AnalyticsPanel({
         <div>
           <h2 className="font-semibold text-gray-900">Analytics</h2>
           <p className="mt-1 text-sm text-gray-500">
-            {analytics ? `Last ${analytics.periodDays} days` : "Loading recent form activity"}
+            {loading
+              ? "Loading recent form activity"
+              : analytics
+                ? `Last ${analytics.periodDays} days`
+                : "Waiting for consent-based activity"}
           </p>
         </div>
         <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600">
@@ -686,7 +690,17 @@ function AnalyticsPanel({
       )}
 
       {!loading && !analytics && (
-        <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-500">Analytics unavailable.</p>
+        <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm text-blue-950">
+          <p className="font-medium">No form analytics to show yet.</p>
+          <p className="mt-2 text-blue-900">
+            This card only fills after visitors open the public form and accept tracking consent.
+            Submissions can still arrive and appear in the list even when analytics is empty.
+          </p>
+          <div className="mt-3 rounded-lg bg-white px-3 py-2 text-xs text-blue-900">
+            Check this again after the form is live on a landing page or embedded website and guests
+            have visited it.
+          </div>
+        </div>
       )}
     </div>
   );

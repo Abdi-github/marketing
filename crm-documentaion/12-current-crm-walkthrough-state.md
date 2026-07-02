@@ -572,6 +572,11 @@ Use this section while teaching the Forms module after CRM/SMS automation.
   - When staff adds a new question, the new field opens immediately so the next editing action is obvious.
   - This keeps the builder powerful for advanced tenants while making the first view less intimidating for non-technical staff.
   - Production note: this collapsed-card builder improvement requires GitHub push + production deployment before the tenant can see it on Vercel.
+  - Live verification: user confirmed in production that clicking `Edit` opens the full field editor and clicking `Done` collapses the field back to the compact card.
+- Forms analytics empty-state improvement implemented immediately:
+  - Replaced the vague `Analytics unavailable` message with plain-English copy explaining that analytics appears after visitors open the public form and accept tracking consent.
+  - Clarified that form submissions can still arrive even when analytics is empty.
+  - Production note: this Analytics card improvement requires GitHub push + production deployment before the tenant can see it on Vercel.
 
 ## Next Ordered Scenarios
 
