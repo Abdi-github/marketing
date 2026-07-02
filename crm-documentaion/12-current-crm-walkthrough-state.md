@@ -586,6 +586,19 @@ Use this section while teaching the Forms module after CRM/SMS automation.
   - UI issue spotted: Inbox still rendered `Possible updated customer details` as `name: [object Object], email: [object Object]`.
   - Fix implemented: Inbox now formats these update hints as saved value -> submitted value so staff can understand what changed before editing the customer identity.
   - Production note: this Inbox formatting fix requires GitHub push + production deployment before the tenant can see it on Vercel.
+  - Live deployment: user redeployed and confirmed the `[object Object]` formatting issue is fixed in production.
+  - Reservation confirmation from Inbox passed: user confirmed that clicking `Confirm` for the Forms walkthrough reservation works. Treat the form submission -> Inbox -> reservation confirmation path as healthy.
+- Shared-form quote/private dining verification:
+  - Public generated website currently uses the same form for `Request quote` and `Reserve a table`.
+  - Recommendation for the current walkthrough: test the shared form with quote/private dining wording to verify intent classification.
+  - Staff submitted a private dining request with `Forms Private Dining Guest`, `forms.private.dining@example.test`, `+41762147690`, date `2026-07-18`, time `20:00`, party size `14`, preferred reply `SMS`, and message `We would like a private dining quote for 14 people with a shared menu and drinks package. Please send an offer.`
+  - Result: Forms submissions classified it as `Quote`; submission drawer showed lead type `Quote`, workflow state `received`, and recommended action `Prepare quote reply`.
+  - Contacts drawer showed `Quote - Received`, customer details were parsed, and CRM created a `Prepare quote reply` task.
+  - Inbox showed the Website Form Request with `Quote`, `Received`, and `Landing_page_form` chips, and the submitted private dining details.
+  - UI issue spotted: Inbox still showed reservation-style action buttons (`Confirm`, `Decline`, `Cancel`) on a quote thread, which is confusing because a quote should not be confirmed like a table reservation.
+  - Fix implemented: Inbox action buttons are now workflow-aware. Booking threads keep reservation actions; quote threads show `Mark contacted`, `Prepare quote reply`, and `Open contact` instead.
+  - Product recommendation: generated restaurant pages should eventually use either a shared form with an explicit `Request type` field or separate forms/sections for `Reserve a table` and `Request quote`.
+  - Production note: the quote-specific Inbox action fix requires GitHub push + production deployment before the tenant can see it on Vercel.
 
 ## Next Ordered Scenarios
 

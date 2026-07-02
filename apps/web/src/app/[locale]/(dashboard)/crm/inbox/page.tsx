@@ -1062,16 +1062,19 @@ export default function InboxPage() {
   const failedThreadCount = threads.filter((thread) => thread.lastStatus === "failed").length;
   const waitingThreadCount = threads.filter((thread) => thread.lastDirection === "inbound").length;
   const workflowState = threadContext?.workflowState ?? null;
-  const isConfirmedReservation = workflowState === "confirmed";
-  const isMissingDetailsReservation = workflowState === "missing_details";
-  const isDeclinedReservation = workflowState === "declined";
-  const isCancelledReservation = workflowState === "cancelled";
+  const isBookingWorkflow = threadContext?.workflowKind === "booking";
+  const isQuoteWorkflow = threadContext?.workflowKind === "quote";
+  const isConfirmedReservation = isBookingWorkflow && workflowState === "confirmed";
+  const isMissingDetailsReservation = isBookingWorkflow && workflowState === "missing_details";
+  const isDeclinedReservation = isBookingWorkflow && workflowState === "declined";
+  const isCancelledReservation = isBookingWorkflow && workflowState === "cancelled";
   const isClosedReservation =
-    workflowState === "confirmed" || workflowState === "declined" || workflowState === "cancelled";
+    isBookingWorkflow &&
+    (workflowState === "confirmed" ||
+      workflowState === "declined" ||
+      workflowState === "cancelled");
   const canConfirmReservation =
-    threadContext?.workflowKind === "booking" &&
-    !isClosedReservation &&
-    !isMissingDetailsReservation;
+    isBookingWorkflow && !isClosedReservation && !isMissingDetailsReservation;
 
   function toggleThreadSelection(thread: Thread) {
     const key = threadKey(thread);
@@ -1961,51 +1964,82 @@ export default function InboxPage() {
                         >
                           Mark contacted
                         </button>
-                        <button
-                          type="button"
-                          disabled={workflowActionInProgress || !canConfirmReservation}
-                          onClick={() =>
-                            void updateWorkflowStatus({
-                              status: "confirmed",
-                              workflowState: "confirmed",
-                            })
-                          }
-                          title={
-                            isMissingDetailsReservation
-                              ? "Ask for the missing reservation details before confirming."
-                              : undefined
-                          }
-                          style={{
-                            ...workflowButtonStyle("#16a34a"),
-                            cursor:
-                              workflowActionInProgress || !canConfirmReservation
-                                ? "not-allowed"
-                                : "pointer",
-                            opacity: workflowActionInProgress || !canConfirmReservation ? 0.65 : 1,
-                          }}
-                        >
-                          Confirm
-                        </button>
-                        <button
-                          type="button"
-                          disabled={workflowActionInProgress}
-                          onClick={() =>
-                            void updateWorkflowStatus({
-                              status: "archived",
-                              workflowState: "declined",
-                            })
-                          }
-                          style={{
-                            ...workflowButtonStyle("#b45309"),
-                            cursor: workflowActionInProgress ? "not-allowed" : "pointer",
-                            opacity: workflowActionInProgress ? 0.65 : 1,
-                          }}
-                        >
-                          Decline
-                        </button>
+                        {isBookingWorkflow ? (
+                          <>
+                            <button
+                              type="button"
+                              disabled={workflowActionInProgress || !canConfirmReservation}
+                              onClick={() =>
+                                void updateWorkflowStatus({
+                                  status: "confirmed",
+                                  workflowState: "confirmed",
+                                })
+                              }
+                              title={
+                                isMissingDetailsReservation
+                                  ? "Ask for the missing reservation details before confirming."
+                                  : undefined
+                              }
+                              style={{
+                                ...workflowButtonStyle("#16a34a"),
+                                cursor:
+                                  workflowActionInProgress || !canConfirmReservation
+                                    ? "not-allowed"
+                                    : "pointer",
+                                opacity:
+                                  workflowActionInProgress || !canConfirmReservation ? 0.65 : 1,
+                              }}
+                            >
+                              Confirm
+                            </button>
+                            <button
+                              type="button"
+                              disabled={workflowActionInProgress}
+                              onClick={() =>
+                                void updateWorkflowStatus({
+                                  status: "archived",
+                                  workflowState: "declined",
+                                })
+                              }
+                              style={{
+                                ...workflowButtonStyle("#b45309"),
+                                cursor: workflowActionInProgress ? "not-allowed" : "pointer",
+                                opacity: workflowActionInProgress ? 0.65 : 1,
+                              }}
+                            >
+                              Decline
+                            </button>
+                          </>
+                        ) : null}
+                        {isQuoteWorkflow ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setReplyDraft(
+                                  "Abdi Restaurant: Thanks for your private dining request. We will review availability and prepare an offer for you shortly.",
+                                )
+                              }
+                              style={workflowButtonStyle("#16a34a")}
+                            >
+                              Prepare quote reply
+                            </button>
+                            <a
+                              href={`/${locale}/crm?contactId=${activeThread?.contactId ?? ""}`}
+                              style={{
+                                ...workflowButtonStyle("#0f172a"),
+                                textDecoration: "none",
+                                display: "inline-flex",
+                                alignItems: "center",
+                              }}
+                            >
+                              Open contact
+                            </a>
+                          </>
+                        ) : null}
                       </>
                     ) : null}
-                    {!isDeclinedReservation && !isCancelledReservation ? (
+                    {isBookingWorkflow && !isDeclinedReservation && !isCancelledReservation ? (
                       <button
                         type="button"
                         disabled={workflowActionInProgress || workflowState === "cancelled"}
