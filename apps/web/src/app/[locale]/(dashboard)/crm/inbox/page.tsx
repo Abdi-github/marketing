@@ -194,7 +194,48 @@ function asRecord(value: unknown): Record<string, unknown> {
 function textValue(value: unknown): string | null {
   if (typeof value === "string" && value.trim()) return value.trim();
   if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  if (typeof value === "boolean") return value ? "yes" : "no";
   return null;
+}
+
+function humanizeMetaKey(key: string): string {
+  return key
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function fallbackDisplayValue(value: unknown): string | null {
+  const simple = textValue(value);
+  if (simple) return simple;
+  if (Array.isArray(value)) {
+    const parts = value.map(fallbackDisplayValue).filter(Boolean);
+    return parts.length ? parts.join(", ") : null;
+  }
+  if (value && typeof value === "object") {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function formatUpdatedCustomerDetail(key: string, value: unknown): string | null {
+  const record = asRecord(value);
+  const current =
+    textValue(record.current) ?? textValue(record.existing) ?? textValue(record.saved);
+  const submitted =
+    textValue(record.submitted) ?? textValue(record.new) ?? textValue(record.incoming);
+  const label = humanizeMetaKey(key);
+
+  if (current || submitted) {
+    return `${label}: saved ${current ?? "empty"} -> submitted ${submitted ?? "empty"}`;
+  }
+
+  const fallback = fallbackDisplayValue(value);
+  return fallback ? `${label}: ${fallback}` : null;
 }
 
 function messageBusinessLabel(message: Message): string {
@@ -243,7 +284,8 @@ function websiteRequestFields(message: Message): Array<{ label: string; value: s
   ].filter((row): row is { label: string; value: string } => Boolean(row.value));
 
   const updates = Object.entries(possibleUpdates)
-    .map(([key, value]) => `${key}: ${String(value)}`)
+    .map(([key, value]) => formatUpdatedCustomerDetail(key, value))
+    .filter(Boolean)
     .join(", ");
   if (updates) {
     rows.push({ label: "Possible updated customer details", value: updates });

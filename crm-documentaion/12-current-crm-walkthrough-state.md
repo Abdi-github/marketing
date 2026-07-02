@@ -577,6 +577,15 @@ Use this section while teaching the Forms module after CRM/SMS automation.
   - Replaced the vague `Analytics unavailable` message with plain-English copy explaining that analytics appears after visitors open the public form and accept tracking consent.
   - Clarified that form submissions can still arrive even when analytics is empty.
   - Production note: this Analytics card improvement requires GitHub push + production deployment before the tenant can see it on Vercel.
+  - Live deployment: user redeployed and confirmed the Analytics card looks better in production.
+- Forms-to-Inbox submission verification:
+  - Staff submitted a real table booking form using `Forms Walkthrough Guest`, `forms.walkthrough@example.test`, `+41762147690`, date `2026-07-10`, time `19:30`, party size `3`, preferred reply `SMS`, and message `Please book a table near the window if possible.`
+  - Forms detail page showed the new submission as `New`.
+  - Contacts showed a new reservation task and the contact drawer opened with `Reservation - Awaiting Confirmation`.
+  - Inbox showed a new `Website Form Request` message with the submitted booking details and `Needs staff attention: 1`.
+  - UI issue spotted: Inbox still rendered `Possible updated customer details` as `name: [object Object], email: [object Object]`.
+  - Fix implemented: Inbox now formats these update hints as saved value -> submitted value so staff can understand what changed before editing the customer identity.
+  - Production note: this Inbox formatting fix requires GitHub push + production deployment before the tenant can see it on Vercel.
 
 ## Next Ordered Scenarios
 
