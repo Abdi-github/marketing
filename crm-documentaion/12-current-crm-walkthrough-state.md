@@ -612,6 +612,13 @@ Use this section while teaching the Forms module after CRM/SMS automation.
     - Internal IDs and raw JSON payloads were removed from the default tenant-facing export. Unusual custom fields are flattened into `Other answers`.
     - Verification: `pnpm.cmd exec prettier --write apps/web/src/server/trpc/routers/forms.ts`, focused `eslint --max-warnings 0`, and `pnpm.cmd --filter @marketing/web typecheck` passed.
     - Production note: this cleaner CSV export requires GitHub push + production deployment before Vercel downloads show the new columns.
+    - Live deployment: user confirmed the cleaner CSV export is better in production.
+  - Starter templates review:
+    - Current behavior: clicking a starter template replaces the editor questions and submit button label, but the live public form does not change until staff clicks `Save form`.
+    - Beginner-risk found: a non-technical tenant could click a template while exploring and not realize the current working booking questions were replaced in the editor.
+    - Improvement implemented immediately: starter template clicks now ask for confirmation before replacing the editor questions. Helper copy also explains that the live form changes only after `Save form`.
+    - Verification: `pnpm.cmd exec prettier --write apps/web/src/app/[locale]/(dashboard)/forms/[id]/page.tsx`, focused `eslint --max-warnings 0`, and `pnpm.cmd --filter @marketing/web typecheck` passed.
+    - Production note: this template confirmation improvement requires GitHub push + production deployment before Vercel shows it.
   - Product recommendation: generated restaurant pages should eventually use either a shared form with an explicit `Request type` field or separate forms/sections for `Reserve a table` and `Request quote`.
   - Production note: the quote-specific Inbox action fix requires GitHub push + production deployment before the tenant can see it on Vercel.
 

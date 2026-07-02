@@ -1268,6 +1268,11 @@ export default function FormDetailPage() {
   }
 
   function applyTemplate(template: FormTemplate) {
+    const shouldReplace = window.confirm(
+      `Replace the current questions with "${template.title}"?\n\nThis only changes the editor. Click "Save form" to publish it, or leave without saving to keep the current live form.`,
+    );
+    if (!shouldReplace) return;
+
     setSteps(cloneSteps(template.steps));
     setSubmitLabel(template.submitLabel);
     setExpandedFields(new Set());
@@ -1504,7 +1509,8 @@ export default function FormDetailPage() {
             <div className="mb-5">
               <h2 className="font-semibold text-gray-900">Starter templates</h2>
               <p className="mt-1 text-sm text-gray-500">
-                Replace the current questions with a proven form pattern, then customize freely.
+                Replace the current questions with a proven form pattern, then customize freely. You
+                will confirm first, and the live form changes only after you click Save form.
               </p>
             </div>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
