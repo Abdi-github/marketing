@@ -597,6 +597,21 @@ Use this section while teaching the Forms module after CRM/SMS automation.
   - Inbox showed the Website Form Request with `Quote`, `Received`, and `Landing_page_form` chips, and the submitted private dining details.
   - UI issue spotted: Inbox still showed reservation-style action buttons (`Confirm`, `Decline`, `Cancel`) on a quote thread, which is confusing because a quote should not be confirmed like a table reservation.
   - Fix implemented: Inbox action buttons are now workflow-aware. Booking threads keep reservation actions; quote threads show `Mark contacted`, `Prepare quote reply`, and `Open contact` instead.
+  - Live deployment: user redeployed and confirmed the quote Inbox thread now shows `Prepare quote reply` and no misleading reservation confirmation buttons.
+  - Next pending walkthrough action: test `Prepare quote reply` on the quote Inbox thread. The button should only fill the SMS reply draft, not send automatically. Staff should review/edit the draft, click `Send`, confirm the SMS appears in the Inbox timeline, confirm the customer phone receives it, then optionally click `Mark contacted` to clear the staff-attention work.
+  - Live verification: user confirmed the quote reply flow behaved as expected. `Prepare quote reply` filled a draft instead of sending automatically, the staff could send the SMS from Inbox, the customer received it, and the follow-up state behaved as expected after staff handling.
+  - Follow-up confirmation: user again confirmed the latest quote/private dining flow works as expected in production.
+  - Correction: do not drift back into a full CRM walkthrough. CRM, Inbox, SMS automation, Segments, and Duplicates have already been explored and verified. When Forms links to CRM actions, explain them only as Forms interconnections: what a form submission creates, where it can send staff next, and why that matters from the Forms page.
+  - Next Forms walkthrough area: stay on the Forms detail page and teach Forms-owned behavior: submissions list, submission drawer, status tracking, export, starter templates, form builder, preview, embed/public usage, analytics, active/inactive state, and how one form can feed different workflows such as reservation vs quote.
+  - Forms submission status tracking verified: user changed a submission status and confirmed it behaved as expected. The Forms status filters/list update correctly, and the status behaves as administrative tracking rather than sending a customer message.
+  - Forms CSV export verification:
+    - User exported `abdi-restaurant-98c1aff3-lead-98c1aff3-submissions.csv`.
+    - The export downloaded and included recent submissions such as `Forms Private Dining Guest` and `Forms Walkthrough Guest`.
+    - Issue found: the CSV used technical columns (`submitted_at`, `source_url`, `contact_id`, raw JSON `payload`) that are not beginner-friendly for a restaurant owner.
+    - Improvement implemented immediately: Forms CSV export now uses plain-English columns such as `Submitted at`, `Form status`, `Request type`, `Workflow state`, `Recommended staff action`, `Name`, `Email`, `Phone`, `Preferred reply`, `Requested date`, `Requested time`, `Guests`, `Message`, `Source page`, and `Other answers`.
+    - Internal IDs and raw JSON payloads were removed from the default tenant-facing export. Unusual custom fields are flattened into `Other answers`.
+    - Verification: `pnpm.cmd exec prettier --write apps/web/src/server/trpc/routers/forms.ts`, focused `eslint --max-warnings 0`, and `pnpm.cmd --filter @marketing/web typecheck` passed.
+    - Production note: this cleaner CSV export requires GitHub push + production deployment before Vercel downloads show the new columns.
   - Product recommendation: generated restaurant pages should eventually use either a shared form with an explicit `Request type` field or separate forms/sections for `Reserve a table` and `Request quote`.
   - Production note: the quote-specific Inbox action fix requires GitHub push + production deployment before the tenant can see it on Vercel.
 

@@ -72,6 +72,80 @@ function summarizePayload(payloadValue: unknown) {
   };
 }
 
+function humanizePayloadKey(key: string): string {
+  return key
+    .replace(/[_-]+/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function payloadValueAsText(value: unknown): string {
+  if (value == null) return "";
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return value.map(payloadValueAsText).filter(Boolean).join("; ");
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+function compactUtcDate(date: Date): string {
+  return `${date.toISOString().slice(0, 16).replace("T", " ")} UTC`;
+}
+
+function exportPayloadSummary(payloadValue: unknown) {
+  const payload = payloadRecord(payloadValue);
+  const knownKeys = new Set([
+    "name",
+    "full_name",
+    "first_name",
+    "contact_name",
+    "email",
+    "e_mail",
+    "mail",
+    "phone",
+    "tel",
+    "telephone",
+    "mobile",
+    "date",
+    "reservation_date",
+    "time",
+    "reservation_time",
+    "party_size",
+    "guests",
+    "guest_count",
+    "preferred_channel",
+    "preferred_contact",
+    "channel",
+    "message",
+    "notes",
+    "comment",
+    "details",
+    "request",
+  ]);
+
+  const otherAnswers = Object.entries(payload)
+    .filter(([key, value]) => !key.startsWith("__") && !knownKeys.has(key) && value != null)
+    .map(([key, value]) => {
+      const text = payloadValueAsText(value);
+      return text ? `${humanizePayloadKey(key)}: ${text}` : null;
+    })
+    .filter((value): value is string => Boolean(value))
+    .join("; ");
+
+  return {
+    name: firstString(payload, ["name", "full_name", "first_name", "contact_name"]) ?? "",
+    email: firstString(payload, ["email", "e_mail", "mail"]) ?? "",
+    phone: firstString(payload, ["phone", "tel", "telephone", "mobile"]) ?? "",
+    preferredChannel:
+      firstString(payload, ["preferred_channel", "preferred_contact", "channel"]) ?? "",
+    requestedDate: firstString(payload, ["date", "reservation_date"]) ?? "",
+    requestedTime: firstString(payload, ["time", "reservation_time"]) ?? "",
+    guests: firstString(payload, ["party_size", "guests", "guest_count"]) ?? "",
+    message: firstString(payload, ["message", "notes", "comment", "details", "request"]) ?? "",
+    otherAnswers,
+  };
+}
+
 function csvCell(value: unknown): string {
   const text = value == null ? "" : String(value);
   return `"${text.replace(/"/g, '""')}"`;
@@ -466,12 +540,12 @@ export const formsRouter = router({
 
       const rows = await db
         .select({
-          id: leads.id,
           status: leads.status,
+          workflowKind: leads.workflowKind,
+          workflowState: leads.workflowState,
           payload: leads.payload,
           sourceUrl: leads.sourceUrl,
           submittedAt: leads.submittedAt,
-          contactId: leads.contactId,
         })
         .from(leads)
         .where(and(...filters))
@@ -479,18 +553,42 @@ export const formsRouter = router({
         .limit(5000);
 
       const csvRows = [
-        ["submitted_at", "status", "name", "email", "phone", "source_url", "contact_id", "payload"],
+        [
+          "Submitted at",
+          "Form status",
+          "Request type",
+          "Workflow state",
+          "Recommended staff action",
+          "Name",
+          "Email",
+          "Phone",
+          "Preferred reply",
+          "Requested date",
+          "Requested time",
+          "Guests",
+          "Message",
+          "Source page",
+          "Other answers",
+        ],
         ...rows.map((row) => {
-          const summary = summarizePayload(row.payload);
+          const answers = exportPayloadSummary(row.payload);
+          const workflow = buildLeadWorkflowPlan(form, payloadRecord(row.payload), row.sourceUrl);
           return [
-            row.submittedAt.toISOString(),
+            compactUtcDate(row.submittedAt),
             row.status,
-            summary.name ?? "",
-            summary.email ?? "",
-            summary.phone ?? "",
+            row.workflowKind ?? workflow.kind,
+            row.workflowState ?? "received",
+            workflow.title,
+            answers.name,
+            answers.email,
+            answers.phone,
+            answers.preferredChannel,
+            answers.requestedDate,
+            answers.requestedTime,
+            answers.guests,
+            answers.message,
             row.sourceUrl ?? "",
-            row.contactId ?? "",
-            JSON.stringify(payloadRecord(row.payload)),
+            answers.otherAnswers,
           ];
         }),
       ];
