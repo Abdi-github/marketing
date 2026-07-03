@@ -135,7 +135,7 @@ const FORM_TEMPLATES: FormTemplate[] = [
   {
     key: "quote",
     title: "Quote request",
-    description: "Lead capture for services, home visits, consultations, and custom offers.",
+    description: "Good for private dining, catering, events, consultations, and custom offers.",
     submitLabel: "Request quote",
     steps: [
       {
@@ -147,25 +147,36 @@ const FORM_TEMPLATES: FormTemplate[] = [
         ],
       },
       {
-        title: "Project details",
+        title: "Request details",
         fields: [
           {
             name: "service",
-            label: "What do you need?",
+            label: "What kind of quote do you need?",
             type: "select",
             required: true,
             options: [
-              { label: "Consultation", value: "consultation" },
+              { label: "Private dining or group booking", value: "private_dining" },
+              { label: "Catering or package", value: "catering" },
+              { label: "Event menu", value: "event_menu" },
               { label: "Custom quote", value: "custom_quote" },
-              { label: "Support", value: "support" },
             ],
+          },
+          { name: "date", label: "Preferred date", type: "text", required: false },
+          { name: "time", label: "Preferred time", type: "text", required: false },
+          {
+            name: "party_size",
+            label: "Number of people",
+            type: "number",
+            required: false,
+            min: 1,
+            max: 500,
           },
           {
             name: "message",
-            label: "Tell us more",
+            label: "Tell us what you need",
             type: "textarea",
             required: false,
-            placeholder: "A few details help us prepare a useful reply.",
+            placeholder: "Share menu wishes, budget, dietary needs, or any important details.",
           },
         ],
       },
