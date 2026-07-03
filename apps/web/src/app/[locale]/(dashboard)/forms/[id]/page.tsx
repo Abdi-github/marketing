@@ -2064,33 +2064,58 @@ export default function FormDetailPage() {
               </div>
             ) : (
               <div className="mt-4 space-y-3">
-                {formVersions.slice(0, 5).map((version) => (
-                  <div
-                    key={version.id}
-                    className="rounded-lg border border-gray-200 bg-gray-50 p-3"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-gray-900">
-                          Version {version.version}
-                        </p>
-                        <p className="mt-0.5 text-xs text-gray-500">
-                          Saved before changes on {formatDateTime(version.createdAt)}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => restoreVersion(version)}
-                        className="shrink-0 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-100"
-                      >
-                        Restore
-                      </button>
-                    </div>
-                    <p className="mt-2 truncate text-xs text-gray-500">
-                      {version.submitLabel ? `Button: ${version.submitLabel}` : "Default button"}
-                    </p>
+                {restoredVersionId && (
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+                    Previous version restored into the editor. Review the preview above, then click
+                    Save form to publish it.
                   </div>
-                ))}
+                )}
+                {formVersions.slice(0, 5).map((version) => {
+                  const isRestored = restoredVersionId === version.id;
+                  return (
+                    <div
+                      key={version.id}
+                      className={`rounded-lg border p-3 ${
+                        isRestored
+                          ? "border-emerald-200 bg-emerald-50"
+                          : "border-gray-200 bg-gray-50"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-sm font-medium text-gray-900">
+                              Version {version.version}
+                            </p>
+                            {isRestored && (
+                              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                                Restored in editor
+                              </span>
+                            )}
+                          </div>
+                          <p className="mt-0.5 text-xs text-gray-500">
+                            Saved before changes on {formatDateTime(version.createdAt)}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => restoreVersion(version)}
+                          disabled={isRestored}
+                          className={`shrink-0 rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+                            isRestored
+                              ? "cursor-default border-emerald-200 bg-emerald-100 text-emerald-700"
+                              : "border-gray-300 bg-white text-gray-700 hover:bg-gray-100"
+                          }`}
+                        >
+                          {isRestored ? "Restored" : "Restore"}
+                        </button>
+                      </div>
+                      <p className="mt-2 truncate text-xs text-gray-500">
+                        {version.submitLabel ? `Button: ${version.submitLabel}` : "Default button"}
+                      </p>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

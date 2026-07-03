@@ -633,12 +633,17 @@ Use this section while teaching the Forms module after CRM/SMS automation.
     - Verification: focused `prettier`, focused `eslint --max-warnings 0`, `pnpm.cmd --filter @marketing/db typecheck`, `pnpm.cmd --filter @marketing/web typecheck`, and `pnpm.cmd --filter @marketing/db test` passed.
     - Production note: this requires both code deployment and the new database migration before `Form history` works in production.
     - Production migration applied from this workspace using `pnpm.cmd --filter @marketing/db db:apply 0047_form_versions.sql`. PostgreSQL reported the expected harmless notice that the policy did not exist before creation, then applied `0047_form_versions.sql` successfully.
+    - Live feedback issue: user reported the `Restore` button seemed to do nothing. Screenshot showed the restore had technically loaded the previous booking version into the editor/preview, but the feedback was too subtle.
+    - Improvement implemented immediately: when a version is restored, the Form history panel now shows a green confirmation message, highlights the restored version, adds a `Restored in editor` badge, and changes the button from `Restore` to disabled `Restored`.
+    - Verification: focused `prettier`, `eslint --max-warnings 0`, and `pnpm.cmd --filter @marketing/web typecheck` passed.
+    - Production note: redeploy before retesting the clearer restore feedback.
   - Starter template content quality review:
     - User reviewed the generated `Quote request` preview before saving and asked whether it is good enough.
     - Assessment: the structure was useful, but the content was too generic for the restaurant walkthrough. `Project details`, `Consultation`, and `Support` were not clear enough for private dining or restaurant quote requests.
     - Improvement implemented immediately: updated the `Quote request` starter template to be more restaurant-friendly while still usable for other businesses. It now says it is good for private dining, catering, events, consultations, and custom offers; uses `Request details`; asks `What kind of quote do you need?`; includes options for private dining/group booking, catering/package, event menu, and custom quote; and collects optional preferred date, preferred time, number of people, and a clearer needs/message field.
     - Verification: focused `prettier`, `eslint --max-warnings 0`, and `pnpm.cmd --filter @marketing/web typecheck` passed.
     - Production note: redeploy before the improved quote starter template appears in production.
+    - Live verification: user confirmed the improved quote starter template is better and published it in production.
   - Product recommendation: generated restaurant pages should eventually use either a shared form with an explicit `Request type` field or separate forms/sections for `Reserve a table` and `Request quote`.
   - Production note: the quote-specific Inbox action fix requires GitHub push + production deployment before the tenant can see it on Vercel.
 
