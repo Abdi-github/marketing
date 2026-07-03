@@ -619,6 +619,10 @@ Use this section while teaching the Forms module after CRM/SMS automation.
     - Improvement implemented immediately: starter template clicks now ask for confirmation before replacing the editor questions. Helper copy also explains that the live form changes only after `Save form`.
     - Verification: `pnpm.cmd exec prettier --write apps/web/src/app/[locale]/(dashboard)/forms/[id]/page.tsx`, focused `eslint --max-warnings 0`, and `pnpm.cmd --filter @marketing/web typecheck` passed.
     - Production note: this template confirmation improvement requires GitHub push + production deployment before Vercel shows it.
+    - User feedback after deployment: the browser-native alert worked but did not feel professional.
+    - Refinement implemented immediately: replaced the browser alert with an in-app confirmation dialog using the shared dashboard modal. The dialog explains that applying a starter template replaces editor questions only and that the public form changes only after `Save form`.
+    - Verification: focused `prettier`, `eslint --max-warnings 0`, and `pnpm.cmd --filter @marketing/web typecheck` passed.
+    - Production note: redeploy before retesting the polished starter-template dialog in production.
   - Product recommendation: generated restaurant pages should eventually use either a shared form with an explicit `Request type` field or separate forms/sections for `Reserve a table` and `Request quote`.
   - Production note: the quote-specific Inbox action fix requires GitHub push + production deployment before the tenant can see it on Vercel.
 

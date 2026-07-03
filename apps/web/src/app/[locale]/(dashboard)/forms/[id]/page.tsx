@@ -9,6 +9,7 @@ import {
 } from "@marketing/ai-router/form-schema";
 import { useTranslations } from "next-intl";
 import { useParams } from "next/navigation";
+import { Modal } from "../../../../../components/ui/modal";
 import { trpc } from "../../../../../lib/trpc";
 
 type FormData = {
@@ -991,6 +992,7 @@ export default function FormDetailPage() {
   const [turnstile, setTurnstile] = useState(false);
   const [steps, setSteps] = useState<FormStep[]>([]);
   const [expandedFields, setExpandedFields] = useState<Set<string>>(() => new Set());
+  const [pendingTemplate, setPendingTemplate] = useState<FormTemplate | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [saveOk, setSaveOk] = useState(false);
@@ -1268,14 +1270,10 @@ export default function FormDetailPage() {
   }
 
   function applyTemplate(template: FormTemplate) {
-    const shouldReplace = window.confirm(
-      `Replace the current questions with "${template.title}"?\n\nThis only changes the editor. Click "Save form" to publish it, or leave without saving to keep the current live form.`,
-    );
-    if (!shouldReplace) return;
-
     setSteps(cloneSteps(template.steps));
     setSubmitLabel(template.submitLabel);
     setExpandedFields(new Set());
+    setPendingTemplate(null);
   }
 
   function addOption(stepIndex: number, fieldIndex: number) {
@@ -1518,7 +1516,7 @@ export default function FormDetailPage() {
                 <button
                   key={template.key}
                   type="button"
-                  onClick={() => applyTemplate(template)}
+                  onClick={() => setPendingTemplate(template)}
                   className="rounded-lg border border-gray-200 p-4 text-left transition hover:border-blue-300 hover:bg-blue-50"
                 >
                   <span className="block text-sm font-semibold text-gray-900">
@@ -2012,6 +2010,52 @@ export default function FormDetailPage() {
         onClose={() => setSelectedSubmission(null)}
         onStatusChange={(leadId, status) => void updateSubmissionStatus(leadId, status)}
       />
+      <Modal
+        open={Boolean(pendingTemplate)}
+        onClose={() => setPendingTemplate(null)}
+        title="Replace form questions?"
+        description={
+          pendingTemplate
+            ? `Apply the ${pendingTemplate.title} starter template to this editor.`
+            : undefined
+        }
+        size="sm"
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setPendingTemplate(null)}
+              className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+            >
+              Keep current form
+            </button>
+            <button
+              type="button"
+              onClick={() => pendingTemplate && applyTemplate(pendingTemplate)}
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700"
+            >
+              Replace questions
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-3 text-sm text-gray-600">
+          <p>
+            This will replace the questions currently shown in the form builder with the selected
+            starter template.
+          </p>
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-900">
+            The public form will not change until you click <strong>Save form</strong>. You can
+            close this dialog to keep the current booking form exactly as it is.
+          </div>
+          {pendingTemplate ? (
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+              <p className="font-medium text-gray-900">{pendingTemplate.title}</p>
+              <p className="mt-1">{pendingTemplate.description}</p>
+            </div>
+          ) : null}
+        </div>
+      </Modal>
     </div>
   );
 }
