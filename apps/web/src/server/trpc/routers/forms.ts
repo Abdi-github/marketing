@@ -7,7 +7,15 @@ import {
 } from "@marketing/ai-router";
 import { smartFormSchema } from "@marketing/ai-router/form-schema";
 import { db } from "@marketing/db";
-import { contacts, events, forms, leads, type EventType, type LeadStatus } from "@marketing/db";
+import {
+  contacts,
+  events,
+  formVersions,
+  forms,
+  leads,
+  type EventType,
+  type LeadStatus,
+} from "@marketing/db";
 import { buildLeadWorkflowPlan, logger } from "@marketing/shared";
 import { TRPCError } from "@trpc/server";
 import { and, count, desc, eq, gte, inArray, sql } from "drizzle-orm";
@@ -628,6 +636,32 @@ export const formsRouter = router({
     return created!;
   }),
 
+  listVersions: tenantProcedure
+    .input(z.object({ formId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const { tenantId } = ctx.tenantCtx;
+
+      const rows = await db
+        .select({
+          id: formVersions.id,
+          version: formVersions.version,
+          name: formVersions.name,
+          slug: formVersions.slug,
+          schema: formVersions.schema,
+          steps: formVersions.steps,
+          settings: formVersions.settings,
+          submitLabel: formVersions.submitLabel,
+          isActive: formVersions.isActive,
+          createdAt: formVersions.createdAt,
+        })
+        .from(formVersions)
+        .where(and(eq(formVersions.tenantId, tenantId), eq(formVersions.formId, input.formId)))
+        .orderBy(desc(formVersions.createdAt))
+        .limit(10);
+
+      return rows;
+    }),
+
   update: tenantProcedure
     .input(formUpsertInput.extend({ formId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
@@ -636,10 +670,14 @@ export const formsRouter = router({
       const [existing] = await db
         .select({
           id: forms.id,
+          name: forms.name,
+          slug: forms.slug,
           schema: forms.schema,
           steps: forms.steps,
           settings: forms.settings,
+          submitLabel: forms.submitLabel,
           landingPageId: forms.landingPageId,
+          isActive: forms.isActive,
         })
         .from(forms)
         .where(and(eq(forms.tenantId, tenantId), eq(forms.id, input.formId)));
@@ -654,20 +692,40 @@ export const formsRouter = router({
         throw new TRPCError({ code: "CONFLICT", message: "A form with this slug already exists" });
       }
 
-      await db
-        .update(forms)
-        .set({
-          name: input.name,
-          slug: input.slug,
-          schema: Object.keys(input.schema).length > 0 ? input.schema : existing.schema,
-          steps: input.steps ?? existing.steps ?? null,
-          settings: input.settings ??
-            existing.settings ?? { honeypot: true, turnstile_enabled: false },
-          submitLabel: input.submitLabel ?? null,
-          landingPageId: input.landingPageId ?? existing.landingPageId ?? null,
-          updatedAt: new Date(),
-        })
-        .where(and(eq(forms.tenantId, tenantId), eq(forms.id, input.formId)));
+      await db.transaction(async (tx) => {
+        const [latestVersion] = await tx
+          .select({ version: sql<number>`COALESCE(MAX(${formVersions.version}), 0)::int` })
+          .from(formVersions)
+          .where(and(eq(formVersions.tenantId, tenantId), eq(formVersions.formId, input.formId)));
+
+        await tx.insert(formVersions).values({
+          tenantId,
+          formId: input.formId,
+          version: (latestVersion?.version ?? 0) + 1,
+          name: existing.name,
+          slug: existing.slug,
+          schema: existing.schema,
+          steps: existing.steps,
+          settings: existing.settings ?? {},
+          submitLabel: existing.submitLabel,
+          isActive: existing.isActive,
+        });
+
+        await tx
+          .update(forms)
+          .set({
+            name: input.name,
+            slug: input.slug,
+            schema: Object.keys(input.schema).length > 0 ? input.schema : existing.schema,
+            steps: input.steps ?? existing.steps ?? null,
+            settings: input.settings ??
+              existing.settings ?? { honeypot: true, turnstile_enabled: false },
+            submitLabel: input.submitLabel ?? null,
+            landingPageId: input.landingPageId ?? existing.landingPageId ?? null,
+            updatedAt: new Date(),
+          })
+          .where(and(eq(forms.tenantId, tenantId), eq(forms.id, input.formId)));
+      });
 
       return { success: true };
     }),

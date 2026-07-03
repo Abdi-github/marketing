@@ -92,6 +92,18 @@ type FormSubmissions = {
   page: number;
   pageSize: number;
 };
+type FormVersion = {
+  id: string;
+  version: number;
+  name: string;
+  slug: string;
+  schema: Record<string, unknown>;
+  steps: FormStep[] | null;
+  settings: { honeypot?: boolean; turnstile_enabled?: boolean; success_message?: string } | null;
+  submitLabel: string | null;
+  isActive: boolean;
+  createdAt: string | Date;
+};
 type FormTemplate = {
   key: string;
   title: string;
@@ -978,6 +990,7 @@ export default function FormDetailPage() {
   const [analytics, setAnalytics] = useState<FormAnalytics | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
   const [submissions, setSubmissions] = useState<FormSubmissions | null>(null);
+  const [formVersions, setFormVersions] = useState<FormVersion[]>([]);
   const [submissionsLoading, setSubmissionsLoading] = useState(true);
   const [submissionStatusFilter, setSubmissionStatusFilter] = useState<LeadStatus | "all">("all");
   const [selectedSubmission, setSelectedSubmission] = useState<FormSubmission | null>(null);
@@ -993,6 +1006,7 @@ export default function FormDetailPage() {
   const [steps, setSteps] = useState<FormStep[]>([]);
   const [expandedFields, setExpandedFields] = useState<Set<string>>(() => new Set());
   const [pendingTemplate, setPendingTemplate] = useState<FormTemplate | null>(null);
+  const [restoredVersionId, setRestoredVersionId] = useState<string | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [saveOk, setSaveOk] = useState(false);
@@ -1032,6 +1046,7 @@ export default function FormDetailPage() {
         const submissionsResult = await trpc.forms.listSubmissions
           .query({ formId, page: 1, pageSize: 10 })
           .catch(() => null);
+        const versionsResult = await trpc.forms.listVersions.query({ formId }).catch(() => []);
         const f = formResult as FormData;
         const nextSubmitLabel = f.submitLabel ?? "";
         const nextSettings = f.settings ?? {};
@@ -1050,6 +1065,7 @@ export default function FormDetailPage() {
         setTenantSlug(slugResult.slug);
         setAnalytics(analyticsResult as FormAnalytics | null);
         setSubmissions(submissionsResult as FormSubmissions | null);
+        setFormVersions(versionsResult as FormVersion[]);
         initialSnapshotRef.current = createEditorSnapshot({
           name: f.name,
           submitLabel: nextSubmitLabel,
@@ -1092,6 +1108,11 @@ export default function FormDetailPage() {
     } finally {
       setSubmissionsLoading(false);
     }
+  }
+
+  async function refreshFormVersions() {
+    const result = await trpc.forms.listVersions.query({ formId }).catch(() => []);
+    setFormVersions(result as FormVersion[]);
   }
 
   function handleSubmissionFilter(status: LeadStatus | "all") {
@@ -1276,6 +1297,25 @@ export default function FormDetailPage() {
     setPendingTemplate(null);
   }
 
+  function restoreVersion(version: FormVersion) {
+    const versionSettings = version.settings ?? {};
+    const nextSteps =
+      version.steps && version.steps.length > 0
+        ? cloneSteps(version.steps)
+        : legacySchemaToSteps(version.schema ?? {});
+
+    setName(version.name);
+    setSubmitLabel(version.submitLabel ?? "");
+    setSuccessMessage(versionSettings.success_message ?? "");
+    setHoneypot(versionSettings.honeypot !== false);
+    setTurnstile(versionSettings.turnstile_enabled === true);
+    setSteps(nextSteps);
+    setExpandedFields(new Set());
+    setRestoredVersionId(version.id);
+    setSaveOk(false);
+    setSaveError(null);
+  }
+
   function addOption(stepIndex: number, fieldIndex: number) {
     const field = steps[stepIndex]?.fields[fieldIndex];
     const options = field?.options ?? [];
@@ -1340,6 +1380,8 @@ export default function FormDetailPage() {
         turnstile,
         steps: nextSteps,
       });
+      setRestoredVersionId(null);
+      void refreshFormVersions();
       void refreshAnalytics();
       setSaveOk(true);
       setTimeout(() => setSaveOk(false), 3000);
@@ -1984,7 +2026,11 @@ export default function FormDetailPage() {
             {saveOk && <p className="mb-3 text-sm text-green-600">{t("savedOk")}</p>}
             {!saveError && !saveOk && (
               <p className="mb-3 text-sm text-gray-500">
-                {isDirty ? "Ready to save your latest edits." : "All changes are saved."}
+                {restoredVersionId
+                  ? "A previous version is restored in the editor. Review the preview, then save to publish it."
+                  : isDirty
+                    ? "Ready to save your latest edits."
+                    : "All changes are saved."}
               </p>
             )}
             <button
@@ -1994,6 +2040,48 @@ export default function FormDetailPage() {
             >
               {saving ? t("saving") : "Save form"}
             </button>
+          </div>
+
+          <div className="rounded-xl border border-gray-200 bg-white p-6">
+            <h2 className="font-semibold text-gray-900">Form history</h2>
+            <p className="mt-1 text-sm text-gray-500">
+              Restore a previous saved version into the editor, then review and save when ready.
+            </p>
+            {formVersions.length === 0 ? (
+              <div className="mt-4 rounded-lg bg-gray-50 p-3 text-sm text-gray-500">
+                Previous versions will appear here after the next time this form is saved.
+              </div>
+            ) : (
+              <div className="mt-4 space-y-3">
+                {formVersions.slice(0, 5).map((version) => (
+                  <div
+                    key={version.id}
+                    className="rounded-lg border border-gray-200 bg-gray-50 p-3"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-900">
+                          Version {version.version}
+                        </p>
+                        <p className="mt-0.5 text-xs text-gray-500">
+                          Saved before changes on {formatDateTime(version.createdAt)}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => restoreVersion(version)}
+                        className="shrink-0 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-100"
+                      >
+                        Restore
+                      </button>
+                    </div>
+                    <p className="mt-2 truncate text-xs text-gray-500">
+                      {version.submitLabel ? `Button: ${version.submitLabel}` : "Default button"}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {tenantSlug && (

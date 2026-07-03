@@ -623,6 +623,16 @@ Use this section while teaching the Forms module after CRM/SMS automation.
     - Refinement implemented immediately: replaced the browser alert with an in-app confirmation dialog using the shared dashboard modal. The dialog explains that applying a starter template replaces editor questions only and that the public form changes only after `Save form`.
     - Verification: focused `prettier`, `eslint --max-warnings 0`, and `pnpm.cmd --filter @marketing/web typecheck` passed.
     - Production note: redeploy before retesting the polished starter-template dialog in production.
+  - Form rollback/history improvement:
+    - User correctly identified that after a tenant replaces a form and publishes it, they need a way to return to the previous working form.
+    - Product decision: this is necessary beginner-friendly safety for non-technical tenants. A tenant should be able to explore templates and publish changes without feeling one mistake permanently damaged the website form.
+    - Improvement implemented immediately: added tenant-scoped `form_versions` persistence. Before each saved form update, the current saved configuration is snapshotted.
+    - Forms detail page now includes a compact `Form history` panel. Staff can restore a previous saved version into the editor, inspect the Preview, and then click `Save form` only if they want to publish the restored version.
+    - This keeps rollback deliberate: restore does not silently change the public form until staff saves.
+    - Files changed include `packages/db/src/schema/landing-pages.ts`, `packages/db/migrations/0047_form_versions.sql`, `apps/web/src/server/trpc/routers/forms.ts`, and `apps/web/src/app/[locale]/(dashboard)/forms/[id]/page.tsx`.
+    - Verification: focused `prettier`, focused `eslint --max-warnings 0`, `pnpm.cmd --filter @marketing/db typecheck`, `pnpm.cmd --filter @marketing/web typecheck`, and `pnpm.cmd --filter @marketing/db test` passed.
+    - Production note: this requires both code deployment and the new database migration before `Form history` works in production.
+    - Production migration applied from this workspace using `pnpm.cmd --filter @marketing/db db:apply 0047_form_versions.sql`. PostgreSQL reported the expected harmless notice that the policy did not exist before creation, then applied `0047_form_versions.sql` successfully.
   - Product recommendation: generated restaurant pages should eventually use either a shared form with an explicit `Request type` field or separate forms/sections for `Reserve a table` and `Request quote`.
   - Production note: the quote-specific Inbox action fix requires GitHub push + production deployment before the tenant can see it on Vercel.
 

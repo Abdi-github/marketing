@@ -261,6 +261,36 @@ export const forms = pgTable(
 
 // ─── leads ────────────────────────────────────────────────────────────────────
 // One row per form submission. contact_id linked when CRM deduplication runs.
+// Saved snapshots of form configuration before staff publishes changes.
+// Lets tenants restore a previous form builder state after replacing or editing fields.
+export const formVersions = pgTable(
+  "form_versions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    formId: uuid("form_id")
+      .notNull()
+      .references(() => forms.id, { onDelete: "cascade" }),
+    version: integer("version").notNull(),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    schema: jsonb("schema").notNull(),
+    steps: jsonb("steps"),
+    settings: jsonb("settings").notNull().default({}),
+    submitLabel: text("submit_label"),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("form_versions_tenant_id_idx").on(t.tenantId),
+    index("form_versions_form_id_idx").on(t.formId),
+    uniqueIndex("form_versions_form_version_unique").on(t.formId, t.version),
+  ],
+);
+
 export const leads = pgTable(
   "leads",
   {
