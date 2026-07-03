@@ -34,6 +34,7 @@ export default async function FormsPage({ params }: Props) {
       id: forms.id,
       name: forms.name,
       slug: forms.slug,
+      settings: forms.settings,
       isActive: forms.isActive,
       createdAt: forms.createdAt,
       leadCount: count(leads.id),
@@ -49,6 +50,10 @@ export default async function FormsPage({ params }: Props) {
     id: r.id,
     name: r.name,
     slug: r.slug,
+    inactiveMessage:
+      r.settings && typeof r.settings === "object" && !Array.isArray(r.settings)
+        ? ((r.settings as { inactive_message?: string }).inactive_message ?? "")
+        : "",
     isActive: r.isActive,
     leadCount: Number(r.leadCount),
     createdAt: r.createdAt.toISOString(),

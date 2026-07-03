@@ -1,6 +1,6 @@
 # Current CRM Walkthrough State
 
-Last updated: 2026-07-02
+Last updated: 2026-07-04
 
 This file prevents the CRM walkthrough from losing track while we test, fix, and document the restaurant workflows.
 
@@ -637,6 +637,8 @@ Use this section while teaching the Forms module after CRM/SMS automation.
     - Improvement implemented immediately: when a version is restored, the Form history panel now shows a green confirmation message, highlights the restored version, adds a `Restored in editor` badge, and changes the button from `Restore` to disabled `Restored`.
     - Verification: focused `prettier`, `eslint --max-warnings 0`, and `pnpm.cmd --filter @marketing/web typecheck` passed.
     - Production note: redeploy before retesting the clearer restore feedback.
+    - Live verification: user confirmed the restored version now gives clear feedback in production. The editor/preview returned to the booking-style form, the page shows unsaved changes, the save panel explains the previous version is restored, and the history row shows `Restored in editor` / `Restored`.
+    - Full rollback verification: user clicked `Save form` after restoring Version 1, and the published website form returned from the quote form back to the booking/reservation form.
   - Starter template content quality review:
     - User reviewed the generated `Quote request` preview before saving and asked whether it is good enough.
     - Assessment: the structure was useful, but the content was too generic for the restaurant walkthrough. `Project details`, `Consultation`, and `Support` were not clear enough for private dining or restaurant quote requests.
@@ -646,6 +648,15 @@ Use this section while teaching the Forms module after CRM/SMS automation.
     - Live verification: user confirmed the improved quote starter template is better and published it in production.
   - Product recommendation: generated restaurant pages should eventually use either a shared form with an explicit `Request type` field or separate forms/sections for `Reserve a table` and `Request quote`.
   - Production note: the quote-specific Inbox action fix requires GitHub push + production deployment before the tenant can see it on Vercel.
+  - Active/inactive form walkthrough:
+    - Issue found in production: when the form was inactive, the public generated website still let the guest fill all steps and only showed the unfriendly error `Not found` after clicking `Request booking`.
+    - Product decision: inactive forms should behave like a temporary front-desk notice, not like a broken form. Tenants need to specify a friendly reason such as `We are closed for holidays`, and customers should see that reason before entering any details.
+    - Improvement implemented immediately: inactive messages are stored on the existing form settings JSON, so no new database migration is required. The Forms list now asks for a customer-facing pause message when staff deactivates a form. The form detail page also has a `Message shown when this form is paused` field.
+    - Public landing-page forms, website subpage forms, embedded forms, and previews now receive the form active state. If inactive, they show a styled `Requests are paused` notice instead of rendering fields.
+    - The public form API now returns the same friendly paused message for inactive forms instead of `Not found`, so direct/bypassed submissions also behave professionally.
+    - Safety improvement: landing-page form helpers no longer automatically reactivate an intentionally inactive generated form.
+    - Verification before deployment: `pnpm.cmd --filter @marketing/ai-router typecheck`, `pnpm.cmd --filter @marketing/web typecheck`, and focused `eslint --max-warnings 0` passed.
+    - Production note: this inactive-form UX fix requires GitHub push + Vercel deployment before the public website retest reflects it. No database migration is needed.
 
 ## Next Ordered Scenarios
 

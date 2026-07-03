@@ -112,6 +112,14 @@ function asRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
+function formInactiveMessage(settings: unknown): string {
+  const record = asRecord(settings);
+  const message = record["inactive_message"];
+  return typeof message === "string" && message.trim()
+    ? message.trim()
+    : "This form is not accepting requests right now. Please contact the business directly or check back later.";
+}
+
 function appendLeadId(meta: Record<string, unknown>, leadId: string): string[] {
   const existing = Array.isArray(meta["leadIds"])
     ? meta["leadIds"].filter((value): value is string => typeof value === "string")
@@ -243,14 +251,18 @@ export async function POST(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  // 2. Resolve active form by (tenant_id, slug).
+  // 2. Resolve form by (tenant_id, slug). Inactive forms return a friendly paused response below.
   const [form] = await db
     .select()
     .from(forms)
-    .where(and(eq(forms.tenantId, tenant.id), eq(forms.slug, formSlug), eq(forms.isActive, true)));
+    .where(and(eq(forms.tenantId, tenant.id), eq(forms.slug, formSlug)));
 
   if (!form) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  if (!form.isActive) {
+    return NextResponse.json({ error: formInactiveMessage(form.settings) }, { status: 423 });
   }
 
   // 3. Parse body.

@@ -61,6 +61,7 @@ export const formSettingsSchema = z.object({
   honeypot: z.boolean().default(true),
   turnstile_enabled: z.boolean().default(false),
   success_message: z.string().max(300).optional(),
+  inactive_message: z.string().max(500).optional(),
 });
 export type FormSettings = z.infer<typeof formSettingsSchema>;
 

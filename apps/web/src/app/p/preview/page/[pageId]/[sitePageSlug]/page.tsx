@@ -177,6 +177,7 @@ export default async function DraftPreviewSitePage({ params, searchParams }: Pro
                           steps={form.steps as FormStep[] | undefined}
                           settings={form.settings as Partial<FormSettings> | undefined}
                           submitLabel={form.submitLabel ?? undefined}
+                          isActive={form.isActive}
                         />
                       );
                     }

@@ -20,7 +20,12 @@ type FormData = {
   steps: FormStep[] | null;
   isActive: boolean;
   submitLabel: string | null;
-  settings: { honeypot?: boolean; turnstile_enabled?: boolean; success_message?: string } | null;
+  settings: {
+    honeypot?: boolean;
+    turnstile_enabled?: boolean;
+    success_message?: string;
+    inactive_message?: string;
+  } | null;
   landingPageId: string | null;
   tenantId: string;
 };
@@ -99,7 +104,12 @@ type FormVersion = {
   slug: string;
   schema: Record<string, unknown>;
   steps: FormStep[] | null;
-  settings: { honeypot?: boolean; turnstile_enabled?: boolean; success_message?: string } | null;
+  settings: {
+    honeypot?: boolean;
+    turnstile_enabled?: boolean;
+    success_message?: string;
+    inactive_message?: string;
+  } | null;
   submitLabel: string | null;
   isActive: boolean;
   createdAt: string | Date;
@@ -775,6 +785,7 @@ function createEditorSnapshot(input: {
   name: string;
   submitLabel: string;
   successMessage: string;
+  inactiveMessage: string;
   honeypot: boolean;
   turnstile: boolean;
   steps: FormStep[];
@@ -783,6 +794,7 @@ function createEditorSnapshot(input: {
     name: input.name,
     submitLabel: input.submitLabel,
     successMessage: input.successMessage,
+    inactiveMessage: input.inactiveMessage,
     honeypot: input.honeypot,
     turnstile: input.turnstile,
     steps: sanitizeSteps(input.steps),
@@ -1012,6 +1024,7 @@ export default function FormDetailPage() {
   const [name, setName] = useState("");
   const [submitLabel, setSubmitLabel] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [inactiveMessage, setInactiveMessage] = useState("");
   const [honeypot, setHoneypot] = useState(true);
   const [turnstile, setTurnstile] = useState(false);
   const [steps, setSteps] = useState<FormStep[]>([]);
@@ -1026,8 +1039,17 @@ export default function FormDetailPage() {
 
   const allFields = useMemo(() => steps.flatMap((step) => step.fields), [steps]);
   const currentSnapshot = useMemo(
-    () => createEditorSnapshot({ name, submitLabel, successMessage, honeypot, turnstile, steps }),
-    [honeypot, name, steps, submitLabel, successMessage, turnstile],
+    () =>
+      createEditorSnapshot({
+        name,
+        submitLabel,
+        successMessage,
+        inactiveMessage,
+        honeypot,
+        turnstile,
+        steps,
+      }),
+    [honeypot, inactiveMessage, name, steps, submitLabel, successMessage, turnstile],
   );
   const isDirty = Boolean(form) && currentSnapshot !== initialSnapshotRef.current;
 
@@ -1062,6 +1084,7 @@ export default function FormDetailPage() {
         const nextSubmitLabel = f.submitLabel ?? "";
         const nextSettings = f.settings ?? {};
         const nextSuccessMessage = nextSettings.success_message ?? "";
+        const nextInactiveMessage = nextSettings.inactive_message ?? "";
         const nextHoneypot = nextSettings.honeypot !== false;
         const nextTurnstile = nextSettings.turnstile_enabled === true;
         const nextSteps =
@@ -1072,6 +1095,7 @@ export default function FormDetailPage() {
         setHoneypot(nextHoneypot);
         setTurnstile(nextTurnstile);
         setSuccessMessage(nextSuccessMessage);
+        setInactiveMessage(nextInactiveMessage);
         setSteps(nextSteps);
         setTenantSlug(slugResult.slug);
         setAnalytics(analyticsResult as FormAnalytics | null);
@@ -1081,6 +1105,7 @@ export default function FormDetailPage() {
           name: f.name,
           submitLabel: nextSubmitLabel,
           successMessage: nextSuccessMessage,
+          inactiveMessage: nextInactiveMessage,
           honeypot: nextHoneypot,
           turnstile: nextTurnstile,
           steps: nextSteps,
@@ -1318,6 +1343,7 @@ export default function FormDetailPage() {
     setName(version.name);
     setSubmitLabel(version.submitLabel ?? "");
     setSuccessMessage(versionSettings.success_message ?? "");
+    setInactiveMessage(versionSettings.inactive_message ?? "");
     setHoneypot(versionSettings.honeypot !== false);
     setTurnstile(versionSettings.turnstile_enabled === true);
     setSteps(nextSteps);
@@ -1358,6 +1384,7 @@ export default function FormDetailPage() {
       honeypot,
       turnstile_enabled: turnstile,
       success_message: successMessage || undefined,
+      inactive_message: inactiveMessage || undefined,
     };
 
     try {
@@ -1387,6 +1414,7 @@ export default function FormDetailPage() {
         name,
         submitLabel,
         successMessage,
+        inactiveMessage,
         honeypot,
         turnstile,
         steps: nextSteps,
@@ -1521,6 +1549,22 @@ export default function FormDetailPage() {
                   placeholder={t("successMessagePlaceholder")}
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
+              </label>
+              <label className="block md:col-span-2">
+                <span className="mb-1 block text-sm font-medium text-gray-700">
+                  Message shown when this form is paused
+                </span>
+                <textarea
+                  value={inactiveMessage}
+                  onChange={(e) => setInactiveMessage(e.target.value)}
+                  rows={3}
+                  maxLength={500}
+                  placeholder="Example: We are closed for holidays until 20 July. Please call us for urgent requests, or check back when we reopen."
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  If the form is inactive, customers see this before entering any details.
+                </p>
               </label>
             </div>
             <div className="mt-5 flex flex-wrap gap-5">

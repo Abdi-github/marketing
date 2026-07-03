@@ -731,13 +731,39 @@ export const formsRouter = router({
     }),
 
   setActive: tenantProcedure
-    .input(z.object({ formId: z.string().uuid(), isActive: z.boolean() }))
+    .input(
+      z.object({
+        formId: z.string().uuid(),
+        isActive: z.boolean(),
+        inactiveMessage: z.string().max(500).optional(),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       const { tenantId } = ctx.tenantCtx;
 
+      const [form] = await db
+        .select({ id: forms.id, settings: forms.settings })
+        .from(forms)
+        .where(and(eq(forms.tenantId, tenantId), eq(forms.id, input.formId)));
+
+      if (!form) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const existingSettings =
+        form.settings && typeof form.settings === "object" && !Array.isArray(form.settings)
+          ? (form.settings as Record<string, unknown>)
+          : {};
+      const settings = input.isActive
+        ? existingSettings
+        : {
+            ...existingSettings,
+            inactive_message:
+              input.inactiveMessage?.trim() ||
+              "We are not accepting requests through this form right now. Please contact us directly or check back later.",
+          };
+
       await db
         .update(forms)
-        .set({ isActive: input.isActive, updatedAt: new Date() })
+        .set({ isActive: input.isActive, settings, updatedAt: new Date() })
         .where(and(eq(forms.tenantId, tenantId), eq(forms.id, input.formId)));
 
       return { success: true };

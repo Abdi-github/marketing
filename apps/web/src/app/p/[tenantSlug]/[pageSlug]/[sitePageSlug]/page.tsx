@@ -310,6 +310,7 @@ export default async function PublicLandingSitePage({ params, searchParams }: Pr
                       steps={form.steps as FormStep[] | undefined}
                       settings={form.settings as Partial<FormSettings> | undefined}
                       submitLabel={form.submitLabel ?? undefined}
+                      isActive={form.isActive}
                     />
                   ) : (
                     <div

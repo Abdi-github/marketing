@@ -28,9 +28,10 @@ export default async function EmbeddedFormPage({ params }: Props) {
       steps: forms.steps,
       settings: forms.settings,
       submitLabel: forms.submitLabel,
+      isActive: forms.isActive,
     })
     .from(forms)
-    .where(and(eq(forms.tenantId, tenant.id), eq(forms.slug, formSlug), eq(forms.isActive, true)));
+    .where(and(eq(forms.tenantId, tenant.id), eq(forms.slug, formSlug)));
 
   if (!form) notFound();
 
@@ -53,6 +54,7 @@ export default async function EmbeddedFormPage({ params }: Props) {
           steps={form.steps as FormStep[] | undefined}
           settings={form.settings as Partial<FormSettings> | undefined}
           submitLabel={form.submitLabel ?? undefined}
+          isActive={form.isActive}
         />
       </div>
     </main>

@@ -72,13 +72,6 @@ export async function ensureLandingPageLeadForm(input: {
 
   const existing = await getLandingPageLeadForm(input.tenantId, input.landingPageId);
   if (existing) {
-    if (!existing.isActive) {
-      await db
-        .update(forms)
-        .set({ isActive: true, updatedAt: new Date() })
-        .where(and(eq(forms.tenantId, input.tenantId), eq(forms.id, existing.id)));
-      return { ...existing, isActive: true };
-    }
     return existing;
   }
 

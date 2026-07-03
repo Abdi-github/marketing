@@ -21,6 +21,7 @@ type Props = {
   steps?: FormStep[];
   settings?: Partial<FormSettings>;
   submitLabel?: string;
+  isActive?: boolean;
 };
 
 type LegacyFieldDef = {
@@ -118,6 +119,32 @@ function validateVisibleFields(fields: FormField[], values: Record<string, strin
     if (error) return error;
   }
   return null;
+}
+
+function pausedMessage(settings?: Partial<FormSettings>): string {
+  return (
+    settings?.inactive_message?.trim() ||
+    "This form is not accepting requests right now. Please contact the business directly or check back later."
+  );
+}
+
+function PausedFormNotice({ message }: { message: string }) {
+  return (
+    <div
+      role="status"
+      style={{
+        border: "1px solid rgba(251, 191, 36, 0.5)",
+        background: "rgba(255, 251, 235, 0.96)",
+        borderRadius: 12,
+        padding: "1rem",
+        color: "#78350f",
+        boxShadow: "0 12px 30px rgba(15, 23, 42, 0.08)",
+      }}
+    >
+      <p style={{ margin: 0, fontWeight: 700, color: "#92400e" }}>Requests are paused</p>
+      <p style={{ margin: "0.45rem 0 0", lineHeight: 1.5, fontSize: "0.95rem" }}>{message}</p>
+    </div>
+  );
 }
 
 // ─── Individual field renderer ────────────────────────────────────────────────
@@ -557,6 +584,7 @@ export default function LeadForm({
   steps,
   settings,
   submitLabel,
+  isActive = true,
 }: Props) {
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -635,6 +663,10 @@ export default function LeadForm({
         {successMessage}
       </p>
     );
+  }
+
+  if (!isActive) {
+    return <PausedFormNotice message={pausedMessage(settings)} />;
   }
 
   return (
