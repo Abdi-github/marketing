@@ -155,7 +155,7 @@ export default async function PublicLandingSitePage({ params, searchParams }: Pr
   let assignedVariantId: string | null = null;
   let versionId = defaultVersionId;
 
-  const [activeExp] = await db
+  const activeExperimentRows = await db
     .select({ id: landingPageExperiments.id })
     .from(landingPageExperiments)
     .where(
@@ -166,7 +166,9 @@ export default async function PublicLandingSitePage({ params, searchParams }: Pr
       ),
     )
     .orderBy(desc(landingPageExperiments.createdAt))
-    .limit(1);
+    .limit(1)
+    .catch(() => []);
+  const activeExp = activeExperimentRows[0];
 
   if (activeExp) {
     const expVariants = await db
@@ -176,7 +178,8 @@ export default async function PublicLandingSitePage({ params, searchParams }: Pr
         trafficPct: experimentVariants.trafficPct,
       })
       .from(experimentVariants)
-      .where(eq(experimentVariants.experimentId, activeExp.id));
+      .where(eq(experimentVariants.experimentId, activeExp.id))
+      .catch(() => []);
 
     if (expVariants.length >= 2) {
       if (existingVariantId && expVariants.some((v) => v.id === existingVariantId)) {
@@ -254,7 +257,11 @@ export default async function PublicLandingSitePage({ params, searchParams }: Pr
     ? await getLandingPageLeadForm(tenant.id, page.id).catch(() => null)
     : null;
 
-  const [brand] = await db.select().from(brandAssets).where(eq(brandAssets.tenantId, tenant.id));
+  const [brand] = await db
+    .select()
+    .from(brandAssets)
+    .where(eq(brandAssets.tenantId, tenant.id))
+    .catch(() => []);
 
   const basePath = `/p/${tenantSlug}/${pageSlug}`;
   const theme = resolveLandingTheme({

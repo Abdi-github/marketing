@@ -677,6 +677,11 @@ Use this section while teaching the Forms module after CRM/SMS automation.
     - Improvement implemented immediately: `/api/track` now awaits the event insert before returning, while still responding gracefully if tracking storage fails so the public page is not broken.
     - Production note: this tracking persistence fix requires GitHub push + Vercel deployment before analytics can be retested successfully. No database migration is needed.
     - Verification before deployment: focused `prettier`, focused `eslint --max-warnings 0`, and `pnpm.cmd --filter @marketing/web typecheck` passed.
+    - Public-page reliability issue found after deploy: user reported that the generated public contact page briefly showed a production `Application error` / Server Components digest on first load, then worked after browser refresh. This is unacceptable for customer-facing pages because a guest may abandon the request.
+    - Reliability improvement implemented immediately: public landing pages now fail open for optional server-render reads such as A/B experiment lookup, experiment variants, and brand styling. Those optional reads should never take down the public customer page.
+    - Customer-facing safety net added: generated public pages now have a route-level error boundary with a friendly retry/reload screen instead of the raw Next.js application error screen.
+    - Production note: this public-page reliability fix requires GitHub push + Vercel deployment before retesting the customer page. No database migration is needed.
+    - Verification before deployment: focused `prettier`, focused `eslint --max-warnings 0`, and `pnpm.cmd --filter @marketing/web typecheck` passed.
 
 ## Next Ordered Scenarios
 
