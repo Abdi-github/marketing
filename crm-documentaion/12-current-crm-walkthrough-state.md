@@ -657,6 +657,20 @@ Use this section while teaching the Forms module after CRM/SMS automation.
     - Safety improvement: landing-page form helpers no longer automatically reactivate an intentionally inactive generated form.
     - Verification before deployment: `pnpm.cmd --filter @marketing/ai-router typecheck`, `pnpm.cmd --filter @marketing/web typecheck`, and focused `eslint --max-warnings 0` passed.
     - Production note: this inactive-form UX fix requires GitHub push + Vercel deployment before the public website retest reflects it. No database migration is needed.
+  - Embed code verification:
+    - User copied the iframe embed code from the Forms detail page and tested it in CodePen.
+    - Result: the embedded form rendered and worked correctly outside the generated website.
+    - This confirms the same tenant form can be placed on an external website while still feeding the app's Forms submissions and CRM workflow.
+  - Forms analytics review:
+    - User opened the Forms detail page after multiple public and embedded submissions.
+    - Result: the Analytics card is still empty and says there is no form analytics yet, while the Submissions list clearly contains recent leads.
+    - Explanation for the walkthrough: this is acceptable if consent-based tracking events have not been recorded. Submissions and CRM workflows can work even when analytics is empty.
+    - Tenant-facing teaching point: Analytics measures visitor behavior such as views, starts, submits, and drop-off; Submissions are the saved customer requests. They are related but not the same.
+    - Improvement implemented immediately: the Analytics card now explains the exact case where submissions exist but no consent-based events are recorded yet, and gives a clear walkthrough instruction to open the public page in a private window or use `Privacy settings`, accept consent, view/submit the form, then refresh.
+    - Tracking improvement: active public forms now emit a `form_view` event when rendered, and the tracker also scans forms when it starts so a consented visitor who reaches the form can produce a view even before typing.
+    - Consent improvement: public landing pages now keep a small `Privacy settings` control after a visitor accepts or declines consent. This lets a visitor change consent later and lets the walkthrough retest analytics without manually clearing browser cookies.
+    - Production note: this Forms analytics and consent UX fix requires GitHub push + Vercel deployment before the production walkthrough can verify it.
+    - Verification before deployment: focused `prettier`, focused `eslint --max-warnings 0`, and `pnpm.cmd --filter @marketing/web typecheck` passed.
 
 ## Next Ordered Scenarios
 

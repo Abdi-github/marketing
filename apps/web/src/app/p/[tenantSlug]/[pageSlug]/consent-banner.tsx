@@ -34,28 +34,60 @@ export function ConsentBanner({
   brandPrimary: string;
 }) {
   const [visible, setVisible] = useState(false);
+  const [hasChoice, setHasChoice] = useState(false);
 
   useEffect(() => {
-    if (getCookie("__tc") === "1") {
+    const consent = getCookie("__tc");
+    setHasChoice(consent === "1" || consent === "0");
+    if (consent === "1") {
       // Already consented — inject tracker immediately.
       injectTracker(tenantSlug);
-    } else {
+    } else if (!consent) {
       setVisible(true);
     }
   }, [tenantSlug]);
 
   function accept() {
     setCookie("__tc", "1", 365);
+    setHasChoice(true);
     setVisible(false);
     injectTracker(tenantSlug);
     document.dispatchEvent(new Event("__tc_accepted"));
   }
 
   function decline() {
+    setCookie("__tc", "0", 30);
+    setHasChoice(true);
     setVisible(false);
   }
 
-  if (!visible) return null;
+  if (!visible) {
+    if (!hasChoice) return null;
+
+    return (
+      <button
+        type="button"
+        onClick={() => setVisible(true)}
+        style={{
+          position: "fixed",
+          left: "1rem",
+          bottom: "1rem",
+          zIndex: 9998,
+          padding: "0.35rem 0.6rem",
+          background: "rgba(255,255,255,0.92)",
+          color: "var(--lp-text,#374151)",
+          border: "1px solid var(--lp-border,#e5e7eb)",
+          borderRadius: 999,
+          boxShadow: "0 6px 18px rgba(15,23,42,0.12)",
+          cursor: "pointer",
+          fontSize: "0.75rem",
+          fontWeight: 600,
+        }}
+      >
+        Privacy settings
+      </button>
+    );
+  }
 
   return (
     <div

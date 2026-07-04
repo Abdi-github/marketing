@@ -619,11 +619,22 @@ function InfoBox({
 function AnalyticsPanel({
   analytics,
   loading,
+  submissionCount,
 }: {
   analytics: FormAnalytics | null;
   loading: boolean;
+  submissionCount: number;
 }) {
   const maxFunnelCount = Math.max(1, ...(analytics?.funnel.map((item) => item.count) ?? [1]));
+  const hasTrackingEvents = Boolean(
+    analytics &&
+    (analytics.totals.views > 0 ||
+      analytics.totals.starts > 0 ||
+      analytics.totals.submits > 0 ||
+      analytics.totals.stepViews > 0 ||
+      analytics.totals.stepCompletions > 0),
+  );
+  const hasStoredSubmissions = submissionCount > 0 || (analytics?.totals.allTimeLeads ?? 0) > 0;
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-6">
@@ -653,6 +664,23 @@ function AnalyticsPanel({
 
       {!loading && analytics && (
         <div className="space-y-5">
+          {!hasTrackingEvents && hasStoredSubmissions && (
+            <div className="rounded-lg border border-amber-100 bg-amber-50 p-4 text-sm text-amber-950">
+              <p className="font-medium">
+                Submissions are arriving, but analytics events are not yet.
+              </p>
+              <p className="mt-2 text-amber-900">
+                Form submissions are saved even without analytics. The numbers below fill only when
+                a visitor opens the public page, accepts the consent request, and then views or uses
+                this form.
+              </p>
+              <div className="mt-3 rounded-lg bg-white px-3 py-2 text-xs text-amber-900">
+                For walkthrough testing, open the public page in a fresh private window or use the
+                Privacy settings button on the public page, choose Accept, then refresh this card.
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <MetricCard label="Views" value={analytics.totals.views} />
             <MetricCard label="Starts" value={analytics.totals.starts} />
@@ -725,14 +753,20 @@ function AnalyticsPanel({
 
       {!loading && !analytics && (
         <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm text-blue-950">
-          <p className="font-medium">No form analytics to show yet.</p>
+          <p className="font-medium">
+            {hasStoredSubmissions
+              ? "Submissions exist, but no consent-based analytics are available yet."
+              : "No form analytics to show yet."}
+          </p>
           <p className="mt-2 text-blue-900">
-            This card only fills after visitors open the public form and accept tracking consent.
-            Submissions can still arrive and appear in the list even when analytics is empty.
+            This card only fills after visitors open the public form and accept tracking consent. A
+            customer can still submit the form, and the submission will still appear in the list,
+            even when analytics is empty.
           </p>
           <div className="mt-3 rounded-lg bg-white px-3 py-2 text-xs text-blue-900">
-            Check this again after the form is live on a landing page or embedded website and guests
-            have visited it.
+            To verify it, open the public page in a fresh private window or use the Privacy settings
+            button on the public page, choose Accept, view the form, submit a test request, then
+            refresh this page.
           </div>
         </div>
       )}
@@ -2064,7 +2098,11 @@ export default function FormDetailPage() {
         </div>
 
         <aside className="space-y-6 xl:sticky xl:top-6 xl:self-start">
-          <AnalyticsPanel analytics={analytics} loading={analyticsLoading} />
+          <AnalyticsPanel
+            analytics={analytics}
+            loading={analyticsLoading}
+            submissionCount={submissions?.total ?? 0}
+          />
 
           <div className="rounded-xl border border-gray-200 bg-white p-6">
             <div className="mb-4 flex items-center justify-between gap-3">

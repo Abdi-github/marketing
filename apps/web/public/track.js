@@ -62,6 +62,7 @@
   var tenantSlug = "";
   var anonymousId = "";
   var activeForms = {};
+  var viewedForms = {};
 
   function push(type, props) {
     if (!hasConsent()) return;
@@ -74,6 +75,13 @@
       referrer: document.referrer.slice(0, 2000) || undefined,
       properties: Object.assign({}, extraProps, props || {}),
     });
+  }
+
+  function pushFormView(formSlug) {
+    var key = formSlug || "__unknown";
+    if (viewedForms[key]) return;
+    viewedForms[key] = true;
+    push("form_view", { form_slug: formSlug || undefined });
   }
 
   // ─── Flush ────────────────────────────────────────────────────────────────
@@ -165,14 +173,12 @@
   function trackFormViews() {
     var forms = document.querySelectorAll("form");
     forms.forEach(function (form) {
-      var fired = false;
+      var formSlug = form.getAttribute("data-form-slug") || undefined;
+      pushFormView(formSlug);
       form.addEventListener(
         "focusin",
         function () {
-          if (!fired) {
-            fired = true;
-            push("form_view", { form_slug: form.getAttribute("data-form-slug") || undefined });
-          }
+          pushFormView(formSlug);
         },
         { once: true },
       );
@@ -211,6 +217,11 @@
   // Used to count conversions in A/B experiments.
 
   function listenFormSubmit() {
+    window.addEventListener("__form_view", function (e) {
+      var detail = e && e.detail ? e.detail : {};
+      pushFormView(detail.formSlug || undefined);
+    });
+
     window.addEventListener("__form_start", function (e) {
       var detail = e && e.detail ? e.detail : {};
       if (detail.formSlug) activeForms[detail.formSlug] = true;

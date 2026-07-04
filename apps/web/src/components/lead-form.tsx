@@ -598,12 +598,22 @@ export default function LeadForm({
   const honeypotRef = useRef<HTMLInputElement>(null);
 
   function dispatchFormEvent(
-    type: "__form_start" | "__form_step_view" | "__form_step_complete" | "__form_submit",
+    type:
+      | "__form_view"
+      | "__form_start"
+      | "__form_step_view"
+      | "__form_step_complete"
+      | "__form_submit",
     detail: Record<string, unknown>,
   ) {
     if (typeof window === "undefined") return;
     window.dispatchEvent(new CustomEvent(type, { detail: { formSlug, ...detail } }));
   }
+
+  useEffect(() => {
+    if (!isActive || typeof window === "undefined") return;
+    window.dispatchEvent(new CustomEvent("__form_view", { detail: { formSlug } }));
+  }, [formSlug, isActive]);
 
   function handleStart(fieldName: string) {
     if (startedRef.current) return;
