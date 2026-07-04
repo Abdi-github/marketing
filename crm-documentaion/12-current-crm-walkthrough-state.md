@@ -682,6 +682,11 @@ Use this section while teaching the Forms module after CRM/SMS automation.
     - Customer-facing safety net added: generated public pages now have a route-level error boundary with a friendly retry/reload screen instead of the raw Next.js application error screen.
     - Production note: this public-page reliability fix requires GitHub push + Vercel deployment before retesting the customer page. No database migration is needed.
     - Verification before deployment: focused `prettier`, focused `eslint --max-warnings 0`, and `pnpm.cmd --filter @marketing/web typecheck` passed.
+    - Live issue persisted after analytics retest: user submitted the form again from an incognito window after accepting consent; the lead arrived in Forms, but the Analytics card remained empty.
+    - Robust analytics improvement implemented immediately: the public form submission endpoint now records a consented `form_submit` analytics event as a server-side fallback when the `__tc=1` consent cookie is present. This means a successful consented submission can no longer arrive without at least the submit event being visible in Forms Analytics.
+    - Privacy behavior preserved: the fallback only runs when the visitor has accepted analytics consent. It also uses a 10-minute duplicate check by anonymous visitor id and form slug to avoid double-counting if browser tracking also succeeds.
+    - Production note: this server-side analytics fallback requires GitHub push + Vercel deployment before the production walkthrough can verify analytics numbers. No database migration is needed.
+    - Verification before deployment: focused `prettier`, focused `eslint --max-warnings 0`, and `pnpm.cmd --filter @marketing/web typecheck` passed.
 
 ## Next Ordered Scenarios
 

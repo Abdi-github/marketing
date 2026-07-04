@@ -23,7 +23,7 @@ import {
   missingReservationFactNames,
   splitContactName,
 } from "@marketing/shared";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
@@ -316,6 +316,8 @@ export async function POST(
   // 8. Insert lead + CRM contact + outbox event in one transaction.
   const sourceUrl = req.headers.get("referer") ?? undefined;
   const anonymousId = req.cookies.get("__tid")?.value ?? null;
+  const analyticsConsent = req.cookies.get("__tc")?.value === "1";
+  const analyticsAnonymousId = anonymousId ?? randomUUID();
   const workflowPlan = buildLeadWorkflowPlan(form, sanitizedPayload, sourceUrl);
   const contactName = splitContactName(sanitizedPayload);
   const sourceChannel = form.landingPageId ? "landing_page_form" : "form";
@@ -649,6 +651,42 @@ export async function POST(
           lifecycleStage: "lead",
         },
       });
+
+      if (analyticsConsent) {
+        const since = new Date(Date.now() - 10 * 60 * 1000);
+        const [existingSubmitEvent] = await tx
+          .select({ id: events.id })
+          .from(events)
+          .where(
+            and(
+              eq(events.tenantId, tenant.id),
+              eq(events.anonymousId, analyticsAnonymousId),
+              eq(events.eventType, "form_submit"),
+              gte(events.occurredAt, since),
+              sql`${events.properties}->>'form_slug' = ${formSlug}`,
+            ),
+          )
+          .limit(1);
+
+        if (!existingSubmitEvent) {
+          await tx.insert(events).values({
+            tenantId: tenant.id,
+            contactId: capturedContactId,
+            anonymousId: analyticsAnonymousId,
+            eventType: "form_submit",
+            properties: {
+              form_slug: formSlug,
+              form_id: form.id,
+              lead_id: lead!.id,
+              workflow_kind: workflowPlan.kind,
+              source: "server_submit_fallback",
+            },
+            pageUrl: sourceUrl ?? null,
+            referrer: sourceUrl ?? null,
+            countryCode: req.headers.get("cf-ipcountry") ?? null,
+          });
+        }
+      }
     });
   } catch (err) {
     logger.error({ err: String(err), tenantSlug, formSlug }, "[form] insert failed");
