@@ -2,7 +2,7 @@
 // Called by /public/track.js embedded in landing pages.
 // FADP compliance: no IP stored; country_code from CF-IPCountry header only.
 // Consent: tracker only fires after visitor accepts consent banner.
-// ADR-0022 — Behavioral event retention (18-month rolling window).
+// ADR-0022: Behavioral event retention (18-month rolling window).
 import { db, events, tenants } from "@marketing/db";
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
@@ -10,8 +10,6 @@ import type { NextRequest } from "next/server";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
-
-// ─── Input validation ─────────────────────────────────────────────────────────
 
 const EVENT_TYPES = [
   "page_view",
@@ -37,14 +35,12 @@ const eventSchema = z.object({
 });
 
 const batchSchema = z.object({
-  /** Tenant's public slug (validated server-side). */
+  /** Tenant's public slug, validated server-side. */
   t: z.string().min(1).max(80),
-  /** First-party UUID cookie — never tied to real-world identity. */
+  /** First-party UUID cookie, never tied to real-world identity. */
   aid: z.string().uuid(),
   events: z.array(eventSchema).min(1).max(50),
 });
-
-// ─── Handler ─────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   let body: unknown;
@@ -61,7 +57,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const { t: tenantSlug, aid: anonymousId, events: eventBatch } = parsed.data;
 
-  // Resolve tenant — validate the slug is real.
   const [tenant] = await db
     .select({ id: tenants.id })
     .from(tenants)
@@ -72,10 +67,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ ok: true });
   }
 
-  // Country code from Cloudflare header — never store IP.
   const countryCode = req.headers.get("cf-ipcountry") ?? undefined;
 
-  // Batch insert — fire and forget pattern; don't block response.
   const rows = eventBatch.map((e) => ({
     tenantId: tenant.id,
     anonymousId,
@@ -86,17 +79,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     countryCode: countryCode ?? null,
   }));
 
-  // Non-blocking: insert in background, don't await.
-  db.insert(events)
-    .values(rows)
-    .catch(() => {
-      // Silently drop on failure — tracking is best-effort.
-    });
+  try {
+    // Await the write: serverless runtimes may stop work after the response is returned.
+    await db.insert(events).values(rows);
+  } catch (error) {
+    console.warn("Public tracking event insert failed", error);
+    return NextResponse.json({ ok: true, stored: false });
+  }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, stored: true });
 }
 
-// Also handle OPTIONS for CORS preflight (tracker may be on a different origin).
+// Handle OPTIONS for CORS preflight, used when tracker runs on another origin.
 export function OPTIONS(): NextResponse {
   return new NextResponse(null, {
     status: 204,

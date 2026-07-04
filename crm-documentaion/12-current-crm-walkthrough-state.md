@@ -671,6 +671,12 @@ Use this section while teaching the Forms module after CRM/SMS automation.
     - Consent improvement: public landing pages now keep a small `Privacy settings` control after a visitor accepts or declines consent. This lets a visitor change consent later and lets the walkthrough retest analytics without manually clearing browser cookies.
     - Production note: this Forms analytics and consent UX fix requires GitHub push + Vercel deployment before the production walkthrough can verify it.
     - Verification before deployment: focused `prettier`, focused `eslint --max-warnings 0`, and `pnpm.cmd --filter @marketing/web typecheck` passed.
+    - Live verification: user redeployed and confirmed the Forms Analytics card now shows the improved explanation: submissions exist, but no consent-based analytics are available yet, with clear instructions to accept consent on the public page and refresh.
+    - Live issue found after retest: user submitted the public form from an incognito browser after accepting consent. The request arrived in Forms/CRM, but the Analytics card still showed no events.
+    - Root cause fixed: `/api/track` inserted analytics events with a fire-and-forget database promise and returned immediately. In serverless production, that can finish the request before the database write persists.
+    - Improvement implemented immediately: `/api/track` now awaits the event insert before returning, while still responding gracefully if tracking storage fails so the public page is not broken.
+    - Production note: this tracking persistence fix requires GitHub push + Vercel deployment before analytics can be retested successfully. No database migration is needed.
+    - Verification before deployment: focused `prettier`, focused `eslint --max-warnings 0`, and `pnpm.cmd --filter @marketing/web typecheck` passed.
 
 ## Next Ordered Scenarios
 
