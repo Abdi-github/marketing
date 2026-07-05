@@ -1,6 +1,8 @@
 import {
   getFontPair,
   getPalette,
+  RADIUS_DENSITIES,
+  SHADOWS,
   getTheme,
   googleFontsUrlForPair,
 } from "@marketing/landing-design-system";
@@ -112,6 +114,8 @@ export function resolveLandingTheme(input: ResolveLandingThemeInput): ResolvedLa
   const darkBg = luminance(rawSurface) < 0.18 ? rawSurface : mixHex(primary, "#020617", 0.68);
   const card =
     luminance(surface) < 0.25 ? mixHex(surface, "#ffffff", 0.16) : mixHex(surface, "#ffffff", 0.66);
+  const radius = theme ? RADIUS_DENSITIES[theme.radius] : RADIUS_DENSITIES.modest;
+  const themeShadow = theme ? SHADOWS[theme.shadow] : `0 8px 28px ${rgba(text, 0.08)}`;
 
   const fontHeading = fontPair
     ? `'${fontPair.heading.family}', ${fontPair.heading.fallback}`
@@ -143,10 +147,14 @@ export function resolveLandingTheme(input: ResolveLandingThemeInput): ResolvedLa
     ["--lp-dark-muted" as string]: "rgba(255, 255, 255, 0.74)",
     ["--lp-on-primary" as string]: readableOn(primary),
     ["--lp-on-dark" as string]: "#ffffff",
+    ["--lp-radius-sm" as string]: radius.sm,
+    ["--lp-radius-md" as string]: radius.md,
+    ["--lp-radius-lg" as string]: radius.lg,
+    ["--lp-radius-xl" as string]: radius.xl,
     ["--lp-nav-bg" as string]: rgba(card, 0.92),
     ["--lp-nav-border" as string]: rgba(text, 0.1),
     ["--lp-shadow-soft" as string]: `0 18px 46px ${rgba(text, 0.1)}`,
-    ["--lp-shadow-card" as string]: `0 8px 28px ${rgba(text, 0.08)}`,
+    ["--lp-shadow-card" as string]: themeShadow,
   };
 
   return {

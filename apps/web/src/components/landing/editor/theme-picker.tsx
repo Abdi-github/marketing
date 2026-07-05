@@ -1,36 +1,30 @@
 "use client";
 
-// LP-5: Theme picker dropdown.
-// Sits in the editor toolbar; opens a panel with palette + font pair grids.
-// On change, calls `landingPages.updateTheme` and refreshes the preview iframe.
-
 import React, { useState } from "react";
+import {
+  FONT_PAIRS,
+  FONT_PAIRS_BY_KEY,
+  PALETTES_BY_KEY,
+  THEMES,
+  type Theme,
+} from "@marketing/landing-design-system";
 
-const PALETTES = [
-  { key: "warm-roasted", name: "Warm Roasted", primary: "#8B4513", swiss: false },
-  { key: "ocean-fresh", name: "Ocean Fresh", primary: "#0EA5E9", swiss: false },
-  { key: "midnight-luxe", name: "Midnight Luxe", primary: "#1E1B4B", swiss: false },
-  { key: "sport-orange", name: "Sport Orange", primary: "#EA580C", swiss: false },
-  { key: "forest-calm", name: "Forest Calm", primary: "#15803D", swiss: false },
-  { key: "rose-blush", name: "Rose Blush", primary: "#be123c", swiss: false },
-  { key: "alpine-clean", name: "Alpine Clean", primary: "#0F172A", swiss: true },
-  { key: "zurich-modern", name: "Zürich Modern", primary: "#374151", swiss: true },
-  { key: "geneve-elegance", name: "Genève Élégance", primary: "#7F1D1D", swiss: true },
-  { key: "ticino-sun", name: "Ticino Sun", primary: "#B45309", swiss: true },
-  { key: "bern-heritage", name: "Bern Heritage", primary: "#991B1B", swiss: true },
-  { key: "lavender-grace", name: "Lavender Grace", primary: "#6d28d9", swiss: false },
-];
+function paletteFor(theme: Theme) {
+  return PALETTES_BY_KEY.get(theme.paletteKey);
+}
 
-const FONT_PAIRS = [
-  { key: "inter-inter", heading: "Inter", body: "Inter" },
-  { key: "manrope-inter", heading: "Manrope", body: "Inter" },
-  { key: "playfair-inter", heading: "Playfair Display", body: "Inter" },
-  { key: "playfair-lora", heading: "Playfair Display", body: "Lora" },
-  { key: "fraunces-inter", heading: "Fraunces", body: "Inter" },
-  { key: "dm-serif-dm-sans", heading: "DM Serif Display", body: "DM Sans" },
-  { key: "space-grotesk-inter", heading: "Space Grotesk", body: "Inter" },
-  { key: "archivo-inter", heading: "Archivo", body: "Inter" },
-];
+function radiusLabel(radius: Theme["radius"]): string {
+  if (radius === "sharp") return "Sharp";
+  if (radius === "rounded") return "Rounded";
+  return "Soft";
+}
+
+function selectedThemeFor(key: string | null | undefined): Theme | undefined {
+  if (!key) return undefined;
+  return (
+    THEMES.find((theme) => theme.key === key) ?? THEMES.find((theme) => theme.paletteKey === key)
+  );
+}
 
 export function ThemePickerButton({
   currentPalette,
@@ -42,8 +36,15 @@ export function ThemePickerButton({
   onChange: (palette: string | null, fontPair: string | null) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const palette = PALETTES.find((p) => p.key === currentPalette);
-  const font = FONT_PAIRS.find((f) => f.key === currentFontPair);
+  const selectedTheme = selectedThemeFor(currentPalette);
+  const selectedPalette = selectedTheme
+    ? paletteFor(selectedTheme)
+    : currentPalette
+      ? PALETTES_BY_KEY.get(currentPalette)
+      : undefined;
+  const selectedFont =
+    (currentFontPair ? FONT_PAIRS_BY_KEY.get(currentFontPair) : undefined) ??
+    (selectedTheme ? FONT_PAIRS_BY_KEY.get(selectedTheme.fontPairKey) : undefined);
 
   return (
     <div className="relative">
@@ -51,10 +52,17 @@ export function ThemePickerButton({
         onClick={() => setOpen((v) => !v)}
         className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm transition-colors hover:border-gray-300"
       >
-        <span
-          className="h-5 w-5 rounded-full border border-gray-300"
-          style={{ background: palette?.primary ?? "#9ca3af" }}
-        />
+        <span className="flex h-5 w-8 overflow-hidden rounded-full border border-gray-200">
+          {selectedPalette ? (
+            <>
+              <span className="flex-1" style={{ background: selectedPalette.colors.primary }} />
+              <span className="flex-1" style={{ background: selectedPalette.colors.accent }} />
+              <span className="flex-1" style={{ background: selectedPalette.colors.surface }} />
+            </>
+          ) : (
+            <span className="h-full w-full bg-gray-300" />
+          )}
+        </span>
         <span className="font-medium text-gray-700">Theme</span>
         <svg
           width="14"
@@ -74,74 +82,119 @@ export function ThemePickerButton({
       {open && (
         <>
           <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full z-40 mt-2 max-h-[80vh] w-[420px] overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-2xl">
+          <div className="absolute right-0 top-full z-40 mt-2 max-h-[82vh] w-[560px] overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-2xl">
             <div className="border-b border-gray-100 px-4 py-3">
-              <p className="text-sm font-semibold text-gray-900">Color palette</p>
+              <p className="text-sm font-semibold text-gray-900">Themes</p>
               <p className="mt-0.5 text-xs text-gray-500">
-                Drives the brand color across CTAs, accents, and gradients.
+                Professional bundles with color roles, typography, radius, and mood.
               </p>
             </div>
-            <div className="grid grid-cols-4 gap-2 border-b border-gray-100 px-4 py-3">
-              {PALETTES.map((p) => (
-                <button
-                  key={p.key}
-                  onClick={() => onChange(p.key, currentFontPair)}
-                  className={`relative aspect-square rounded-lg border-2 transition-all ${currentPalette === p.key ? "scale-105 border-gray-900 shadow-md" : "border-transparent hover:border-gray-300"}`}
-                  style={{ background: p.primary }}
-                  title={p.name}
-                >
-                  {p.swiss && (
-                    <span className="absolute right-0.5 top-0.5 rounded bg-white/90 px-0.5 text-[8px] font-bold text-red-700">
-                      🇨🇭
-                    </span>
-                  )}
-                  {currentPalette === p.key && (
-                    <span className="absolute inset-0 flex items-center justify-center">
-                      <svg width="16" height="16" viewBox="0 0 20 20" fill="white">
-                        <path
-                          fillRule="evenodd"
-                          d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                    </span>
-                  )}
-                </button>
-              ))}
+            <div className="grid grid-cols-2 gap-3 border-b border-gray-100 px-4 py-3">
+              {THEMES.map((theme) => {
+                const palette = paletteFor(theme);
+                const font = FONT_PAIRS_BY_KEY.get(theme.fontPairKey);
+                const selected = selectedTheme?.key === theme.key || currentPalette === theme.key;
+                return (
+                  <button
+                    key={theme.key}
+                    onClick={() => onChange(theme.key, theme.fontPairKey)}
+                    className={`overflow-hidden rounded-lg border-2 bg-white text-left transition-all ${
+                      selected
+                        ? "border-gray-950 shadow-md"
+                        : "border-gray-200 hover:border-gray-400"
+                    }`}
+                  >
+                    <div
+                      className="relative h-20"
+                      style={{ background: palette?.colors.surface ?? "#f8fafc" }}
+                    >
+                      <div className="absolute right-3 top-3 flex -space-x-1.5">
+                        {palette &&
+                          [
+                            palette.colors.primary,
+                            palette.colors.secondary,
+                            palette.colors.accent,
+                            palette.colors.surface,
+                          ].map((color) => (
+                            <span
+                              key={color}
+                              className="h-5 w-5 rounded-full border border-white shadow-sm"
+                              style={{ background: color }}
+                            />
+                          ))}
+                      </div>
+                      <div
+                        className="absolute bottom-3 left-3 h-8 w-8 rounded-md"
+                        style={{ background: palette?.colors.primary ?? "#111827" }}
+                      />
+                    </div>
+                    <div className="space-y-2 p-3">
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900">{theme.name}</p>
+                        <p className="text-xs text-gray-500">{font?.name ?? theme.fontPairKey}</p>
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium capitalize text-gray-600">
+                          {theme.vibe}
+                        </span>
+                        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600">
+                          {radiusLabel(theme.radius)}
+                        </span>
+                        {theme.bestFor.slice(0, 2).map((tag) => (
+                          <span
+                            key={tag}
+                            className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium capitalize text-gray-600"
+                          >
+                            {tag.replace(/-/g, " ")}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
             <div className="border-b border-gray-100 px-4 py-3">
-              <p className="text-sm font-semibold text-gray-900">Typography</p>
-              <p className="mt-0.5 text-xs text-gray-500">Heading + body font pairing.</p>
+              <p className="text-sm font-semibold text-gray-900">Typography Override</p>
             </div>
             <div className="grid grid-cols-2 gap-2 px-4 py-3">
-              {FONT_PAIRS.map((f) => (
+              {FONT_PAIRS.map((font) => (
                 <button
-                  key={f.key}
-                  onClick={() => onChange(currentPalette, f.key)}
-                  className={`rounded-lg border-2 p-2.5 text-left transition-all ${currentFontPair === f.key ? "border-gray-900 bg-gray-50" : "border-gray-200 hover:border-gray-300"}`}
+                  key={font.key}
+                  onClick={() => onChange(currentPalette, font.key)}
+                  className={`rounded-lg border-2 p-2.5 text-left transition-all ${
+                    selectedFont?.key === font.key
+                      ? "border-gray-900 bg-gray-50"
+                      : "border-gray-200 hover:border-gray-300"
+                  }`}
                 >
                   <p
                     className="text-sm font-bold text-gray-900"
-                    style={{ fontFamily: `'${f.heading}', system-ui` }}
+                    style={{ fontFamily: `'${font.heading.family}', system-ui` }}
                   >
-                    {f.heading}
+                    {font.heading.family}
                   </p>
-                  <p className="text-xs text-gray-500" style={{ fontFamily: `'${f.body}', serif` }}>
-                    {f.body}
+                  <p
+                    className="text-xs text-gray-500"
+                    style={{ fontFamily: `'${font.body.family}', serif` }}
+                  >
+                    {font.body.family}
                   </p>
                 </button>
               ))}
             </div>
-            {(palette || font) && (
+            {(selectedTheme || selectedFont) && (
               <div className="border-t border-gray-100 bg-gray-50 px-4 py-3 text-xs text-gray-600">
                 Currently:{" "}
-                <span className="font-medium text-gray-900">{palette?.name ?? "default"}</span>
-                {font && (
+                <span className="font-medium text-gray-900">
+                  {selectedTheme?.name ?? selectedPalette?.name ?? "default"}
+                </span>
+                {selectedFont && (
                   <>
                     {" "}
-                    ·{" "}
+                    -{" "}
                     <span className="font-medium text-gray-900">
-                      {font.heading} + {font.body}
+                      {selectedFont.heading.family} + {selectedFont.body.family}
                     </span>
                   </>
                 )}

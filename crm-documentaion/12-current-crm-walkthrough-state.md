@@ -893,7 +893,22 @@ Use this section while teaching the Forms module after CRM/SMS automation.
     - The Email sequences dashboard now counts only accepted/sent email statuses in `Emails sent`, so failed sends do not inflate the sent count.
     - The sequence detail page now shows a friendly session/load error instead of incorrectly displaying `Sequence not found` when the auth/session check fails during refresh.
   - Production note: this retry/session fix requires GitHub push and Vercel deployment before production reflects the corrected failed-enrollment behavior.
-- Next email walkthrough action: deploy the email-sequence cron fix, then retest the stuck manual sequence enrollment and confirm the send history/status behavior.
+- Email automation pause note for next session:
+  - The walkthrough is intentionally paused here so the next chat can focus on enhancing the landing page / website generation module.
+  - Resume email automation later from the email sequence retry/failure checkpoint, not from Email settings or template creation.
+  - Latest verified email state:
+    - Email settings passed with `Marketing AI <abdi@swiftapp.ch>` as From and `abdi.ahmed.huss@gmail.com` as Reply-To.
+    - Email template test passed in Gmail, including Reply-To routing.
+    - Manual sequence exists: `Manual reservation email follow-up test`.
+    - The current enrolled test contact used `abdi.crm.manual@example.test`, which is a fake address and should fail provider delivery.
+  - Latest implemented fix to verify later:
+    - Failed/skipped sequence sends for the same enrollment step should stop retries.
+    - Provider-rejected sends should mark the enrollment `failed`.
+    - The Email sequences dashboard should count only accepted/sent statuses as `Emails sent`.
+    - The sequence detail page should show a friendly load/session message instead of misleading `Sequence not found`.
+  - Next email walkthrough action when returning: after the latest sequence retry/session fix is pushed and deployed, retest the manual sequence twice:
+    1. With the fake `.test` contact, confirm one clear failed status and no repeated retries.
+    2. With a real-email contact, confirm the email sends, arrives, and appears correctly in send history.
 
 ## Next Ordered Scenarios
 

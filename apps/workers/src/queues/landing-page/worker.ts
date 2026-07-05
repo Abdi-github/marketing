@@ -100,7 +100,28 @@ function deriveUsageJobId(jobId: string, ...parts: string[]): string {
 // the bare minimum. Keyed by vertical keyword match so a café gets a menu section
 // and a fitness studio gets an offer section automatically.
 function defaultSectionsForVertical(vertical: string): string {
-  const v = vertical.toLowerCase();
+  const v = vertical
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  if (
+    /\b(real estate|estate agency|property|properties|realtor|immobilier|immobilien|immo)\b/.test(v)
+  )
+    return "hero, gallery, offer, testimonials, about, faq, contact, lead_form";
+  if (
+    /\b(saas|software|web design|web agency|digital agency|marketing agency|branding studio|design studio|seo agency|startup)\b/.test(
+      v,
+    )
+  )
+    return "hero, offer, gallery, testimonials, about, faq, lead_form, contact";
+  if (/\b(event venue|wedding venue|venue|conference|banquet)\b/.test(v))
+    return "hero, gallery, offer, testimonials, faq, contact, lead_form";
+  if (
+    /\b(electrician|plumber|roofer|carpenter|painter|cleaning|hvac|handyman|renovation|repair|solar)\b/.test(
+      v,
+    )
+  )
+    return "hero, offer, testimonials, faq, contact, lead_form";
   if (/café|cafe|kaffee|coffee|barista|bakery|boulangerie|pâtisserie|brunch/.test(v))
     return "hero, menu_preview, about, gallery, testimonials, contact, lead_form";
   if (
@@ -1233,6 +1254,9 @@ async function handleLayout(
   // Failures are non-fatal — the composition still publishes with the AI-suggested URL or empty.
   const wizardPayload = stepData["wizardPayload"] as
     | {
+        paletteKey?: string;
+        themeKey?: string;
+        fontPairKey?: string;
         imageStrategy?: string;
         vibe?: {
           minimalBold: number;
@@ -1290,13 +1314,15 @@ async function handleLayout(
             },
       ),
     };
-    const themePatch: Record<string, string> = { themeFontPair: recipe.fontPairKey };
+    const themePatch: Record<string, string> = {
+      themeFontPair: wizardPayload?.fontPairKey ?? recipe.fontPairKey,
+    };
     if (wizardPayload) themePatch["styleEra"] = designPlan.styleContract.era;
     if (!page.themeKey) {
       await db
         .update(landingPages)
         .set({
-          themeKey: recipe.paletteKey,
+          themeKey: recipe.themeKey,
           stepData: sql`COALESCE(${landingPages.stepData}, '{}'::jsonb) || ${JSON.stringify(themePatch)}::jsonb`,
           updatedAt: new Date(),
         })

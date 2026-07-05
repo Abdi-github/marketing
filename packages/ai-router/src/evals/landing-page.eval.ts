@@ -24,7 +24,11 @@ import {
 } from "../queues/landing-page.schema";
 import { enhanceCompositionWithWebsite, hasValidWebsiteShell } from "../queues/website-plan";
 import { createLandingPageDesignPlan, designPlanSeed } from "../queues/design-plan";
-import { applyStyleContractToComposition } from "../queues/design-recipe";
+import { applyStyleContractToComposition, pickDesignRecipe } from "../queues/design-recipe";
+import {
+  SECTION_VARIANTS,
+  type SectionType as VariantSectionType,
+} from "../queues/section-variants";
 
 const baseOpts = {
   tenantId: "00000000-0000-0000-0000-000000000001",
@@ -42,6 +46,47 @@ const router = new ProviderRouter({
 });
 
 const TENANT_PLAN = "trial";
+
+const KNOWN_THEME_KEYS = new Set([
+  "alpine-clean",
+  "zurich-modern",
+  "geneve-elegance",
+  "ticino-sun",
+  "bern-heritage",
+  "modern-minimal",
+  "vercel-mono",
+  "sage-garden",
+  "elegant-luxury",
+  "ocean-breeze",
+  "nature",
+  "graphite-mono",
+  "clean-slate",
+  "solar-dusk",
+  "amber-slate",
+  "warm-roasted",
+  "morning-cream",
+  "burgundy-velvet",
+  "terracotta-clay",
+  "ocean-fresh",
+  "mint-clinic",
+  "midnight-luxe",
+  "indigo-trust",
+  "sky-startup",
+  "sport-orange",
+  "neon-pulse",
+  "fuchsia-bold",
+  "rose-blush",
+  "electric-lime",
+  "forest-calm",
+  "sage-wellness",
+  "stone-minimal",
+  "graphite-pro",
+  "champagne-soft",
+  "lavender-grace",
+  "monochrome-bold",
+  "violet-noir",
+  "midnight-emerald",
+]);
 
 describe("landing-page designPlan", () => {
   const baseInput = {
@@ -104,6 +149,92 @@ describe("landing-page designPlan", () => {
     expect(["bold-pill", "editorial"]).toContain(modern.styleContract.navStyle);
     expect(modern.styleContract.heroVariants).toContain("editorial-bold");
     expect(modern.styleContract.sectionOrder).not.toEqual(classic.styleContract.sectionOrder);
+  });
+
+  it.each([
+    {
+      name: "restaurant private event",
+      vertical: "restaurant",
+      prompt: "Warm neighborhood restaurant with private dining and event signups.",
+      goals: ["event_signup"],
+      vibe: { minimalBold: 0.2, classicModern: 0.35, calmEnergetic: 0.25 },
+      expectedSubvertical: "restaurant-local",
+    },
+    {
+      name: "web design agency",
+      vertical: "service",
+      prompt: "Modern web design agency for Swiss SMEs, branding, SEO, and conversion websites.",
+      goals: ["lead_capture"],
+      vibe: { minimalBold: 0.65, classicModern: 0.8, calmEnergetic: 0.3 },
+      expectedSubvertical: "agency-digital",
+    },
+    {
+      name: "boutique real estate agency",
+      vertical: "service",
+      prompt: "Boutique real estate agency for residential property inquiries and viewings.",
+      goals: ["lead_capture"],
+      vibe: { minimalBold: -0.1, classicModern: 0.55, calmEnergetic: -0.2 },
+      expectedSubvertical: "real-estate-luxury",
+    },
+    {
+      name: "clinic appointment",
+      vertical: "clinic",
+      prompt: "Trust-led clinic for preventive care and appointment booking.",
+      goals: ["appointment_booking"],
+      vibe: { minimalBold: -0.35, classicModern: 0.15, calmEnergetic: -0.5 },
+      expectedSubvertical: "clinic-trust",
+    },
+    {
+      name: "local quote service",
+      vertical: "service",
+      prompt: "Electrician and solar repair team offering fast quote requests.",
+      goals: ["lead_capture"],
+      vibe: { minimalBold: 0.15, classicModern: 0.25, calmEnergetic: 0.35 },
+      expectedSubvertical: "local-trades",
+    },
+    {
+      name: "retail boutique",
+      vertical: "retail",
+      prompt: "Independent fashion boutique with seasonal sales and local styling.",
+      goals: ["sales_promo"],
+      vibe: { minimalBold: 0.35, classicModern: 0.4, calmEnergetic: 0.25 },
+      expectedSubvertical: "retail-fashion",
+    },
+  ])("classifies and recipes $name without invalid variants", (fixture) => {
+    const plan = createLandingPageDesignPlan({
+      ...baseInput,
+      landingPageId: `00000000-0000-0000-0000-00000000${String(
+        Math.abs(fixture.name.length * 17),
+      ).padStart(4, "0")}`,
+      vertical: fixture.vertical,
+      userPrompt: fixture.prompt,
+      goals: fixture.goals,
+      vibe: fixture.vibe,
+    });
+    const recipe = pickDesignRecipe({
+      vibe: fixture.vibe,
+      goals: fixture.goals,
+      seed: designPlanSeed(plan),
+      sectionTypes: Object.keys(SECTION_VARIANTS),
+      designPlan: plan,
+    });
+
+    expect(plan.subvertical).toBe(fixture.expectedSubvertical);
+    if (fixture.expectedSubvertical !== "retail-fashion") {
+      expect(plan.subvertical).not.toBe("retail-fashion");
+    }
+    expect(KNOWN_THEME_KEYS.has(recipe.themeKey)).toBe(true);
+    expect(recipe.paletteKey).toBe(recipe.themeKey);
+    for (const [type, variant] of Object.entries(recipe.variants)) {
+      expect(
+        (SECTION_VARIANTS[type as VariantSectionType] as readonly string[]).includes(variant!),
+      ).toBe(true);
+    }
+    if (plan.subvertical.startsWith("real-estate") || plan.subvertical.startsWith("clinic")) {
+      expect(["neon-pulse", "violet-noir", "fuchsia-bold", "electric-lime"]).not.toContain(
+        recipe.themeKey,
+      );
+    }
   });
 
   it("applies style contracts to section order, hero family, tones, and nav style", () => {

@@ -10,6 +10,13 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
+import {
+  FONT_PAIRS as DESIGN_FONT_PAIRS,
+  FONT_PAIRS_BY_KEY,
+  PALETTES_BY_KEY,
+  THEMES,
+  type Theme,
+} from "@marketing/landing-design-system";
 import { trpc } from "../../../../../../lib/trpc";
 import type { LandingPageLocale } from "../../../../../../lib/landing-language";
 
@@ -185,29 +192,41 @@ const PALETTES = [
     vibe: "dark",
   },
 ] as const;
-type PaletteKey = (typeof PALETTES)[number]["key"];
+type PaletteKey = string;
 
-const FONT_PAIRS = [
-  { key: "inter-inter", heading: "Inter", body: "Inter", vibe: "Modern & readable" },
-  { key: "manrope-inter", heading: "Manrope", body: "Inter", vibe: "Tech-forward editorial" },
-  { key: "playfair-inter", heading: "Playfair Display", body: "Inter", vibe: "Elegant & timeless" },
-  { key: "playfair-lora", heading: "Playfair Display", body: "Lora", vibe: "Editorial & bold" },
-  { key: "fraunces-inter", heading: "Fraunces", body: "Inter", vibe: "Warm & characterful" },
-  {
-    key: "dm-serif-dm-sans",
-    heading: "DM Serif Display",
-    body: "DM Sans",
-    vibe: "Friendly & approachable",
-  },
-  {
-    key: "space-grotesk-inter",
-    heading: "Space Grotesk",
-    body: "Inter",
-    vibe: "Distinctive & techy",
-  },
-  { key: "archivo-inter", heading: "Archivo", body: "Inter", vibe: "Confident & serious" },
-] as const;
-type FontPairKey = (typeof FONT_PAIRS)[number]["key"];
+type FontPairKey = string;
+
+function paletteForTheme(theme: Theme) {
+  return PALETTES_BY_KEY.get(theme.paletteKey);
+}
+
+function radiusLabel(radius: Theme["radius"]): string {
+  if (radius === "sharp") return "Sharp";
+  if (radius === "rounded") return "Rounded";
+  return "Soft";
+}
+
+function scoreThemeForState(theme: Theme, state: WizardState): number {
+  const vertical = effectiveVertical(state) ?? "";
+  const normalized = vertical.toLowerCase();
+  const normalizedKey = normalized.replace(/[\s_]+/g, "-");
+  let score = 0;
+  if (
+    theme.bestFor.some(
+      (tag) =>
+        normalized.includes(tag) || normalizedKey.includes(tag) || tag.includes(normalizedKey),
+    )
+  ) {
+    score += 4;
+  }
+  if (state.vertical === "service" && theme.bestFor.includes("service")) score += 2;
+  if (state.vertical === "clinic" && theme.bestFor.includes("clinic")) score += 2;
+  if (state.vertical === "restaurant" && theme.bestFor.includes("restaurant")) score += 2;
+  if (state.vertical === "cafe" && theme.bestFor.includes("cafe")) score += 2;
+  if (state.vertical === "retail" && theme.bestFor.includes("retail")) score += 2;
+  if (state.goals.includes("event_signup") && theme.bestFor.includes("event")) score += 2;
+  return score;
+}
 
 // ─── Wizard state ────────────────────────────────────────────────────────────
 
@@ -283,7 +302,7 @@ const STEP_TITLES = [
   "Lead capture",
   "Site type",
   "Template",
-  "Palette",
+  "Theme",
   "Typography",
   "Vibe",
   "Your story",
@@ -599,7 +618,7 @@ export default function LandingPageWizard() {
             loading={templatesLoading}
           />
         )}
-        {state.step === 6 && <StepPalette state={state} setState={setState} />}
+        {state.step === 6 && <StepTheme state={state} setState={setState} />}
         {state.step === 7 && <StepFont state={state} setState={setState} />}
         {state.step === 8 && <StepVibe state={state} setState={setState} />}
         {state.step === 9 && <StepBrief state={state} setState={setState} />}
@@ -1120,6 +1139,8 @@ function StepTemplate({
   );
 }
 
+// Legacy swatch step retained until the old encoded palette block is removed.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function StepPalette({ state, setState }: StepProps) {
   const [showSwissOnly, setShowSwissOnly] = useState(false);
   const visible = showSwissOnly ? PALETTES.filter((p) => p.swiss) : PALETTES;
@@ -1162,6 +1183,103 @@ function StepPalette({ state, setState }: StepProps) {
   );
 }
 
+function StepTheme({ state, setState }: StepProps) {
+  const [showSwissOnly, setShowSwissOnly] = useState(false);
+  const visible = (showSwissOnly ? THEMES.filter((theme) => theme.swissCoded) : THEMES)
+    .slice()
+    .sort((a, b) => scoreThemeForState(b, state) - scoreThemeForState(a, state));
+
+  return (
+    <div className="mx-auto max-w-5xl">
+      <div className="mb-2 flex items-start justify-between">
+        <div>
+          <h2 className="mb-2 text-3xl font-bold text-gray-900">Pick a design theme</h2>
+          <p className="text-gray-600">
+            Color roles, typography, radius, and mood bundled into a polished starting point.
+          </p>
+        </div>
+        <button
+          onClick={() => setShowSwissOnly((v) => !v)}
+          className={`rounded-lg px-4 py-2 text-sm font-medium transition-all ${showSwissOnly ? "bg-red-600 text-white" : "border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"}`}
+        >
+          Swiss only
+        </button>
+      </div>
+      <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {visible.map((theme) => {
+          const palette = paletteForTheme(theme);
+          const font = FONT_PAIRS_BY_KEY.get(theme.fontPairKey);
+          return (
+            <button
+              key={theme.key}
+              onClick={() =>
+                setState((s) => ({
+                  ...s,
+                  paletteKey: theme.key,
+                  fontPairKey: theme.fontPairKey,
+                }))
+              }
+              className={`overflow-hidden rounded-xl border-2 bg-white text-left transition-all ${state.paletteKey === theme.key ? "scale-[1.02] border-purple-600 shadow-lg" : "border-gray-200 hover:border-purple-300"}`}
+            >
+              <div
+                className="relative h-28"
+                style={{ background: palette?.colors.surface ?? "#f8fafc" }}
+              >
+                <div className="absolute right-4 top-4 flex -space-x-2">
+                  {palette &&
+                    [
+                      palette.colors.primary,
+                      palette.colors.secondary,
+                      palette.colors.accent,
+                      palette.colors.surface,
+                    ].map((color) => (
+                      <span
+                        key={color}
+                        className="h-6 w-6 rounded-full border-2 border-white shadow-sm"
+                        style={{ background: color }}
+                      />
+                    ))}
+                </div>
+                <div
+                  className="absolute bottom-4 left-4 h-10 w-10 rounded-lg"
+                  style={{ background: palette?.colors.primary ?? "#111827" }}
+                />
+                {theme.swissCoded && (
+                  <span className="absolute bottom-5 left-16 rounded bg-white/90 px-1.5 py-0.5 text-xs font-bold text-red-700">
+                    CH
+                  </span>
+                )}
+              </div>
+              <div className="space-y-3 p-4">
+                <div>
+                  <p className="text-base font-semibold text-gray-900">{theme.name}</p>
+                  <p className="mt-0.5 text-xs text-gray-500">{font?.name ?? theme.fontPairKey}</p>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-medium capitalize text-gray-600">
+                    {theme.vibe}
+                  </span>
+                  <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600">
+                    {radiusLabel(theme.radius)}
+                  </span>
+                  {theme.bestFor.slice(0, 2).map((tag) => (
+                    <span
+                      key={tag}
+                      className="rounded-full bg-gray-100 px-2 py-1 text-xs font-medium capitalize text-gray-600"
+                    >
+                      {tag.replace(/-/g, " ")}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function StepFont({ state, setState }: StepProps) {
   return (
     <div className="mx-auto max-w-3xl">
@@ -1170,7 +1288,7 @@ function StepFont({ state, setState }: StepProps) {
         Headings and body text — proven combinations that always look great together.
       </p>
       <div className="grid gap-4 sm:grid-cols-2">
-        {FONT_PAIRS.map((f) => (
+        {DESIGN_FONT_PAIRS.map((f) => (
           <button
             key={f.key}
             onClick={() => setState((s) => ({ ...s, fontPairKey: f.key }))}
@@ -1178,14 +1296,17 @@ function StepFont({ state, setState }: StepProps) {
           >
             <p
               className="mb-1 text-xl font-bold text-gray-900"
-              style={{ fontFamily: `'${f.heading}', system-ui` }}
+              style={{ fontFamily: `'${f.heading.family}', system-ui` }}
             >
-              {f.heading}
+              {f.heading.family}
             </p>
-            <p className="mb-3 text-sm text-gray-600" style={{ fontFamily: `'${f.body}', serif` }}>
+            <p
+              className="mb-3 text-sm text-gray-600"
+              style={{ fontFamily: `'${f.body.family}', serif` }}
+            >
               The quick brown fox jumps over the lazy dog.
             </p>
-            <p className="text-xs font-medium text-gray-500">{f.vibe}</p>
+            <p className="text-xs font-medium capitalize text-gray-500">{f.vibe}</p>
           </button>
         ))}
       </div>
@@ -1336,8 +1457,15 @@ function StepImageStrategy({ state, setState }: StepProps) {
 }
 
 function StepReview({ state }: { state: WizardState }) {
-  const palette = PALETTES.find((p) => p.key === state.paletteKey);
-  const font = FONT_PAIRS.find((f) => f.key === state.fontPairKey);
+  const theme = THEMES.find((t) => t.key === state.paletteKey);
+  const themePalette = theme ? paletteForTheme(theme) : undefined;
+  const palette = themePalette
+    ? { name: theme?.name ?? themePalette.name, primary: themePalette.colors.primary }
+    : undefined;
+  const fontPair = state.fontPairKey ? FONT_PAIRS_BY_KEY.get(state.fontPairKey) : undefined;
+  const font = fontPair
+    ? { heading: fontPair.heading.family, body: fontPair.body.family }
+    : undefined;
   const vertical = VERTICALS.find((v) => v.key === state.vertical);
   const industryLabel =
     state.vertical === "other"

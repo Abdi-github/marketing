@@ -900,6 +900,9 @@ export const landingPagesRouter = router({
         },
         languagePreferences,
         wizardPayload: {
+          // Backward compatibility: paletteKey now accepts either a legacy palette key
+          // or a full curated theme key. themeKey is the clearer alias for new clients.
+          themeKey: input.paletteKey,
           paletteKey: input.paletteKey,
           fontPairKey: input.fontPairKey,
           languagePreferences,

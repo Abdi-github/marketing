@@ -19,6 +19,9 @@ export type Vibe = {
 
 export type DesignRecipe = {
   variants: Partial<Record<SectionType, string>>;
+  /** Preferred page-level theme bundle key. Kept separate from paletteKey for the new theme-first UI. */
+  themeKey: string;
+  /** Backwards-compatible alias; may contain a full theme key or a legacy palette key. */
   paletteKey: string;
   fontPairKey: string;
 };
@@ -32,7 +35,9 @@ export type DesignRecipePlanSignals = Pick<
   | "motionStyle"
   | "density"
   | "styleContract"
->;
+> & {
+  subvertical?: string;
+};
 
 // Style affinity per "type:variant" as [boldness, modernity, energy] in roughly -1..1.
 // Unlisted variants score neutral (0,0,0). Tune freely — this is the design knowledge.
@@ -161,6 +166,43 @@ const ARCHETYPE_BOOST: Record<string, Record<string, number>> = {
     "gallery:masonry-3": 0.15,
     "testimonials:cards-3col": 0.2,
   },
+  "bold-agency": {
+    "hero:gradient-spotlight": 0.45,
+    "hero:editorial-bold": 0.35,
+    "gallery:feature-side": 0.3,
+    "testimonials:marquee": 0.2,
+    "lead_form:full-width-bar": 0.25,
+  },
+  "property-showcase": {
+    "hero:image-bg-overlay": 0.4,
+    "hero:split-image-right": 0.25,
+    "gallery:feature-side": 0.35,
+    "gallery:grid-2x2": 0.25,
+    "testimonials:large-quote": 0.2,
+    "contact:split-map": 0.2,
+  },
+  "clinic-trust": {
+    "hero:split-form-right": 0.35,
+    "about:team-grid": 0.3,
+    "testimonials:list-with-avatars": 0.35,
+    "faq:accordion": 0.25,
+    "lead_form:card-centered": 0.25,
+    "contact:cards-row": 0.2,
+  },
+  "event-spotlight": {
+    "hero:image-bg-overlay": 0.35,
+    "gallery:carousel-strip": 0.35,
+    "offer:countdown-bold": 0.35,
+    "testimonials:large-quote": 0.2,
+    "lead_form:full-width-bar": 0.25,
+  },
+  "premium-minimal": {
+    "hero:split-image-right": 0.3,
+    "hero:centered": 0.25,
+    "about:values-3col": 0.25,
+    "gallery:feature-side": 0.2,
+    "testimonials:large-quote": 0.15,
+  },
 };
 
 const PLAN_SIGNAL_BOOST: Record<string, Record<string, number>> = {
@@ -186,6 +228,27 @@ const PLAN_SIGNAL_BOOST: Record<string, Record<string, number>> = {
     "faq:numbered-list": 0.15,
   },
   "image-direction:product-detail": { "gallery:grid-2x2": 0.2, "menu_preview:cards-grid": 0.2 },
+  "image-direction:property-showcase": {
+    "hero:image-bg-overlay": 0.2,
+    "gallery:feature-side": 0.35,
+    "gallery:grid-2x2": 0.2,
+    "contact:split-map": 0.15,
+  },
+  "image-direction:portfolio-proof": {
+    "gallery:feature-side": 0.35,
+    "gallery:carousel-strip": 0.25,
+    "testimonials:marquee": 0.15,
+  },
+  "image-direction:clinical-calm": {
+    "about:team-grid": 0.2,
+    "testimonials:list-with-avatars": 0.2,
+    "faq:accordion": 0.15,
+  },
+  "image-direction:venue-atmosphere": {
+    "hero:image-bg-overlay": 0.2,
+    "gallery:carousel-strip": 0.3,
+    "offer:countdown-bold": 0.15,
+  },
   "motion:carousel-forward": { "gallery:carousel-strip": 0.25, "testimonials:marquee": 0.2 },
   "motion:kinetic": { "hero:gradient-spotlight": 0.2, "offer:countdown-bold": 0.2 },
   "density:airy": { "hero:split-image-right": 0.1, "gallery:feature-side": 0.1 },
@@ -265,16 +328,16 @@ export function pickVariant(
   return best;
 }
 
-// Palette / font pools keyed by leaning. Keys must exist in @marketing/landing-design-system.
+// Theme / font pools keyed by leaning. Keys must exist in @marketing/landing-design-system.
 const PALETTE_POOLS = {
-  bold: ["midnight-luxe", "violet-noir", "monochrome-bold", "sport-orange", "midnight-emerald"],
-  modern: ["violet-noir", "zurich-modern", "midnight-emerald", "ocean-fresh", "graphite-pro"],
-  minimal: ["alpine-clean", "zurich-modern", "stone-minimal", "forest-calm"],
+  bold: ["midnight-luxe", "vercel-mono", "monochrome-bold", "sport-orange", "midnight-emerald"],
+  modern: ["clean-slate", "vercel-mono", "zurich-modern", "sky-startup", "graphite-mono"],
+  minimal: ["modern-minimal", "alpine-clean", "clean-slate", "stone-minimal", "forest-calm"],
   elegant: [
     "geneve-elegance",
+    "elegant-luxury",
     "lavender-grace",
     "midnight-luxe",
-    "violet-noir",
     "bern-heritage",
     "champagne-soft",
   ],
@@ -289,6 +352,54 @@ const PALETTE_POOLS = {
     "geneve-elegance",
   ],
 } as const;
+
+const SUBVERTICAL_THEME_POOLS: Record<string, readonly string[]> = {
+  "agency-digital": [
+    "vercel-mono",
+    "clean-slate",
+    "sky-startup",
+    "modern-minimal",
+    "graphite-mono",
+  ],
+  "software-saas": ["clean-slate", "sky-startup", "vercel-mono", "indigo-trust", "modern-minimal"],
+  "real-estate-residential": [
+    "graphite-mono",
+    "ocean-breeze",
+    "clean-slate",
+    "alpine-clean",
+    "elegant-luxury",
+  ],
+  "real-estate-luxury": [
+    "elegant-luxury",
+    "midnight-luxe",
+    "champagne-soft",
+    "graphite-mono",
+    "geneve-elegance",
+  ],
+  "clinic-trust": ["mint-clinic", "ocean-breeze", "sage-garden", "nature", "alpine-clean"],
+  "clinic-dental": ["mint-clinic", "ocean-breeze", "sage-garden", "alpine-clean", "graphite-pro"],
+  "local-trades": ["clean-slate", "graphite-pro", "zurich-modern", "amber-slate", "alpine-clean"],
+  "event-venue": [
+    "solar-dusk",
+    "elegant-luxury",
+    "burgundy-velvet",
+    "champagne-soft",
+    "rose-blush",
+  ],
+};
+
+const THEME_FONT_PAIR: Record<string, string> = {
+  "modern-minimal": "manrope-inter",
+  "vercel-mono": "inter-inter",
+  "sage-garden": "dm-serif-dm-sans",
+  "elegant-luxury": "playfair-inter",
+  "ocean-breeze": "manrope-inter",
+  nature: "fraunces-inter",
+  "graphite-mono": "inter-inter",
+  "clean-slate": "manrope-inter",
+  "solar-dusk": "fraunces-inter",
+  "amber-slate": "ibm-plex-source-serif",
+};
 
 const FONT_POOLS = {
   modern: ["space-grotesk-inter", "manrope-inter", "archivo-inter"],
@@ -483,7 +594,10 @@ export function pickDesignRecipe(input: {
 
   const lean = leaning(vibe);
   const palettePool =
-    input.designPlan?.styleContract.palettePool ?? PALETTE_POOLS[lean] ?? PALETTE_POOLS.neutral;
+    SUBVERTICAL_THEME_POOLS[input.designPlan?.subvertical ?? ""] ??
+    input.designPlan?.styleContract.palettePool ??
+    PALETTE_POOLS[lean] ??
+    PALETTE_POOLS.neutral;
   const fontLean: keyof typeof FONT_POOLS =
     lean === "bold" || lean === "energetic"
       ? "bold"
@@ -495,12 +609,18 @@ export function pickDesignRecipe(input: {
             ? "modern"
             : "neutral";
 
-  return {
-    variants,
-    paletteKey: pickFromPool(palettePool, `${input.seed}|palette`),
-    fontPairKey: pickFromPool(
+  const themeKey = pickFromPool(palettePool, `${input.seed}|palette`);
+  const fontPairKey =
+    THEME_FONT_PAIR[themeKey] ??
+    pickFromPool(
       input.designPlan?.styleContract.fontPairPool ?? FONT_POOLS[fontLean],
       `${input.seed}|font`,
-    ),
+    );
+
+  return {
+    variants,
+    themeKey,
+    paletteKey: themeKey,
+    fontPairKey,
   };
 }

@@ -9,7 +9,12 @@ export type DesignArchetype =
   | "trust-first"
   | "kinetic-launch"
   | "calm-service"
-  | "premium-local";
+  | "premium-local"
+  | "bold-agency"
+  | "property-showcase"
+  | "clinic-trust"
+  | "event-spotlight"
+  | "premium-minimal";
 
 export type HeroTreatment =
   | "image-overlay"
@@ -27,7 +32,11 @@ export type ImageDirection =
   | "editorial-people"
   | "product-detail"
   | "ambient-space"
-  | "ai-hero";
+  | "ai-hero"
+  | "property-showcase"
+  | "portfolio-proof"
+  | "clinical-calm"
+  | "venue-atmosphere";
 export type SectionTopology =
   | "story-first"
   | "conversion-first"
@@ -107,19 +116,139 @@ function normalize(value: string | null | undefined): string {
   return (value ?? "").trim().toLowerCase();
 }
 
+function normalizeSearch(value: string | null | undefined): string {
+  return normalize(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/æ/g, "ae")
+    .replace(/œ/g, "oe");
+}
+
+type SearchContext = {
+  text: string;
+  tokens: Set<string>;
+  verticalTokens: Set<string>;
+};
+
+function createSearchContext(vertical: string, prompt: string): SearchContext {
+  const verticalText = normalizeSearch(vertical);
+  const text = `${verticalText} ${normalizeSearch(prompt)}`;
+  return {
+    text,
+    tokens: new Set(text.match(/[a-z0-9]+/g) ?? []),
+    verticalTokens: new Set(verticalText.match(/[a-z0-9]+/g) ?? []),
+  };
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function hasToken(ctx: SearchContext, values: readonly string[]): boolean {
+  return values.some((value) => ctx.tokens.has(value));
+}
+
+function hasVerticalToken(ctx: SearchContext, values: readonly string[]): boolean {
+  return values.some((value) => ctx.verticalTokens.has(value));
+}
+
+function hasPhrase(ctx: SearchContext, phrases: readonly string[]): boolean {
+  return phrases.some((phrase) => {
+    const normalized = normalizeSearch(phrase);
+    return new RegExp(`(^|[^a-z0-9])${escapeRegExp(normalized)}([^a-z0-9]|$)`).test(ctx.text);
+  });
+}
+
 function classifySubvertical(vertical: string, prompt: string): string {
-  const text = `${normalize(vertical)} ${normalize(prompt)}`;
-  if (/bakery|boulangerie|patisserie|pastry|brunch/.test(text)) return "cafe-bakery";
-  if (/cafe|coffee|barista|kaffee/.test(text)) return "cafe-specialty";
-  if (/pizza|trattoria|italian|ristorante/.test(text)) return "restaurant-italian";
-  if (/restaurant|bistro|brasserie|dining|gastro/.test(text)) return "restaurant-local";
-  if (/yoga|pilates|wellness|spa/.test(text)) return "fitness-wellness";
-  if (/gym|fitness|crossfit|training|sport/.test(text)) return "fitness-performance";
-  if (/dental|dentist|zahnarzt/.test(text)) return "clinic-dental";
-  if (/clinic|doctor|arzt|medecin|physio|osteo|health|praxis/.test(text)) return "clinic-care";
-  if (/fashion|mode|clothing|boutique/.test(text)) return "retail-fashion";
-  if (/jewel|watch|artisan|maker|atelier/.test(text)) return "retail-artisan";
-  if (/agency|consult|coach|studio|service/.test(text)) return "service-professional";
+  const ctx = createSearchContext(vertical, prompt);
+
+  const realEstate =
+    hasPhrase(ctx, [
+      "real estate",
+      "estate agency",
+      "property agency",
+      "property management",
+      "agence immobiliere",
+      "immobilien makler",
+      "immobilienagentur",
+      "agente immobiliare",
+    ]) || hasToken(ctx, ["realtor", "property", "properties", "immobilier", "immobilien", "immo"]);
+  if (realEstate) {
+    const luxury =
+      hasToken(ctx, ["luxury", "luxe", "premium", "villa", "penthouse", "estate", "boutique"]) ||
+      hasPhrase(ctx, ["high end", "high-end", "lake view", "private estate"]);
+    return luxury ? "real-estate-luxury" : "real-estate-residential";
+  }
+
+  const software =
+    hasToken(ctx, ["saas", "software", "platform", "app", "apps", "ai", "startup", "tech"]) ||
+    hasPhrase(ctx, ["web app", "mobile app", "b2b software", "software company"]);
+  if (software) return "software-saas";
+
+  const digitalAgency =
+    hasPhrase(ctx, [
+      "web design",
+      "web agency",
+      "digital agency",
+      "marketing agency",
+      "creative agency",
+      "branding studio",
+      "design studio",
+      "seo agency",
+      "website agency",
+    ]) ||
+    (hasToken(ctx, ["agency", "studio"]) &&
+      hasToken(ctx, ["web", "website", "websites", "brand", "branding", "design", "digital"]));
+  if (digitalAgency) return "agency-digital";
+
+  if (hasToken(ctx, ["bakery", "boulangerie", "patisserie", "pastry", "brunch"]))
+    return "cafe-bakery";
+  if (hasToken(ctx, ["cafe", "coffee", "barista", "kaffee"])) return "cafe-specialty";
+  if (hasToken(ctx, ["pizza", "trattoria", "italian", "ristorante"])) return "restaurant-italian";
+  if (hasToken(ctx, ["restaurant", "bistro", "brasserie", "dining", "gastro"]))
+    return "restaurant-local";
+
+  const eventVenue =
+    hasPhrase(ctx, ["event venue", "wedding venue", "conference venue", "private events"]) ||
+    hasToken(ctx, ["venue", "wedding", "events", "event", "conference", "banquet"]);
+  if (
+    eventVenue &&
+    (hasVerticalToken(ctx, ["event", "events", "venue", "wedding"]) ||
+      !hasToken(ctx, ["restaurant", "cafe", "bistro"]))
+  ) {
+    return "event-venue";
+  }
+
+  if (hasToken(ctx, ["yoga", "pilates", "wellness", "spa"])) return "fitness-wellness";
+  if (hasToken(ctx, ["gym", "fitness", "crossfit", "training", "sport"]))
+    return "fitness-performance";
+  if (hasToken(ctx, ["dental", "dentist", "zahnarzt"])) return "clinic-dental";
+  if (hasToken(ctx, ["clinic", "doctor", "arzt", "medecin", "physio", "osteo", "health", "praxis"]))
+    return "clinic-trust";
+
+  if (
+    hasToken(ctx, [
+      "electrician",
+      "plumber",
+      "roofer",
+      "carpenter",
+      "painter",
+      "cleaning",
+      "hvac",
+      "handyman",
+      "renovation",
+      "repair",
+      "solar",
+    ])
+  ) {
+    return "local-trades";
+  }
+
+  if (hasToken(ctx, ["fashion", "mode", "clothing", "boutique"])) return "retail-fashion";
+  if (hasToken(ctx, ["jewel", "jewelry", "watch", "artisan", "maker", "atelier"]))
+    return "retail-artisan";
+  if (hasToken(ctx, ["agency", "consult", "consulting", "coach", "studio", "service"]))
+    return "service-professional";
   return (
     normalize(vertical)
       .replace(/[^a-z0-9]+/g, "-")
@@ -130,6 +259,8 @@ function classifySubvertical(vertical: string, prompt: string): string {
 function defaultGoal(subvertical: string): string {
   if (subvertical.startsWith("restaurant") || subvertical.startsWith("cafe"))
     return "info_brochure";
+  if (subvertical.startsWith("event")) return "event_signup";
+  if (subvertical.startsWith("real-estate")) return "lead_capture";
   if (subvertical.startsWith("clinic") || subvertical.startsWith("fitness"))
     return "appointment_booking";
   if (subvertical.startsWith("retail")) return "sales_promo";
@@ -143,6 +274,21 @@ function chooseArchetype(input: {
   seed: string;
 }): DesignArchetype {
   const pool: DesignArchetype[] = [];
+  if (input.subvertical === "agency-digital" || input.subvertical === "software-saas") {
+    pool.push("bold-agency", "premium-minimal", "kinetic-launch");
+  }
+  if (input.subvertical.startsWith("real-estate")) {
+    pool.push("property-showcase", "premium-minimal", "trust-first");
+  }
+  if (input.subvertical.startsWith("clinic")) {
+    pool.push("clinic-trust", "trust-first", "calm-service");
+  }
+  if (input.subvertical === "event-venue") {
+    pool.push("event-spotlight", "premium-local", "editorial-showcase");
+  }
+  if (input.subvertical === "local-trades") {
+    pool.push("conversion-split", "trust-first", "calm-service");
+  }
   if (input.goal === "lead_capture" || input.goal === "appointment_booking") {
     pool.push("conversion-split", "trust-first", "calm-service");
   }
@@ -170,6 +316,21 @@ function chooseHeroTreatment(
   goal: string,
   seed: string,
 ): HeroTreatment {
+  if (archetype === "bold-agency") {
+    return pick(["gradient-spotlight", "editorial-headline", "split-media"], seed, "hero");
+  }
+  if (archetype === "property-showcase") {
+    return pick(["image-overlay", "split-media", "editorial-headline"], seed, "hero");
+  }
+  if (archetype === "clinic-trust") {
+    return pick(["form-first", "split-media", "centered-statement"], seed, "hero");
+  }
+  if (archetype === "event-spotlight") {
+    return pick(["image-overlay", "gradient-spotlight", "split-media"], seed, "hero");
+  }
+  if (archetype === "premium-minimal") {
+    return pick(["centered-statement", "split-media", "editorial-headline"], seed, "hero");
+  }
   if (goal === "lead_capture" || goal === "appointment_booking") {
     return pick(["form-first", "split-media", "image-overlay"], seed, "hero");
   }
@@ -188,6 +349,339 @@ function chooseStyleEra(vibe: Vibe): StyleEra {
   return "balanced";
 }
 
+type ContractInput = {
+  era: StyleEra;
+  subvertical: string;
+  goal: string;
+  archetype: DesignArchetype;
+  vibe: Vibe;
+  seed: string;
+};
+
+function isDigital(subvertical: string): boolean {
+  return subvertical === "agency-digital" || subvertical === "software-saas";
+}
+
+function isProperty(subvertical: string): boolean {
+  return subvertical.startsWith("real-estate");
+}
+
+function isClinic(subvertical: string): boolean {
+  return subvertical.startsWith("clinic");
+}
+
+function isTrades(subvertical: string): boolean {
+  return subvertical === "local-trades";
+}
+
+function isEventVenue(subvertical: string): boolean {
+  return subvertical === "event-venue";
+}
+
+function isCatalogBusiness(subvertical: string): boolean {
+  return (
+    subvertical.startsWith("restaurant") ||
+    subvertical.startsWith("cafe") ||
+    subvertical.startsWith("retail")
+  );
+}
+
+function sectionOrderFor(input: ContractInput, era: StyleEra): SectionType[] {
+  if (isDigital(input.subvertical)) {
+    return [
+      "hero",
+      "offer",
+      "gallery",
+      "testimonials",
+      "about",
+      "faq",
+      "lead_form",
+      "contact",
+      "menu_preview",
+      "whatsapp_cta",
+    ];
+  }
+  if (isProperty(input.subvertical)) {
+    return [
+      "hero",
+      "gallery",
+      "offer",
+      "testimonials",
+      "about",
+      "faq",
+      "contact",
+      "lead_form",
+      "menu_preview",
+      "whatsapp_cta",
+    ];
+  }
+  if (isClinic(input.subvertical) || isTrades(input.subvertical)) {
+    return [
+      "hero",
+      "about",
+      "testimonials",
+      "faq",
+      "contact",
+      "lead_form",
+      "offer",
+      "gallery",
+      "menu_preview",
+      "whatsapp_cta",
+    ];
+  }
+  if (isEventVenue(input.subvertical)) {
+    return [
+      "hero",
+      "gallery",
+      "offer",
+      "testimonials",
+      "faq",
+      "contact",
+      "lead_form",
+      "about",
+      "menu_preview",
+      "whatsapp_cta",
+    ];
+  }
+
+  const catalogFirst = isCatalogBusiness(input.subvertical);
+  if (era === "classic") {
+    return catalogFirst
+      ? [
+          "hero",
+          "about",
+          "menu_preview",
+          "gallery",
+          "offer",
+          "testimonials",
+          "faq",
+          "contact",
+          "lead_form",
+          "whatsapp_cta",
+        ]
+      : [
+          "hero",
+          "about",
+          "offer",
+          "menu_preview",
+          "testimonials",
+          "faq",
+          "contact",
+          "lead_form",
+          "gallery",
+          "whatsapp_cta",
+        ];
+  }
+  if (era === "modern") {
+    return catalogFirst
+      ? [
+          "hero",
+          "gallery",
+          "offer",
+          "menu_preview",
+          "testimonials",
+          "about",
+          "faq",
+          "lead_form",
+          "contact",
+          "whatsapp_cta",
+        ]
+      : [
+          "hero",
+          "offer",
+          "gallery",
+          "testimonials",
+          "about",
+          "faq",
+          "lead_form",
+          "contact",
+          "menu_preview",
+          "whatsapp_cta",
+        ];
+  }
+  return catalogFirst
+    ? [
+        "hero",
+        "offer",
+        "menu_preview",
+        "gallery",
+        "about",
+        "testimonials",
+        "faq",
+        "contact",
+        "lead_form",
+        "whatsapp_cta",
+      ]
+    : [
+        "hero",
+        "offer",
+        "about",
+        "gallery",
+        "testimonials",
+        "faq",
+        "contact",
+        "lead_form",
+        "menu_preview",
+        "whatsapp_cta",
+      ];
+}
+
+function heroVariantsFor(
+  input: ContractInput,
+  era: StyleEra,
+  fallback: readonly string[],
+): string[] {
+  if (isDigital(input.subvertical)) {
+    return era === "classic"
+      ? ["split-image-right", "centered"]
+      : ["gradient-spotlight", "editorial-bold", "split-image-right"];
+  }
+  if (isProperty(input.subvertical)) {
+    return era === "classic"
+      ? ["split-image-right", "image-bg-overlay", "centered"]
+      : ["image-bg-overlay", "split-image-right", "editorial-bold"];
+  }
+  if (isClinic(input.subvertical)) {
+    return ["split-form-right", "split-image-right", "centered"];
+  }
+  if (isTrades(input.subvertical)) {
+    return ["split-form-right", "image-bg-overlay", "split-image-right"];
+  }
+  if (isEventVenue(input.subvertical)) {
+    return era === "classic"
+      ? ["image-bg-overlay", "split-image-right", "centered"]
+      : ["image-bg-overlay", "gradient-spotlight", "split-image-right"];
+  }
+  return [...fallback];
+}
+
+function variantPoolsFor(
+  input: ContractInput,
+  base: Partial<Record<SectionType, string[]>>,
+): Partial<Record<SectionType, string[]>> {
+  if (isDigital(input.subvertical)) {
+    return {
+      ...base,
+      hero: heroVariantsFor(input, input.era, base.hero ?? []),
+      about: ["team-grid", "values-3col", "text-image-split"],
+      offer: ["banner-centered", "countdown-bold", "split-image-price"],
+      gallery: ["feature-side", "carousel-strip", "masonry-3"],
+      testimonials: ["marquee", "large-quote", "cards-3col"],
+      faq: ["two-column", "numbered-list"],
+      contact: ["cards-row", "split-map"],
+      lead_form: ["full-width-bar", "split-side-image", "card-centered"],
+    };
+  }
+  if (isProperty(input.subvertical)) {
+    return {
+      ...base,
+      hero: heroVariantsFor(input, input.era, base.hero ?? []),
+      about: ["values-3col", "text-image-split"],
+      offer: ["split-image-price", "banner-centered"],
+      gallery: ["feature-side", "grid-2x2", "masonry-3"],
+      testimonials: ["large-quote", "cards-3col"],
+      faq: ["two-column", "accordion"],
+      contact: ["split-map", "cards-row"],
+      lead_form: ["split-side-image", "card-centered"],
+    };
+  }
+  if (isClinic(input.subvertical)) {
+    return {
+      ...base,
+      hero: heroVariantsFor(input, input.era, base.hero ?? []),
+      about: ["team-grid", "values-3col", "text-image-split"],
+      gallery: ["feature-side", "grid-2x2"],
+      testimonials: ["list-with-avatars", "cards-3col", "large-quote"],
+      faq: ["accordion", "two-column"],
+      contact: ["cards-row", "split-map"],
+      lead_form: ["card-centered", "split-side-image"],
+    };
+  }
+  if (isTrades(input.subvertical)) {
+    return {
+      ...base,
+      hero: heroVariantsFor(input, input.era, base.hero ?? []),
+      offer: ["banner-centered", "split-image-price"],
+      testimonials: ["cards-3col", "list-with-avatars"],
+      faq: ["numbered-list", "accordion"],
+      contact: ["cards-row", "split-map"],
+      lead_form: ["full-width-bar", "card-centered", "split-side-image"],
+    };
+  }
+  if (isEventVenue(input.subvertical)) {
+    return {
+      ...base,
+      hero: heroVariantsFor(input, input.era, base.hero ?? []),
+      offer: ["countdown-bold", "banner-centered"],
+      gallery: ["carousel-strip", "masonry-3", "feature-side"],
+      testimonials: ["large-quote", "marquee", "cards-3col"],
+      faq: ["two-column", "accordion"],
+      contact: ["split-map", "cards-row"],
+      lead_form: ["full-width-bar", "split-side-image"],
+    };
+  }
+  return base;
+}
+
+function themePoolFor(input: ContractInput, fallback: readonly string[]): string[] {
+  if (input.subvertical === "agency-digital") {
+    return ["vercel-mono", "clean-slate", "sky-startup", "modern-minimal", "graphite-mono"];
+  }
+  if (input.subvertical === "software-saas") {
+    return ["clean-slate", "sky-startup", "vercel-mono", "indigo-trust", "modern-minimal"];
+  }
+  if (input.subvertical === "real-estate-luxury") {
+    return [
+      "elegant-luxury",
+      "midnight-luxe",
+      "champagne-soft",
+      "graphite-mono",
+      "geneve-elegance",
+    ];
+  }
+  if (input.subvertical === "real-estate-residential") {
+    return ["graphite-mono", "ocean-breeze", "clean-slate", "alpine-clean", "elegant-luxury"];
+  }
+  if (isClinic(input.subvertical)) {
+    return ["mint-clinic", "ocean-breeze", "sage-garden", "nature", "alpine-clean", "graphite-pro"];
+  }
+  if (isTrades(input.subvertical)) {
+    return ["clean-slate", "graphite-pro", "zurich-modern", "amber-slate", "alpine-clean"];
+  }
+  if (isEventVenue(input.subvertical)) {
+    return ["solar-dusk", "elegant-luxury", "burgundy-velvet", "champagne-soft", "rose-blush"];
+  }
+  return [...fallback];
+}
+
+function fontPoolFor(input: ContractInput, fallback: readonly string[]): string[] {
+  if (input.subvertical === "agency-digital" || input.subvertical === "software-saas") {
+    return ["inter-inter", "manrope-inter", "space-grotesk-inter", "archivo-inter"];
+  }
+  if (isProperty(input.subvertical)) {
+    return ["playfair-inter", "manrope-inter", "fraunces-inter", "inter-inter"];
+  }
+  if (isClinic(input.subvertical) || isTrades(input.subvertical)) {
+    return ["manrope-inter", "inter-inter", "ibm-plex-source-serif"];
+  }
+  if (isEventVenue(input.subvertical)) {
+    return ["playfair-lora", "fraunces-inter", "dm-serif-dm-sans", "playfair-inter"];
+  }
+  return [...fallback];
+}
+
+function navStyleFor(input: ContractInput, fallback: NavStyle): NavStyle {
+  if (input.era === "classic") return "classic";
+  if (isClinic(input.subvertical) || isTrades(input.subvertical)) return "compact-cta";
+  if (isProperty(input.subvertical)) return "editorial";
+  if (isDigital(input.subvertical) || isEventVenue(input.subvertical)) {
+    return input.vibe.calmEnergetic > 0.35 || input.vibe.minimalBold > 0.35
+      ? "bold-pill"
+      : "editorial";
+  }
+  return fallback;
+}
+
 function styleContractFor(input: {
   era: StyleEra;
   subvertical: string;
@@ -196,44 +690,20 @@ function styleContractFor(input: {
   vibe: Vibe;
   seed: string;
 }): StyleContract {
-  const catalogFirst =
-    input.subvertical.startsWith("restaurant") ||
-    input.subvertical.startsWith("cafe") ||
-    input.subvertical.startsWith("retail");
   if (input.era === "classic") {
+    const heroVariants = heroVariantsFor(
+      input,
+      "classic",
+      input.goal === "lead_capture" || input.goal === "appointment_booking"
+        ? ["split-image-right", "centered", "split-form-right"]
+        : ["centered", "split-image-right", "image-bg-overlay"],
+    );
     return {
       era: "classic",
-      navStyle: "classic",
-      heroVariants:
-        input.goal === "lead_capture" || input.goal === "appointment_booking"
-          ? ["split-image-right", "centered", "split-form-right"]
-          : ["centered", "split-image-right", "image-bg-overlay"],
-      sectionOrder: catalogFirst
-        ? [
-            "hero",
-            "about",
-            "menu_preview",
-            "gallery",
-            "offer",
-            "testimonials",
-            "faq",
-            "contact",
-            "lead_form",
-            "whatsapp_cta",
-          ]
-        : [
-            "hero",
-            "about",
-            "offer",
-            "menu_preview",
-            "testimonials",
-            "faq",
-            "contact",
-            "lead_form",
-            "gallery",
-            "whatsapp_cta",
-          ],
-      variantPools: {
+      navStyle: navStyleFor(input, "classic"),
+      heroVariants,
+      sectionOrder: sectionOrderFor(input, "classic"),
+      variantPools: variantPoolsFor(input, {
         hero: ["centered", "split-image-right"],
         about: ["text-image-split", "values-3col"],
         menu_preview: ["list-borders", "split-image"],
@@ -243,16 +713,21 @@ function styleContractFor(input: {
         faq: ["accordion", "two-column"],
         contact: ["split-map", "cards-row"],
         lead_form: ["card-centered", "split-side-image"],
-      },
-      palettePool: [
+      }),
+      palettePool: themePoolFor(input, [
         "alpine-clean",
         "geneve-elegance",
         "bern-heritage",
         "graphite-pro",
         "champagne-soft",
         "forest-calm",
-      ],
-      fontPairPool: ["playfair-inter", "fraunces-inter", "playfair-lora", "ibm-plex-source-serif"],
+      ]),
+      fontPairPool: fontPoolFor(input, [
+        "playfair-inter",
+        "fraunces-inter",
+        "playfair-lora",
+        "ibm-plex-source-serif",
+      ]),
       rhythmStyle: "quiet-trust",
       spacing: "compact",
       motionStyle: "quiet",
@@ -260,46 +735,26 @@ function styleContractFor(input: {
   }
 
   if (input.era === "modern") {
+    const fallbackHeroVariants =
+      input.archetype === "editorial-showcase" || input.archetype === "boutique-story"
+        ? ["editorial-bold", "image-bg-overlay", "gradient-spotlight"]
+        : input.goal === "lead_capture" || input.goal === "appointment_booking"
+          ? ["editorial-bold", "gradient-spotlight", "split-form-right"]
+          : ["editorial-bold", "gradient-spotlight", "image-bg-overlay"];
+    const heroVariants = heroVariantsFor(input, "modern", fallbackHeroVariants);
     return {
       era: "modern",
-      navStyle:
+      navStyle: navStyleFor(
+        input,
         input.archetype === "kinetic-launch" ||
-        input.vibe.minimalBold > 0.35 ||
-        input.vibe.calmEnergetic > 0.35
+          input.vibe.minimalBold > 0.35 ||
+          input.vibe.calmEnergetic > 0.35
           ? "bold-pill"
           : "editorial",
-      heroVariants:
-        input.archetype === "editorial-showcase" || input.archetype === "boutique-story"
-          ? ["editorial-bold", "image-bg-overlay", "gradient-spotlight"]
-          : input.goal === "lead_capture" || input.goal === "appointment_booking"
-            ? ["editorial-bold", "gradient-spotlight", "split-form-right"]
-            : ["editorial-bold", "gradient-spotlight", "image-bg-overlay"],
-      sectionOrder: catalogFirst
-        ? [
-            "hero",
-            "gallery",
-            "offer",
-            "menu_preview",
-            "testimonials",
-            "about",
-            "faq",
-            "lead_form",
-            "contact",
-            "whatsapp_cta",
-          ]
-        : [
-            "hero",
-            "offer",
-            "gallery",
-            "testimonials",
-            "about",
-            "faq",
-            "lead_form",
-            "contact",
-            "menu_preview",
-            "whatsapp_cta",
-          ],
-      variantPools: {
+      ),
+      heroVariants,
+      sectionOrder: sectionOrderFor(input, "modern"),
+      variantPools: variantPoolsFor(input, {
         hero: ["editorial-bold", "gradient-spotlight", "image-bg-overlay"],
         about: ["team-grid", "values-3col"],
         menu_preview: ["cards-grid", "split-image"],
@@ -310,55 +765,38 @@ function styleContractFor(input: {
         contact: ["cards-row", "split-map"],
         lead_form: ["full-width-bar", "split-side-image"],
         whatsapp_cta: ["banner-strip"],
-      },
-      palettePool: [
+      }),
+      palettePool: themePoolFor(input, [
         "violet-noir",
         "monochrome-bold",
         "midnight-emerald",
         "electric-lime",
         "fuchsia-bold",
         "neon-pulse",
-      ],
-      fontPairPool: ["space-grotesk-inter", "archivo-inter", "bebas-inter", "manrope-inter"],
+      ]),
+      fontPairPool: fontPoolFor(input, [
+        "space-grotesk-inter",
+        "archivo-inter",
+        "bebas-inter",
+        "manrope-inter",
+      ]),
       rhythmStyle: "kinetic-contrast",
       spacing: "editorial",
       motionStyle: input.vibe.calmEnergetic > 0.25 ? "kinetic" : "carousel-forward",
     };
   }
 
+  const fallbackHeroVariants =
+    input.goal === "lead_capture" || input.goal === "appointment_booking"
+      ? ["split-form-right", "image-bg-overlay", "split-image-right"]
+      : ["image-bg-overlay", "split-image-right", "centered"];
+  const heroVariants = heroVariantsFor(input, "balanced", fallbackHeroVariants);
   return {
     era: "balanced",
-    navStyle: "compact-cta",
-    heroVariants:
-      input.goal === "lead_capture" || input.goal === "appointment_booking"
-        ? ["split-form-right", "image-bg-overlay", "split-image-right"]
-        : ["image-bg-overlay", "split-image-right", "centered"],
-    sectionOrder: catalogFirst
-      ? [
-          "hero",
-          "offer",
-          "menu_preview",
-          "gallery",
-          "about",
-          "testimonials",
-          "faq",
-          "contact",
-          "lead_form",
-          "whatsapp_cta",
-        ]
-      : [
-          "hero",
-          "offer",
-          "about",
-          "gallery",
-          "testimonials",
-          "faq",
-          "contact",
-          "lead_form",
-          "menu_preview",
-          "whatsapp_cta",
-        ],
-    variantPools: {
+    navStyle: navStyleFor(input, "compact-cta"),
+    heroVariants,
+    sectionOrder: sectionOrderFor(input, "balanced"),
+    variantPools: variantPoolsFor(input, {
       hero: ["split-form-right", "image-bg-overlay", "split-image-right"],
       about: ["values-3col", "text-image-split", "team-grid"],
       menu_preview: ["cards-grid", "list-borders", "split-image"],
@@ -368,16 +806,21 @@ function styleContractFor(input: {
       faq: ["two-column", "accordion", "numbered-list"],
       contact: ["cards-row", "split-map"],
       lead_form: ["split-side-image", "card-centered", "full-width-bar"],
-    },
-    palettePool: [
+    }),
+    palettePool: themePoolFor(input, [
       "zurich-modern",
       "ocean-fresh",
       "warm-roasted",
       "sage-wellness",
       "rose-blush",
       "graphite-pro",
-    ],
-    fontPairPool: ["manrope-inter", "inter-inter", "dm-serif-dm-sans", "fraunces-inter"],
+    ]),
+    fontPairPool: fontPoolFor(input, [
+      "manrope-inter",
+      "inter-inter",
+      "dm-serif-dm-sans",
+      "fraunces-inter",
+    ]),
     rhythmStyle: "balanced-contrast",
     spacing: "balanced",
     motionStyle:
@@ -393,6 +836,15 @@ function chooseTopology(
   subvertical: string,
   seed: string,
 ): SectionTopology {
+  if (subvertical === "agency-digital" || subvertical === "software-saas") {
+    return pick(["conversion-first", "proof-first", "service-brochure"], seed, "topology");
+  }
+  if (subvertical.startsWith("real-estate") || subvertical === "event-venue") {
+    return pick(["catalog-first", "proof-first", "story-first"], seed, "topology");
+  }
+  if (subvertical.startsWith("clinic") || subvertical === "local-trades") {
+    return pick(["proof-first", "conversion-first", "service-brochure"], seed, "topology");
+  }
   if (
     subvertical.startsWith("restaurant") ||
     subvertical.startsWith("cafe") ||
@@ -457,16 +909,19 @@ export function createLandingPageDesignPlan(input: DesignPlanInput): LandingPage
           ? "dense"
           : "balanced"
         : "balanced";
-  const imageDirection: ImageDirection =
-    input.imageStrategy === "ai"
-      ? "ai-hero"
-      : subvertical.startsWith("retail")
-        ? "product-detail"
-        : archetype === "editorial-showcase" || archetype === "boutique-story"
-          ? "editorial-people"
-          : archetype === "calm-service"
-            ? "ambient-space"
-            : "curated-local";
+  const imageDirection: ImageDirection = (() => {
+    if (input.imageStrategy === "ai") return "ai-hero";
+    if (subvertical.startsWith("real-estate")) return "property-showcase";
+    if (subvertical === "agency-digital" || subvertical === "software-saas")
+      return "portfolio-proof";
+    if (subvertical.startsWith("clinic")) return "clinical-calm";
+    if (subvertical === "event-venue") return "venue-atmosphere";
+    if (subvertical.startsWith("retail")) return "product-detail";
+    if (archetype === "editorial-showcase" || archetype === "boutique-story")
+      return "editorial-people";
+    if (archetype === "calm-service") return "ambient-space";
+    return "curated-local";
+  })();
 
   return {
     subvertical,
