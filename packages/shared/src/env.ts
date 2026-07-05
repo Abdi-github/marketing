@@ -35,6 +35,9 @@ const schema = z.object({
   RESEND_API_KEY: z.string().optional(),
   RESEND_WEBHOOK_SECRET: z.string().optional(),
   POSTMARK_API_KEY: z.string().optional(),
+  // Optional bearer token for protected cron endpoints. Set this in production
+  // when an external scheduler calls the endpoint directly.
+  CRON_SECRET: z.string().optional(),
   // Sender address shown to recipients. Must be a verified domain in Resend.
   // The default is the platform sender for the Swiss SaaS deployment; override
   // this per environment if the platform sending domain changes.

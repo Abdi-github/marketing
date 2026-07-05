@@ -860,13 +860,34 @@ Use this section while teaching the Forms module after CRM/SMS automation.
   - Email sender settings now show whether Reply-To comes from the custom business profile setting or the fallback owner account.
   - Web app email test/sequence actions, the email sequence worker, and the lead follow-up worker now prefer the configured business reply inbox before falling back to the owner account email.
   - Migration `0049_business_profile_email_reply_to.sql` was applied successfully.
-- Production note: this Reply inbox enhancement requires GitHub push and Vercel deployment before production reflects it.
-- Next email walkthrough action after deployment: open `Email settings`, enter a real reply inbox, save it, confirm the Reply-To display changes away from `restaurant-owner@e2e.test`, then send a test email from Email templates/sequence flow and verify replies can arrive at the real inbox.
+- Production verification: user redeployed, saved `abdi.ahmed.huss@gmail.com` as the Reply inbox, and confirmed the Email settings page now shows:
+  - From: `Marketing AI <abdi@swiftapp.ch>`
+  - Reply-To: `abdi.ahmed.huss@gmail.com`
+  - `Custom reply inbox` badge visible.
+  - Sender ready, Resend API key, Webhook, Tracking, and Reply-To all marked ready.
+- Result: Email settings / reply-inbox setup scenario passed.
+- Email template test verification:
+  - User created `Reservation request follow-up test` as a transactional `booking` template.
+  - User sent a real test email to Gmail.
+  - Gmail received the message from `Marketing AI <abdi@swiftapp.ch>`.
+  - Gmail reply composer routed the reply to `abdi.ahmed.huss@gmail.com`.
+  - Result: Email template creation, Resend test sending, merge-tag preview, and Reply-To routing scenario passed.
+- Email sequence enrollment checkpoint:
+  - User created an active manual sequence named `Manual reservation email follow-up test`.
+  - Sequence step uses the verified template `Reservation request follow-up test` with `0` minute delay.
+  - User enrolled `Abdi CRM Manual Guest`.
+  - Production result: enrollment row showed `status=enrolled` and `next send=7/5/2026, 10:20:36 PM`, but after the due time and refresh it stayed enrolled.
+  - Root cause found: email sequence sending existed in the persistent worker process, but the production Vercel web deployment does not keep that worker running.
+  - Fix implemented immediately: added a protected web cron endpoint at `/api/cron/email-sequences` plus `vercel.json` cron configuration to process due email sequence steps every minute in production.
+  - Safety behavior preserved: duplicate-send idempotency, sender readiness checks, suppression checks, marketing opt-in rules, unsubscribe footer, Reply-To routing, and send failure recording still apply.
+  - Production note: this cron fix requires GitHub push and Vercel deployment before stuck/due email enrollments can process in production.
+  - Retest after deployment: wait one or two minutes, open the same sequence page, refresh, and confirm the enrollment moves from `enrolled` to `completed` or a clear failed/skipped status. Because the current contact email is `abdi.crm.manual@example.test`, real Gmail delivery should be tested with a real-email contact after cron processing is confirmed.
+- Next email walkthrough action: deploy the email-sequence cron fix, then retest the stuck manual sequence enrollment and confirm the send history/status behavior.
 
 ## Next Ordered Scenarios
 
 1. Continue the walkthrough with Email settings -> Email templates -> Email sequences in plain tenant/staff language.
-2. Email settings next pending item: verify the new Reply inbox field with a real email address, then send a test email.
+2. Email sequences next pending item: deploy the cron fix, retest the manual transactional sequence enrollment, and verify email send history/status behavior.
 3. Later checkpoint: retest Scenarios 1-7 in browser only if a new regression appears or after a broader release changes CRM behavior.
 
 ## Rule For The Assistant
