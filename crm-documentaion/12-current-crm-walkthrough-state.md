@@ -687,6 +687,22 @@ Use this section while teaching the Forms module after CRM/SMS automation.
     - Privacy behavior preserved: the fallback only runs when the visitor has accepted analytics consent. It also uses a 10-minute duplicate check by anonymous visitor id and form slug to avoid double-counting if browser tracking also succeeds.
     - Production note: this server-side analytics fallback requires GitHub push + Vercel deployment before the production walkthrough can verify analytics numbers. No database migration is needed.
     - Verification before deployment: focused `prettier`, focused `eslint --max-warnings 0`, and `pnpm.cmd --filter @marketing/web typecheck` passed.
+    - Live result after redeploy: user submitted again from incognito after accepting consent. Multiple new leads arrived in Forms, but Analytics still did not populate.
+    - Walkthrough decision: defer Forms Analytics debugging and continue the Forms walkthrough. This is now an unresolved analytics defect, not a blocker for validating form creation, form editing, submissions, CRM handoff, public embedding, inactive-form messaging, and form history.
+    - Later debugging needs production logs and/or direct database inspection for `/api/track`, `/api/forms/...`, and the `events` table to determine whether events are not inserted, inserted with a mismatched `form_slug`, or not returned by `forms.getAnalytics`.
+    - Standalone form creation scenario:
+      - User created a new `Private Dining Inquiry` form from the Forms -> New form AI generator.
+      - User confirmed the generated standalone form works as expected.
+      - Follow-up product questions found during walkthrough:
+        - The generator was tending to create two-step forms even though the form model and editor support 1-5 steps.
+        - Tenants should be able to ask naturally for a one-page/simple form or a 3-step/more complex form.
+        - Swiss-based restaurant forms should prefer CHF for budget/price options, then EUR when requested, and avoid USD/dollar defaults unless explicitly requested.
+      - Improvement implemented immediately:
+        - Updated the form-builder AI prompt to respect explicit step-count requests from 1 to 5 and to choose one-step forms for simple/quick/one-page requests.
+        - Updated the AI prompt to use Swiss-first currency defaults: CHF first, EUR when requested or cross-border, and USD only when explicitly requested.
+        - Added a server-side safeguard after AI generation that converts dollar-style budget/price options to CHF by default, or EUR when the tenant asks for euros.
+        - Updated the New form page restaurant examples to teach tenants to type `one-page form`, `3-step form`, and `CHF budget range` when that is what they want.
+      - Production note: this generator/currency improvement requires GitHub push + production deployment before new generated forms reflect it.
 
 ## Next Ordered Scenarios
 

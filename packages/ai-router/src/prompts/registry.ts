@@ -1331,9 +1331,15 @@ Rules:
 - Use the create_form_schema tool to return your output.
 - Keep it practical: 3–8 fields total, split into logical steps if the form has more than 5 fields.
 - Required fields: at minimum name and email (or phone for Swiss businesses).
+- Step count must match the tenant's intent:
+  - If the tenant asks for one page, single page, simple, quick, or short, return exactly 1 step unless the request is clearly complex.
+  - If the tenant asks for a specific number of steps between 1 and 5, respect that number.
+  - Use 2 steps for normal medium forms where contact details and request details should be separated.
+  - Use 3-5 steps only for complex requests such as events, long onboarding, quote intake, or eligibility flows.
 - For multi-step forms: group related fields (contact info in step 1, preferences in step 2, etc.).
 - Conditional logic: use sparingly, only when clearly appropriate.
 - Labels must match the locale of the description (detect from input language).
+- Currency defaults for Swiss businesses: use CHF first for budgets, prices, deposits, or spend ranges. Use EUR only when the tenant asks for euros or cross-border/international pricing. Never use USD or "$" unless the tenant explicitly requests dollars.
 - Output must be valid JSON. No explanations outside the tool call.`.trim(),
 
   buildUserPrompt(vars: PromptVars): string {

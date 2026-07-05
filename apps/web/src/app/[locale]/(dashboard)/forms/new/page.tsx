@@ -183,11 +183,20 @@ export default function NewFormPage() {
         <div className="mt-5 rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
           <p className="font-semibold">Useful restaurant examples</p>
           <ul className="mt-2 list-disc space-y-1 pl-5">
-            <li>Table booking form for date, time, guests, phone, and dietary notes.</li>
-            <li>Private dining request for group size, budget, preferred date, and message.</li>
-            <li>Callback request for guests who want staff to phone them back.</li>
+            <li>One-page table booking form for date, time, guests, phone, and dietary notes.</li>
+            <li>
+              Private dining request with group size, CHF budget range, preferred date, and message.
+            </li>
+            <li>
+              Three-step event inquiry: contact details, event details, then budget and special
+              requests.
+            </li>
             <li>Newsletter signup with clear marketing consent.</li>
           </ul>
+          <p className="mt-3 text-xs text-blue-800">
+            Tip: write &quot;one-page form&quot; or &quot;3-step form&quot; if you want a specific
+            structure.
+          </p>
         </div>
       </div>
 

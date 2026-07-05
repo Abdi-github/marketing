@@ -161,6 +161,65 @@ function csvCell(value: unknown): string {
 
 // ─── Tool definition for AI form builder ──────────────────────────────────────
 
+const CURRENCY_FIELD_RE = /(budget|price|amount|cost|fee|spend|deposit|currency)/i;
+const EXPLICIT_DOLLAR_RE = /(\$|\busd\b|\bdollars?\b|\bu\.s\. dollars?\b)/i;
+const EXPLICIT_EURO_RE = /(€|\beur\b|\beuros?\b)/i;
+const GENERATED_DOLLAR_RE = /(\$|\busd\b|\bdollars?\b|\bu\.s\. dollars?\b)/i;
+
+function preferredCurrencyFromDescription(description: string): "CHF" | "EUR" | "USD" {
+  if (EXPLICIT_DOLLAR_RE.test(description)) return "USD";
+  if (EXPLICIT_EURO_RE.test(description)) return "EUR";
+  return "CHF";
+}
+
+function normalizeCurrencyText(value: string | undefined, currency: "CHF" | "EUR" | "USD") {
+  if (!value || currency === "USD") return value;
+
+  return value
+    .replace(/\$\s*/g, `${currency} `)
+    .replace(/\bUSD\b/gi, currency)
+    .replace(/\bU\.S\. dollars?\b/gi, currency)
+    .replace(/\bUS dollars?\b/gi, currency)
+    .replace(/\bdollars?\b/gi, currency)
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeSwissCurrencyDefaults(form: SmartForm, description: string): SmartForm {
+  const currency = preferredCurrencyFromDescription(description);
+  if (currency === "USD") return form;
+
+  return {
+    ...form,
+    steps: form.steps.map((step) => ({
+      ...step,
+      fields: step.fields.map((field) => {
+        const fieldLooksCurrencyRelated =
+          CURRENCY_FIELD_RE.test(field.name) ||
+          CURRENCY_FIELD_RE.test(field.label) ||
+          GENERATED_DOLLAR_RE.test(field.placeholder ?? "") ||
+          Boolean(
+            field.options?.some(
+              (option) =>
+                GENERATED_DOLLAR_RE.test(option.label) || GENERATED_DOLLAR_RE.test(option.value),
+            ),
+          );
+
+        if (!fieldLooksCurrencyRelated) return field;
+
+        return {
+          ...field,
+          placeholder: normalizeCurrencyText(field.placeholder, currency),
+          options: field.options?.map((option) => ({
+            label: normalizeCurrencyText(option.label, currency) ?? option.label,
+            value: normalizeCurrencyText(option.value, currency) ?? option.value,
+          })),
+        };
+      }),
+    })),
+  };
+}
+
 const CREATE_FORM_TOOL: ToolDefinition = {
   name: "create_form_schema",
   description: "Output the structured form schema you designed",
@@ -850,6 +909,6 @@ export const formsRouter = router({
         });
       }
 
-      return parsed.data as SmartForm;
+      return normalizeSwissCurrencyDefaults(parsed.data as SmartForm, input.description);
     }),
 });
