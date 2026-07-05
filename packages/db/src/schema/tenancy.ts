@@ -62,6 +62,7 @@ export const businessProfiles = pgTable(
     addressCity: text("address_city"),
     addressPostalCode: text("address_postal_code"),
     addressCountry: text("address_country").notNull().default("CH"),
+    emailReplyTo: text("email_reply_to"),
     leadCaptureSettings: jsonb("lead_capture_settings").notNull().default({}),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

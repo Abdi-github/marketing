@@ -119,6 +119,14 @@ function isUsableSenderAddress(address: string): boolean {
 }
 
 async function resolveReplyToAddress(tenantId: string): Promise<string | undefined> {
+  const [profile] = await db
+    .select({ emailReplyTo: businessProfiles.emailReplyTo })
+    .from(businessProfiles)
+    .where(eq(businessProfiles.tenantId, tenantId));
+
+  const configuredReplyTo = profile?.emailReplyTo?.trim();
+  if (configuredReplyTo) return configuredReplyTo;
+
   const [owner] = await db
     .select({ email: users.email })
     .from(tenantUsers)

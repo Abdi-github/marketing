@@ -846,10 +846,27 @@ Use this section while teaching the Forms module after CRM/SMS automation.
   - Multi-business correction: the first version said `restaurant`, but the SaaS supports many tenant types. The copy is now generic: `This quick check helps protect the form from fake requests.`
   - Production note: this Turnstile UX copy requires GitHub push and Vercel deployment before production reflects it.
 
+## Email Automation Checkpoint
+
+- 2026-07-05: email automation implementation is now active for walkthrough. The user verified the Resend sender domain `swiftapp.ch`, configured `EMAIL_FROM_ADDRESS` as `Marketing AI <abdi@swiftapp.ch>`, and configured `RESEND_WEBHOOK_SECRET` in Vercel.
+- Email settings live screenshot showed:
+  - From: `Marketing AI <abdi@swiftapp.ch>`
+  - Sender ready, Resend API key, Webhook, Tracking, and Reply-To all marked ready.
+  - Reply-To still showed `restaurant-owner@e2e.test`, which is only a seed/demo tenant owner email and not a real inbox.
+- Product clarification: before this fix, the app did not have a dedicated tenant-facing field for the email inbox where customer replies should go. It fell back to the tenant owner account email.
+- Improvement implemented immediately:
+  - Added `business_profiles.email_reply_to`.
+  - Added Email settings `Reply inbox` field so a tenant can enter a real address such as `abdi@swiftapp.ch`.
+  - Email sender settings now show whether Reply-To comes from the custom business profile setting or the fallback owner account.
+  - Web app email test/sequence actions, the email sequence worker, and the lead follow-up worker now prefer the configured business reply inbox before falling back to the owner account email.
+  - Migration `0049_business_profile_email_reply_to.sql` was applied successfully.
+- Production note: this Reply inbox enhancement requires GitHub push and Vercel deployment before production reflects it.
+- Next email walkthrough action after deployment: open `Email settings`, enter a real reply inbox, save it, confirm the Reply-To display changes away from `restaurant-owner@e2e.test`, then send a test email from Email templates/sequence flow and verify replies can arrive at the real inbox.
+
 ## Next Ordered Scenarios
 
-1. Continue the walkthrough with the next non-email application area/page. Email settings, Email templates, and email Sequences are deferred until email automation functionality is implemented.
-2. Later checkpoint: return to email automation after implementation, then test Email settings -> Email templates -> email Sequences in plain restaurant-owner language.
+1. Continue the walkthrough with Email settings -> Email templates -> Email sequences in plain tenant/staff language.
+2. Email settings next pending item: verify the new Reply inbox field with a real email address, then send a test email.
 3. Later checkpoint: retest Scenarios 1-7 in browser only if a new regression appears or after a broader release changes CRM behavior.
 
 ## Rule For The Assistant

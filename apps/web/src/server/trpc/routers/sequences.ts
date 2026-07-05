@@ -97,6 +97,8 @@ function isUsablePlatformSender(address: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && !email.endsWith(".localhost");
 }
 
+const emailAddressSchema = z.string().email().max(320);
+
 function buildEmailDnsInstructions(domain: string, verifyToken: string) {
   return {
     verification: {
@@ -159,14 +161,30 @@ async function resolveSenderAddress(tenantId: string): Promise<string> {
   return `${domain.fromName} <${domain.fromLocalPart}@${domain.domain}>`;
 }
 
-async function resolveReplyToAddress(tenantId: string): Promise<string | undefined> {
+async function resolveReplyToDetails(
+  tenantId: string,
+): Promise<{ email: string | undefined; source: "business_profile" | "owner_account" | "none" }> {
+  const [profile] = await db
+    .select({ emailReplyTo: businessProfiles.emailReplyTo })
+    .from(businessProfiles)
+    .where(eq(businessProfiles.tenantId, tenantId));
+
+  const configuredReplyTo = profile?.emailReplyTo?.trim();
+  if (configuredReplyTo) return { email: configuredReplyTo, source: "business_profile" };
+
   const [owner] = await db
     .select({ email: users.email })
     .from(tenantUsers)
     .innerJoin(users, eq(users.id, tenantUsers.userId))
     .where(and(eq(tenantUsers.tenantId, tenantId), eq(tenantUsers.role, "owner")));
 
-  return owner?.email;
+  return owner?.email
+    ? { email: owner.email, source: "owner_account" }
+    : { email: undefined, source: "none" };
+}
+
+async function resolveReplyToAddress(tenantId: string): Promise<string | undefined> {
+  return (await resolveReplyToDetails(tenantId)).email;
 }
 
 async function resolveSenderSettings(tenantId: string) {
@@ -186,7 +204,7 @@ async function resolveSenderSettings(tenantId: string) {
       ),
     );
 
-  const replyTo = await resolveReplyToAddress(tenantId);
+  const replyTo = await resolveReplyToDetails(tenantId);
   const tenantSender = domain
     ? `${domain.fromName} <${domain.fromLocalPart}@${domain.domain}>`
     : null;
@@ -197,7 +215,8 @@ async function resolveSenderSettings(tenantId: string) {
     platformSender: env.EMAIL_FROM_ADDRESS,
     platformSenderConfigured,
     sender: tenantSender ?? env.EMAIL_FROM_ADDRESS,
-    replyTo: replyTo ?? null,
+    replyTo: replyTo.email ?? null,
+    replyToSource: replyTo.source,
     trackingStatus: domain?.trackingStatus ?? "platform-managed",
     webhookStatus: env.RESEND_WEBHOOK_SECRET ? "configured" : "not_configured",
     resendApiStatus: env.RESEND_API_KEY ? "configured" : "not_configured",
@@ -632,6 +651,27 @@ export const sequencesRouter = router({
     const { tenantId } = ctx.tenantCtx;
     return resolveSenderSettings(tenantId);
   }),
+
+  updateReplyToAddress: tenantProcedure
+    .input(z.object({ replyTo: z.union([emailAddressSchema, z.literal("")]) }))
+    .mutation(async ({ ctx, input }) => {
+      const { tenantId } = ctx.tenantCtx;
+      const replyTo = input.replyTo.trim() || null;
+      const [updated] = await db
+        .update(businessProfiles)
+        .set({ emailReplyTo: replyTo, updatedAt: new Date() })
+        .where(eq(businessProfiles.tenantId, tenantId))
+        .returning({ emailReplyTo: businessProfiles.emailReplyTo });
+
+      if (!updated) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "Business profile is not ready yet. Complete account setup first.",
+        });
+      }
+
+      return { replyTo: updated.emailReplyTo };
+    }),
 
   getAutomationOverview: tenantProcedure.query(async ({ ctx }) => {
     const { tenantId } = ctx.tenantCtx;

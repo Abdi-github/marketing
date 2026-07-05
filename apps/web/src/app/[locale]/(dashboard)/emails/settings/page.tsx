@@ -37,6 +37,7 @@ export default function EmailSettingsPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [senderSettings, setSenderSettings] = useState<SenderSettings | null>(null);
+  const [replyToInput, setReplyToInput] = useState("");
 
   async function loadDomains() {
     const [rows, settings] = await Promise.all([
@@ -45,6 +46,7 @@ export default function EmailSettingsPage() {
     ]);
     setDomains(rows);
     setSenderSettings(settings);
+    setReplyToInput(settings.replyTo ?? "");
   }
 
   useEffect(() => {
@@ -74,6 +76,19 @@ export default function EmailSettingsPage() {
       });
       setDomain("");
       setMessage("Domain added. Add the TXT verification record, then click Verify.");
+    });
+  }
+
+  async function saveReplyTo() {
+    await run("reply-to", async () => {
+      await trpc.sequences.updateReplyToAddress.mutate({
+        replyTo: replyToInput.trim(),
+      });
+      setMessage(
+        replyToInput.trim()
+          ? "Reply inbox saved. Customer email replies will go to this address."
+          : "Reply inbox cleared. Emails will fall back to the tenant owner account email.",
+      );
     });
   }
 
@@ -114,7 +129,7 @@ export default function EmailSettingsPage() {
             <p className="mt-1 max-w-3xl text-sm text-blue-800">
               {senderSettings?.mode === "tenant_domain"
                 ? "Emails are sent from your verified business domain."
-                : "Emails are sent from the platform sender. Customer replies go to your account email when available."}
+                : "Emails are sent from the platform sender. Customer replies go to the reply inbox below when available."}
             </p>
           </div>
           <span
@@ -141,6 +156,11 @@ export default function EmailSettingsPage() {
             <div className="mt-1 break-all font-medium text-gray-900">
               {senderSettings ? (senderSettings.replyTo ?? "Not available") : "Loading..."}
             </div>
+            {senderSettings?.replyToSource === "owner_account" && (
+              <p className="mt-1 text-xs text-amber-700">
+                Fallback owner email. Set a real reply inbox below before testing with customers.
+              </p>
+            )}
           </div>
         </div>
         <div className="mt-4 grid gap-2 text-sm md:grid-cols-5">
@@ -182,6 +202,47 @@ export default function EmailSettingsPage() {
             test email. 5. Activate only after reviewing consent rules.
           </p>
         </div>
+      </section>
+
+      <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Reply inbox</h2>
+            <p className="mt-1 max-w-3xl text-sm text-gray-500">
+              Use a real inbox that your team checks. Customer replies, test replies, and questions
+              about automated emails should arrive here.
+            </p>
+          </div>
+          {senderSettings?.replyToSource === "business_profile" && (
+            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+              Custom reply inbox
+            </span>
+          )}
+        </div>
+        <div className="mt-5 grid gap-4 md:grid-cols-[1fr_auto]">
+          <label className="grid gap-1 text-sm font-medium text-gray-700">
+            Email address for customer replies
+            <input
+              type="email"
+              value={replyToInput}
+              onChange={(e) => setReplyToInput(e.target.value)}
+              placeholder="abdi@swiftapp.ch"
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={saveReplyTo}
+            disabled={busy !== null}
+            className="self-end rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {busy === "reply-to" ? "Saving..." : "Save reply inbox"}
+          </button>
+        </div>
+        <p className="mt-3 text-xs text-gray-500">
+          This does not change the sender domain. It only tells email providers where replies should
+          be delivered.
+        </p>
       </section>
 
       <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5">
@@ -233,7 +294,7 @@ export default function EmailSettingsPage() {
           <h2 className="text-lg font-semibold text-gray-900">Sending domains</h2>
           <p className="mt-1 text-sm text-gray-500">
             Verified primary domains replace the platform sender. Without one, email automation
-            still works through the platform sender with replies routed to the account owner.
+            still works through the platform sender with replies routed to the reply inbox above.
           </p>
         </div>
 
