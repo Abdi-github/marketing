@@ -714,6 +714,13 @@ Use this section while teaching the Forms module after CRM/SMS automation.
         - Improvement implemented immediately before walkthrough: replaced the browser-native delete confirmation with an in-app confirmation modal that explains the form name, the risk, and the rule that submitted forms should be kept for history and reporting.
         - Production note: this Forms delete confirmation improvement requires GitHub push + production deployment before the production Forms table reflects it.
         - Live verification: user confirmed the delete/protect behavior works as expected in production.
+      - Forms anti-spam explanation checkpoint:
+        - User asked what the two Form settings anti-spam checkboxes mean and which technology each uses.
+        - `Block simple spam bots with a hidden safety field` is the Honeypot option: a hidden field normal guests never see, but simple bots often fill. If it is filled, the submission is rejected.
+        - `Add an extra anti-spam check for suspicious visitors` is the Cloudflare Turnstile option: a stronger challenge/token check for suspicious traffic.
+        - Improvement implemented immediately: the checkbox labels now include the technology names in brackets, for example `(Honeypot)` and `(Cloudflare Turnstile)`, so non-technical tenants can connect the plain-English description to the underlying protection.
+        - Walkthrough teaching point: keep Honeypot on by default for normal restaurant forms; enable Turnstile when the restaurant receives repeated fake submissions, a campaign is attracting suspicious traffic, or a public embedded form is being abused.
+        - Production note: this label clarification requires GitHub push and Vercel deployment before production reflects it.
 
 ## Production Auth Stability Note
 
@@ -775,6 +782,11 @@ Use this section while teaching the Forms module after CRM/SMS automation.
   - Fix implemented: the CRM AI prompt now explicitly says confirmed reservations must not be recommended for confirmation again.
   - Server-side safety was also added so if the model still returns a confirmation recommendation for a confirmed reservation, the app replaces it with a safer `No immediate action` suggestion and an optional customer follow-up draft.
   - Production note: this refinement requires GitHub push and Vercel deployment before production retesting reflects it.
+- CRM task priority and due-time clarification:
+  - User asked what task due times mean, for example reservation tasks due in about 1 hour, callback tasks due in about 2 hours, and quote/private-dining tasks due in about 8 hours.
+  - Clarification: due time is a suggested staff response time, not an automation deadline. If it passes, the task moves to `Overdue`; the app does not send messages, change priorities, confirm/decline reservations, or close work automatically.
+  - Improvement implemented immediately: the Contacts follow-up queue now includes helper copy explaining that due time is only a suggested response time and overdue tasks do not trigger automatic customer-facing changes.
+  - Production note: this helper copy requires GitHub push and Vercel deployment before production reflects it.
 
 ## Next Ordered Scenarios
 

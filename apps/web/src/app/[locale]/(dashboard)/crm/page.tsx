@@ -1665,6 +1665,7 @@ function TaskQueuePanel({
         <div>
           <h2 className="text-sm font-semibold text-gray-900">{t("tasksQueueTitle")}</h2>
           <p className="mt-0.5 text-xs text-gray-500">{t("tasksQueueSubtitle")}</p>
+          <p className="mt-1 max-w-3xl text-xs text-gray-500">{t("tasksDueTimeHelp")}</p>
         </div>
         <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600">
           {t("tasksOpenCount", { count: tasks.length })}
