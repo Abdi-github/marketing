@@ -158,7 +158,8 @@ export default function EmailSettingsPage() {
             </div>
             {senderSettings?.replyToSource === "owner_account" && (
               <p className="mt-1 text-xs text-amber-700">
-                Fallback owner email. Set a real reply inbox below before testing with customers.
+                Replies are currently routed to the account email. You can choose a dedicated reply
+                inbox below.
               </p>
             )}
           </div>
