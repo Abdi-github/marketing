@@ -444,7 +444,7 @@ function SmartFormBody({
               color: "var(--lp-muted,#6b7280)",
             }}
           >
-            This quick check helps protect the restaurant from fake requests.
+            This quick check helps protect the form from fake requests.
           </p>
           <TurnstileWidget siteKey={siteKey} onToken={setTurnstileToken} />
         </div>
