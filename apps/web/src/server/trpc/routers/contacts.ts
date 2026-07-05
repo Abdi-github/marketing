@@ -1,4 +1,4 @@
-import { createAnthropicHaiku, getPrompt } from "@marketing/ai-router";
+import { createAnthropicHaiku, getPrompt, type ToolDefinition } from "@marketing/ai-router";
 import { db } from "@marketing/db";
 import {
   contacts,
@@ -53,6 +53,148 @@ type ContactTimelineItem = {
   occurredAt: Date;
   meta: Record<string, unknown>;
 };
+
+const crmAssistantActionSchema = z.enum([
+  "confirm_reservation",
+  "ask_missing_details",
+  "prepare_quote",
+  "call_customer",
+  "send_follow_up",
+  "create_task",
+  "create_deal",
+  "mark_contacted",
+  "no_action",
+]);
+
+const crmAssistantSchema = z.object({
+  situationSummary: z.string().trim().min(1).max(240),
+  recommendedAction: crmAssistantActionSchema,
+  recommendationLabel: z.string().trim().min(1).max(80),
+  reason: z.string().trim().min(1).max(240),
+  replyDraft: z.string().trim().min(1).max(900),
+  suggestedTaskTitle: z.string().trim().max(160).optional(),
+  suggestedNote: z.string().trim().max(240).optional(),
+  safetyReminder: z.string().trim().max(180).optional(),
+});
+
+type CrmAssistantResult = z.infer<typeof crmAssistantSchema>;
+
+const CRM_STAFF_ASSISTANT_TOOL: ToolDefinition = {
+  name: "create_crm_staff_assist",
+  description:
+    "Return a safe staff co-pilot response for a CRM contact. It may suggest or draft, but must not execute actions.",
+  inputSchema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      situationSummary: {
+        type: "string",
+        description:
+          "Plain-English one-sentence summary of the customer situation for restaurant staff.",
+      },
+      recommendedAction: {
+        type: "string",
+        enum: crmAssistantActionSchema.options,
+        description: "The safest next staff action. This is only a recommendation.",
+      },
+      recommendationLabel: {
+        type: "string",
+        description: "Short button-like label for the recommended action.",
+      },
+      reason: {
+        type: "string",
+        description: "One plain-English sentence explaining why this action is recommended.",
+      },
+      replyDraft: {
+        type: "string",
+        description: "Customer-ready reply draft. Staff must review and send manually.",
+      },
+      suggestedTaskTitle: {
+        type: "string",
+        description: "Optional staff task title to prefill if follow-up work is needed.",
+      },
+      suggestedNote: {
+        type: "string",
+        description: "Optional private CRM note to save after staff review.",
+      },
+      safetyReminder: {
+        type: "string",
+        description: "Short reminder that the staff member must confirm, send, or save manually.",
+      },
+    },
+    required: [
+      "situationSummary",
+      "recommendedAction",
+      "recommendationLabel",
+      "reason",
+      "replyDraft",
+    ],
+  },
+};
+
+function fallbackCrmAssistant(input: {
+  contactName: string;
+  leadSummary: string;
+  notes: string;
+}): CrmAssistantResult {
+  const lead = input.leadSummary.toLowerCase();
+  const firstName = input.contactName.split(/\s+/)[0] || input.contactName;
+  const isQuote =
+    lead.includes('"quote"') || lead.includes("quote") || lead.includes("private dining");
+  const isMissing =
+    lead.includes("missing_details") ||
+    lead.includes("missing details") ||
+    lead.includes("date") === false ||
+    lead.includes("time") === false;
+
+  if (isQuote) {
+    return {
+      situationSummary:
+        "This customer is asking about a larger or private dining request and needs a staff reply.",
+      recommendedAction: "prepare_quote",
+      recommendationLabel: "Prepare quote reply",
+      reason:
+        "A quote request usually needs menu, budget, date, and guest-count review before promising anything.",
+      replyDraft: `Hi ${firstName},\n\nThanks for your request. We will review the details and get back to you with a suitable option. If there is anything important about the menu, budget, or timing, please send it through.\n\nKind regards`,
+      suggestedTaskTitle: "Prepare quote reply",
+      suggestedNote:
+        "Customer asked for a quote. Review date, time, guest count, budget, and menu needs before replying.",
+      safetyReminder:
+        "AI only prepared this suggestion. Staff should review and send or save manually.",
+    };
+  }
+
+  if (isMissing) {
+    return {
+      situationSummary:
+        "This customer is interested, but the request may need one or more details before staff can confirm it.",
+      recommendedAction: "ask_missing_details",
+      recommendationLabel: "Ask for missing details",
+      reason:
+        "The safest next step is to collect the missing reservation details before confirming.",
+      replyDraft: `Hi ${firstName},\n\nThanks for your request. Could you please confirm the preferred date, time, and number of guests? Once we have that, we can check availability for you.\n\nKind regards`,
+      suggestedTaskTitle: "Ask customer for missing reservation details",
+      suggestedNote: "Customer request needs staff review before confirmation.",
+      safetyReminder:
+        "AI only prepared this suggestion. Staff should review and send or save manually.",
+    };
+  }
+
+  return {
+    situationSummary:
+      "This looks like a reservation request that staff should review before confirming.",
+    recommendedAction: "confirm_reservation",
+    recommendationLabel: "Review and confirm",
+    reason: "The customer supplied enough information for staff to check availability and decide.",
+    replyDraft: `Hi ${firstName},\n\nThanks for your request. We will check availability and confirm your reservation shortly.\n\nKind regards`,
+    suggestedTaskTitle: "Confirm reservation request",
+    suggestedNote: input.notes
+      ? undefined
+      : "Review availability before confirming this reservation.",
+    safetyReminder:
+      "AI only prepared this suggestion. Staff should review and confirm or send manually.",
+  };
+}
 
 type EmailStatus = "active" | "unsubscribed" | "bounced" | "complained";
 
@@ -589,7 +731,8 @@ export const contactsRouter = router({
       return deleted;
     }),
 
-  // AI-drafted follow-up message for a contact's latest lead.
+  // AI staff co-pilot for a contact's latest lead. It drafts and recommends,
+  // but never executes customer-facing or CRM-changing actions.
   draftFollowUp: tenantProcedure
     .input(z.object({ contactId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
@@ -612,44 +755,103 @@ export const contactsRouter = router({
           payload: leads.payload,
           submittedAt: leads.submittedAt,
           sourceUrl: leads.sourceUrl,
+          status: leads.status,
+          workflowKind: leads.workflowKind,
+          workflowState: leads.workflowState,
+          sourceChannel: leads.sourceChannel,
         })
         .from(leads)
         .where(and(eq(leads.tenantId, tenantId), eq(leads.contactId, input.contactId)))
         .orderBy(desc(leads.submittedAt))
         .limit(1);
 
-      const prompt = getPrompt("crm-follow-up-v1");
+      const openTasks = await db
+        .select({
+          title: crmTasks.title,
+          priority: crmTasks.priority,
+          dueAt: crmTasks.dueAt,
+        })
+        .from(crmTasks)
+        .where(
+          and(
+            eq(crmTasks.tenantId, tenantId),
+            eq(crmTasks.contactId, input.contactId),
+            eq(crmTasks.status, "open"),
+          ),
+        )
+        .orderBy(desc(crmTasks.createdAt))
+        .limit(5);
+
+      const prompt = getPrompt("crm-staff-assistant-v1");
+      const contactName =
+        [contact.firstName, contact.lastName].filter(Boolean).join(" ") || contact.email;
       const leadSummary = latestLeads[0]
-        ? `Form submitted ${new Date(latestLeads[0].submittedAt).toLocaleDateString()} from ${latestLeads[0].sourceUrl ?? "landing page"}:\n${JSON.stringify(latestLeads[0].payload, null, 2)}`
-        : "No form submissions yet — reached out manually.";
+        ? `Form submitted ${new Date(latestLeads[0].submittedAt).toLocaleDateString()} from ${
+            latestLeads[0].sourceUrl ?? "landing page"
+          }.
+Workflow kind: ${latestLeads[0].workflowKind ?? "unknown"}
+Workflow state: ${latestLeads[0].workflowState ?? latestLeads[0].status ?? "unknown"}
+Preferred channel: ${latestLeads[0].sourceChannel ?? "unknown"}
+Payload:
+${JSON.stringify(latestLeads[0].payload, null, 2)}`
+        : "No form submissions yet - reached out manually.";
+      const taskSummary =
+        openTasks.length > 0
+          ? openTasks
+              .map((task) => {
+                const due = task.dueAt ? `, due ${new Date(task.dueAt).toLocaleDateString()}` : "";
+                return `- ${task.title} (${task.priority}${due})`;
+              })
+              .join("\n")
+          : "No open tasks.";
 
       const userPrompt = prompt.buildUserPrompt({
         businessName: profile?.businessName ?? "our business",
         vertical: profile?.vertical ?? "SME",
         city: profile?.addressCity ?? "",
         locale: profile?.locale ?? "en",
-        contactName:
-          [contact.firstName, contact.lastName].filter(Boolean).join(" ") || contact.email,
+        contactName,
         contactEmail: contact.email,
+        contactPhone: contact.phone ?? "",
         leadSummary,
+        openTasks: taskSummary,
         notes: contact.notes ?? "",
       });
 
       const provider = createAnthropicHaiku();
-      const result = await provider.complete(
-        { prompt: userPrompt, systemPrompt: prompt.systemPrompt, maxTokens: 200, temperature: 0.7 },
-        {
-          tenantId,
-          jobId: crypto.randomUUID(),
-          promptId: "crm-follow-up-v1",
-          promptVersion: 1,
-          costBudgetCents: 10,
-        },
-      );
+      const fallback = fallbackCrmAssistant({
+        contactName,
+        leadSummary,
+        notes: contact.notes ?? "",
+      });
 
-      return { draft: result.text };
+      try {
+        const result = provider.completionWithTools
+          ? await provider.completionWithTools(
+              {
+                prompt: userPrompt,
+                systemPrompt: prompt.systemPrompt,
+                maxTokens: 900,
+                temperature: 0.3,
+              },
+              [CRM_STAFF_ASSISTANT_TOOL],
+              {
+                tenantId,
+                jobId: crypto.randomUUID(),
+                promptId: prompt.id,
+                promptVersion: prompt.version,
+                costBudgetCents: 15,
+              },
+            )
+          : null;
+
+        const parsed = crmAssistantSchema.safeParse(result?.toolResult);
+        const assistant = parsed.success ? parsed.data : fallback;
+        return { draft: assistant.replyDraft, assistant };
+      } catch {
+        return { draft: fallback.replyDraft, assistant: fallback };
+      }
     }),
-
   // Update lifecycle stage and/or custom properties for a contact.
   // (Tags + notes have their own dedicated mutations above.)
   update: tenantProcedure

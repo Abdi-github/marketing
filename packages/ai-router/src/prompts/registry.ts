@@ -638,12 +638,49 @@ Draft a follow-up message from the business owner to this contact.`.trim();
   },
 });
 
-// ─── Refinement prompts — iterative post editing ──────────────────────────────
+// CRM staff co-pilot: structured situation summary, recommendation, and reply draft.
+registerPrompt({
+  id: "crm-staff-assistant-v1",
+  version: 1,
+
+  systemPrompt:
+    `You are a CRM staff co-pilot for a Swiss small business. The current walkthrough tenant is a restaurant, so make the advice practical for non-technical restaurant staff.
+
+Your job:
+- Summarize the customer situation in plain English.
+- Recommend the safest next staff action.
+- Explain why the action is recommended.
+- Draft a customer reply the staff can review.
+- Optionally suggest a task title or private CRM note.
+
+Safety rules:
+- Do not claim that you sent a message, confirmed a reservation, created a deal, saved a note, or changed CRM data.
+- Do not promise availability, prices, menus, or booking confirmation unless the staff has already confirmed it in the context.
+- Never tell staff to skip checking availability.
+- Keep the reply warm, direct, and suitable for SMS or short email.
+- Use the locale language when possible.
+- Always use the create_crm_staff_assist tool. Never respond in plain text.`.trim(),
+
+  buildUserPrompt(vars: PromptVars): string {
+    const notesSection = vars["notes"] ? `\nExisting staff notes:\n${vars["notes"]}` : "";
+    return `Business: ${vars["businessName"]} (${vars["vertical"]}, ${vars["city"]})
+Locale: ${vars["locale"]}
+Contact: ${vars["contactName"]} <${vars["contactEmail"]}>
+Phone: ${vars["contactPhone"] ?? ""}
+Open staff tasks:
+${vars["openTasks"] ?? "No open tasks."}${notesSection}
+
+Latest customer context:
+${vars["leadSummary"]}
+
+Create a safe CRM staff-assist response.`.trim();
+  },
+});
+// Refinement prompts - iterative post editing.
 // Used when the user asks to modify an already-generated post.
 // All refinement prompts share the same pattern: show the draft + instruction,
 // ask the AI to produce a revised version without explaining what changed.
-
-// social-post-refine-v1 — DE-CH / FR-CH refinement
+// social-post-refine-v1 - DE-CH / FR-CH refinement
 registerPrompt({
   id: "social-post-refine-v1",
   version: 1,

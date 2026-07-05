@@ -63,6 +63,26 @@ type ContactDetail = ContactRow & {
   leads: LeadEntry[];
 };
 
+type CrmAssistantResult = {
+  situationSummary: string;
+  recommendedAction:
+    | "confirm_reservation"
+    | "ask_missing_details"
+    | "prepare_quote"
+    | "call_customer"
+    | "send_follow_up"
+    | "create_task"
+    | "create_deal"
+    | "mark_contacted"
+    | "no_action";
+  recommendationLabel: string;
+  reason: string;
+  replyDraft: string;
+  suggestedTaskTitle?: string;
+  suggestedNote?: string;
+  safetyReminder?: string;
+};
+
 type ListResult = {
   rows: ContactRow[];
   total: number;
@@ -817,6 +837,7 @@ function DetailPanel({
   const [leadActionNotice, setLeadActionNotice] = useState<string | null>(null);
 
   const [draft, setDraft] = useState<string | null>(null);
+  const [crmAssistant, setCrmAssistant] = useState<CrmAssistantResult | null>(null);
   const [draftingFollowUp, setDraftingFollowUp] = useState(false);
   const [draftCopied, setDraftCopied] = useState(false);
 
@@ -902,9 +923,11 @@ function DetailPanel({
   async function handleDraftFollowUp() {
     setDraftingFollowUp(true);
     setDraft(null);
+    setCrmAssistant(null);
     try {
       const result = await trpc.contacts.draftFollowUp.mutate({ contactId });
       setDraft(result.draft);
+      setCrmAssistant((result.assistant as CrmAssistantResult | undefined) ?? null);
     } catch {
       setDraft("—");
     }
@@ -917,6 +940,15 @@ function DetailPanel({
       setDraftCopied(true);
       setTimeout(() => setDraftCopied(false), 2000);
     });
+  }
+
+  function handleUseSuggestedTask(title: string) {
+    setTaskTitle(title);
+  }
+
+  function handleUseSuggestedNote(note: string) {
+    const prefix = notes.trim() ? `${notes.trim()}\n\n` : "";
+    handleNotesChange(`${prefix}${note}`);
   }
 
   async function handleCreateTask(e: React.FormEvent) {
@@ -1253,17 +1285,75 @@ function DetailPanel({
             >
               {draftingFollowUp ? t("draftingFollowUp") : t("aiFollowUp")}
             </button>
-            {draft && (
+            {crmAssistant ? (
+              <div className="mt-3 space-y-3 rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm text-gray-800">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-indigo-700">
+                    {t("aiSituationLabel")}
+                  </p>
+                  <p className="mt-1">{crmAssistant.situationSummary}</p>
+                </div>
+                <div className="rounded border border-indigo-100 bg-white p-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-indigo-700">
+                    {t("aiRecommendationLabel")}
+                  </p>
+                  <p className="mt-1 font-semibold text-gray-900">
+                    {crmAssistant.recommendationLabel}
+                  </p>
+                  <p className="mt-1 text-gray-600">{crmAssistant.reason}</p>
+                </div>
+                <div className="relative rounded border border-indigo-100 bg-white p-3">
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-indigo-700">
+                    {t("aiReplyDraftLabel")}
+                  </p>
+                  <p className="whitespace-pre-wrap pr-16">{crmAssistant.replyDraft}</p>
+                  <button
+                    type="button"
+                    onClick={handleCopyDraft}
+                    className="absolute right-2 top-2 rounded border border-indigo-300 px-2 py-0.5 text-xs text-indigo-600 hover:text-indigo-800"
+                  >
+                    {draftCopied ? t("copiedDraft") : t("copyDraft")}
+                  </button>
+                </div>
+                {(crmAssistant.suggestedTaskTitle || crmAssistant.suggestedNote) && (
+                  <div className="flex flex-wrap gap-2">
+                    {crmAssistant.suggestedTaskTitle && (
+                      <button
+                        type="button"
+                        onClick={() => handleUseSuggestedTask(crmAssistant.suggestedTaskTitle!)}
+                        className="rounded border border-indigo-200 bg-white px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100"
+                      >
+                        {t("aiUseTask")}
+                      </button>
+                    )}
+                    {crmAssistant.suggestedNote && (
+                      <button
+                        type="button"
+                        onClick={() => handleUseSuggestedNote(crmAssistant.suggestedNote!)}
+                        className="rounded border border-indigo-200 bg-white px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100"
+                      >
+                        {t("aiAddNote")}
+                      </button>
+                    )}
+                  </div>
+                )}
+                {crmAssistant.safetyReminder && (
+                  <p className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    {crmAssistant.safetyReminder}
+                  </p>
+                )}
+              </div>
+            ) : draft ? (
               <div className="relative mt-3 rounded border border-indigo-200 bg-indigo-50 p-3 text-sm text-gray-800">
                 <p className="whitespace-pre-wrap pr-16">{draft}</p>
                 <button
                   onClick={handleCopyDraft}
                   className="absolute right-2 top-2 rounded border border-indigo-300 px-2 py-0.5 text-xs text-indigo-600 hover:text-indigo-800"
                 >
-                  {draftCopied ? "✓" : t("copyDraft")}
+                  {draftCopied ? t("copiedDraft") : t("copyDraft")}
                 </button>
               </div>
-            )}
+            ) : null}
           </section>
 
           {/* Leads history */}

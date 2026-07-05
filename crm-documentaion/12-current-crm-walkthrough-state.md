@@ -726,6 +726,50 @@ Use this section while teaching the Forms module after CRM/SMS automation.
   - Login now shows a clear visible error if credentials are wrong, the backend fails, or the session cannot be opened.
   - Dashboard session lookup now retries once before treating the user as unauthenticated.
 - Production note: this auth stability fix requires GitHub push and Vercel deployment before production retesting reflects it.
+- Live verification: user redeployed/logged in successfully and continued the walkthrough. Treat the login blocker as fixed unless a fresh production screenshot or console/server log shows the issue returning.
+
+## CRM AI Assistance Checkpoint
+
+- 2026-07-05: user tested the CRM contact drawer `AI Draft` feature after submitting a fresh reservation request.
+- Test request context:
+  - Contact: `AI Draft Guest`
+  - Phone: `+41762147690`
+  - Reservation date/time: `2026-07-22`, `20:00`
+  - People: `8`
+  - Customer message: `We would like to book a birthday dinner and ask if you can prepare a small dessert with candles.`
+- Live result: the AI draft appeared in the contact drawer and correctly referenced the birthday dinner, date/time, 8 people, dessert with candles, and a follow-up phone call.
+- Teaching point: CRM AI is assistive, not automatic. It drafts a staff-ready message based on contact/request context, but the staff member must review, copy/edit, and decide whether to send from Inbox or use the draft as call notes.
+- Next walkthrough action: verify the safe handoff from AI draft to actual staff communication, preferably by copying/adapting the draft into the Inbox reply composer rather than treating the draft as automatically sent.
+- Safe handoff verification passed: user copied a shortened, realistic SMS version of the AI draft into the Inbox composer, sent it, and received it on the verified phone number.
+- Conclusion: CRM AI follow-up drafting works as intended for this scenario. The AI helps staff write faster, but the staff member remains responsible for reviewing and sending the message.
+- Follow-up-task retest adjustment: after the AI draft SMS was sent, the Contacts page showed `0 open tasks`, while the same contact drawer still showed `Reservation - Awaiting Confirmation` with action buttons. This is valid product behavior because the queue tracks explicit staff follow-up tasks, while the reservation action panel tracks the latest unresolved reservation state.
+- UX note: for beginner staff, this distinction can be confusing. A future copy improvement could explain that `No open tasks` does not always mean there is no customer action left; the contact drawer can still show a reservation waiting for confirmation.
+- Next CRM AI test should use the active reservation context directly: click `Draft follow-up with AI` again while the drawer shows `Reservation - Awaiting Confirmation`, and verify that AI drafts wording without sending SMS or changing reservation status.
+- Active-reservation AI draft verification passed: user generated a second AI draft while the contact still showed `Reservation - Awaiting Confirmation`. The AI drafted a relevant birthday dinner follow-up, but it did not send SMS, complete a task, or change reservation status.
+- Staff decision boundary verification passed: user manually clicked `Confirm reservation`. Twilio sent the confirmation successfully, the contact drawer changed to `Reservation - Confirmed`, and the confirmed panel showed the date `2026-07-22`, time `20:00`, and `8` guests.
+- Conclusion for CRM AI walkthrough: AI currently facilitates CRM by drafting staff wording from contact/reservation context. It does not replace human business decisions. Staff still manually sends messages and manually confirms/declines/marks contacted.
+- CRM AI enhancement analysis:
+  - Current CRM contact AI is intentionally narrow: `contacts.draftFollowUp` generates text only.
+  - The broader Copilot system already has the safer architecture needed for AI-assisted operations: safe read-only tools can auto-run, while write actions become pending actions that require user confirmation.
+  - Recommendation: enhance CRM AI, but do it as a proposal-and-confirm assistant, not as an autonomous operator.
+  - Best first CRM enhancements:
+    - AI summarizes the latest customer request and highlights missing/confirmed reservation details.
+    - AI proposes the next staff action: ask for details, confirm reservation, create deal, prepare quote, add task, or mark contacted.
+    - AI can prefill a task or deal draft, but staff must confirm before saving.
+    - AI can prepare a reply in Inbox and insert it into the composer, but staff must click Send.
+  - Actions that should remain manual or confirmation-gated:
+    - Sending SMS/WhatsApp/email.
+    - Confirming/declining/cancelling a reservation.
+    - Creating or winning/losing a deal.
+    - Enrolling contacts into automation.
+    - Updating saved customer identity details.
+  - Product reason: this would make the CRM easier for non-technical restaurant staff without weakening trust. AI can reduce thinking/writing work, but business commitments stay human-approved.
+- CRM AI enhancement implementation:
+  - `contacts.draftFollowUp` now returns a structured staff co-pilot response in addition to the existing `draft` text.
+  - The assistant response includes: customer situation summary, recommended next staff action, plain-English reason, reply draft, optional task title, optional note, and a safety reminder.
+  - The CRM contact drawer now shows this as a beginner-friendly AI card instead of only a raw paragraph.
+  - Staff can copy the draft reply, prefill the task title field, or append the suggested note, but AI does not send messages, create tasks, save notes, confirm reservations, or change CRM state automatically.
+  - Production note: this enhancement requires GitHub push and Vercel deployment before production retesting reflects it.
 
 ## Next Ordered Scenarios
 
