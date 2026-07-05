@@ -553,6 +553,7 @@
     "forgotSent": "Se l'e-mail esiste, il link è in arrivo. Controlla la tua casella.",
     "backToLogin": "← Torna all'accesso",
     "invalidCredentials": "E-mail o password errati.",
+    "sessionUnavailable": "Accesso riuscito, ma la sessione non si e aperta. Aggiorna la pagina e riprova.",
     "genericError": "Accesso fallito. Riprova."
   },
   "Integrations": {

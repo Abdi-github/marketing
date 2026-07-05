@@ -46,18 +46,22 @@ export function FormsList({
   const t = useTranslations("Forms");
   const router = useRouter();
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteForm, setDeleteForm] = useState<FormItem | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [pausingForm, setPausingForm] = useState<FormItem | null>(null);
   const [inactiveMessage, setInactiveMessage] = useState("");
   const [updatingActiveId, setUpdatingActiveId] = useState<string | null>(null);
 
-  async function handleDelete(id: string) {
-    if (!confirm(t("deleteConfirm"))) return;
-    setDeletingId(id);
+  async function confirmDelete() {
+    if (!deleteForm) return;
+    setDeletingId(deleteForm.id);
+    setDeleteError(null);
     try {
-      await trpc.forms.delete.mutate({ formId: id });
+      await trpc.forms.delete.mutate({ formId: deleteForm.id });
+      setDeleteForm(null);
       router.refresh();
     } catch (err) {
-      alert(err instanceof Error ? err.message : t("deleteError"));
+      setDeleteError(err instanceof Error ? err.message : t("deleteError"));
     } finally {
       setDeletingId(null);
     }
@@ -167,7 +171,10 @@ export function FormsList({
                       {t("edit")}
                     </Link>
                     <button
-                      onClick={() => void handleDelete(form.id)}
+                      onClick={() => {
+                        setDeleteError(null);
+                        setDeleteForm(form);
+                      }}
                       disabled={deletingId === form.id || form.leadCount > 0}
                       title={form.leadCount > 0 ? t("deleteDisabledHint") : undefined}
                       className="text-red-400 transition-colors hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-30"
@@ -209,6 +216,52 @@ export function FormsList({
           </div>
         )}
       </div>
+
+      <Modal
+        open={Boolean(deleteForm)}
+        onClose={() => {
+          if (deletingId) return;
+          setDeleteForm(null);
+          setDeleteError(null);
+        }}
+        title="Delete this unused form?"
+        description="This removes the form from the tenant dashboard. Forms that already received submissions are protected and cannot be deleted from this list."
+        size="sm"
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                setDeleteForm(null);
+                setDeleteError(null);
+              }}
+              disabled={Boolean(deletingId)}
+              className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Keep form
+            </button>
+            <button
+              type="button"
+              onClick={() => void confirmDelete()}
+              disabled={Boolean(deletingId)}
+              className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {deletingId ? "Deleting..." : "Delete form"}
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="rounded-lg border border-red-100 bg-red-50 p-3 text-sm text-red-900">
+            <p className="font-medium">{deleteForm?.name}</p>
+            <p className="mt-1">
+              Delete only test or unused forms. If a form has customer submissions, keep it for
+              history and reporting.
+            </p>
+          </div>
+          {deleteError && <p className="text-sm text-red-600">{deleteError}</p>}
+        </div>
+      </Modal>
 
       <Modal
         open={Boolean(pausingForm)}

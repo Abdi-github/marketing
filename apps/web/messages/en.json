@@ -558,6 +558,7 @@
     "forgotSent": "If that email exists, a reset link is on its way. Check your inbox.",
     "backToLogin": "← Back to log in",
     "invalidCredentials": "Wrong email or password.",
+    "sessionUnavailable": "Login succeeded, but your session could not be opened. Refresh the page and try again.",
     "genericError": "Login failed. Please try again."
   },
   "Integrations": {

@@ -709,6 +709,23 @@ Use this section while teaching the Forms module after CRM/SMS automation.
         - Beginner-friendly expectation: staff should also be able to open the form by clicking the form name or the table row.
         - Improvement implemented immediately: the Forms list row now opens the form detail page, and the form name is a direct link. Status and action controls keep their own behavior and do not accidentally trigger row navigation.
         - Production note: this Forms list navigation improvement requires GitHub push + production deployment before the production Forms table reflects it.
+      - Forms deletion walkthrough preparation:
+        - Next Forms-owned scenario is deleting an unused/test form and understanding why forms with submissions are protected.
+        - Improvement implemented immediately before walkthrough: replaced the browser-native delete confirmation with an in-app confirmation modal that explains the form name, the risk, and the rule that submitted forms should be kept for history and reporting.
+        - Production note: this Forms delete confirmation improvement requires GitHub push + production deployment before the production Forms table reflects it.
+        - Live verification: user confirmed the delete/protect behavior works as expected in production.
+
+## Production Auth Stability Note
+
+- 2026-07-05: user reported an intermittent production issue during walkthrough testing: the app redirected to the login page by itself, then clicking `Log in` appeared to do nothing with no visible error.
+- Root cause found in code: the login page treated a successful sign-in HTTP response as enough and redirected immediately without confirming that the browser had a readable session and active tenant context. If the session cookie was not available yet, or if the server session lookup briefly failed, the dashboard redirected back to login and the experience looked like a dead button.
+- Related hardening issue found: dashboard session resolution caught server-side auth lookup errors and returned `null`, which can turn a transient auth/session read failure into a user-visible logout.
+- Fix implemented:
+  - Added a server session readiness check endpoint.
+  - Login now verifies the session and active tenant context before redirecting to the dashboard.
+  - Login now shows a clear visible error if credentials are wrong, the backend fails, or the session cannot be opened.
+  - Dashboard session lookup now retries once before treating the user as unauthenticated.
+- Production note: this auth stability fix requires GitHub push and Vercel deployment before production retesting reflects it.
 
 ## Next Ordered Scenarios
 

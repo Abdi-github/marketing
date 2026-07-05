@@ -3,6 +3,40 @@
 import React, { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 
+type LoginErrorKind = "invalid" | "session" | "server";
+
+async function fetchWithTimeout(
+  input: Parameters<typeof fetch>[0],
+  init: Parameters<typeof fetch>[1] = {},
+) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 15_000);
+
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
+async function classifySignInFailure(res: Response): Promise<LoginErrorKind> {
+  const text = await res.text().catch(() => "");
+  const normalized = text.toLowerCase();
+
+  if (
+    res.status === 400 ||
+    res.status === 401 ||
+    res.status === 403 ||
+    normalized.includes("invalid") ||
+    normalized.includes("credential") ||
+    normalized.includes("password")
+  ) {
+    return "invalid";
+  }
+
+  return "server";
+}
+
 export default function LoginPage() {
   const locale = useLocale();
   const t = useTranslations("Login");
@@ -15,33 +49,48 @@ export default function LoginPage() {
     setLoading(true);
 
     const form = new FormData(e.currentTarget);
+    const email = String(form.get("email") ?? "").trim();
+    const password = String(form.get("password") ?? "");
 
     try {
-      const res = await fetch("/api/auth/sign-in/email", {
+      const res = await fetchWithTimeout("/api/auth/sign-in/email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         cache: "no-store",
         body: JSON.stringify({
-          email: form.get("email"),
-          password: form.get("password"),
+          email,
+          password,
         }),
         credentials: "include",
       });
 
-      if (res.status === 401 || res.status === 403) {
-        throw new Error("invalid");
-      }
       if (!res.ok) {
-        throw new Error("server");
+        throw new Error(await classifySignInFailure(res));
+      }
+
+      const sessionCheck = await fetchWithTimeout("/api/session/check", {
+        method: "GET",
+        cache: "no-store",
+        credentials: "include",
+      });
+
+      if (!sessionCheck.ok) {
+        throw new Error("session");
       }
 
       window.location.href = `/${locale}/dashboard`;
     } catch (err) {
-      setError(
-        err instanceof Error && err.message === "invalid"
-          ? t("invalidCredentials")
-          : t("genericError"),
-      );
+      if (err instanceof Error && err.message === "invalid") {
+        setError(t("invalidCredentials"));
+        return;
+      }
+
+      if (err instanceof Error && err.message === "session") {
+        setError(t("sessionUnavailable"));
+        return;
+      }
+
+      setError(t("genericError"));
     } finally {
       setLoading(false);
     }
@@ -52,7 +101,12 @@ export default function LoginPage() {
       <h1 className="text-2xl font-bold">{t("title")}</h1>
 
       {error && (
-        <p className="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-600">{error}</p>
+        <p
+          aria-live="polite"
+          className="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-600"
+        >
+          {error}
+        </p>
       )}
 
       <div>

@@ -553,6 +553,7 @@
     "forgotSent": "Wenn diese E-Mail bei uns existiert, ist der Link unterwegs. Prüfe dein Postfach.",
     "backToLogin": "← Zurück zur Anmeldung",
     "invalidCredentials": "E-Mail oder Passwort falsch.",
+    "sessionUnavailable": "Die Anmeldung war erfolgreich, aber die Sitzung konnte nicht geoeffnet werden. Bitte Seite aktualisieren und erneut versuchen.",
     "genericError": "Anmeldung fehlgeschlagen. Bitte erneut versuchen."
   },
   "Integrations": {

@@ -553,6 +553,7 @@
     "forgotSent": "Si cet e-mail existe chez nous, le lien est en route. Vérifiez votre boîte de réception.",
     "backToLogin": "← Retour à la connexion",
     "invalidCredentials": "E-mail ou mot de passe incorrect.",
+    "sessionUnavailable": "La connexion a reussi, mais la session n'a pas pu s'ouvrir. Actualisez la page puis reessayez.",
     "genericError": "Échec de la connexion. Réessayez."
   },
   "Integrations": {
