@@ -703,6 +703,12 @@ Use this section while teaching the Forms module after CRM/SMS automation.
         - Added a server-side safeguard after AI generation that converts dollar-style budget/price options to CHF by default, or EUR when the tenant asks for euros.
         - Updated the New form page restaurant examples to teach tenants to type `one-page form`, `3-step form`, and `CHF budget range` when that is what they want.
       - Production note: this generator/currency improvement requires GitHub push + production deployment before new generated forms reflect it.
+      - Live verification: user redeployed and confirmed the one-page / multi-step generation and Swiss currency behavior works.
+      - Forms list navigation improvement:
+        - User noticed that opening a form detail page required clicking the small `Edit` action in the Forms table.
+        - Beginner-friendly expectation: staff should also be able to open the form by clicking the form name or the table row.
+        - Improvement implemented immediately: the Forms list row now opens the form detail page, and the form name is a direct link. Status and action controls keep their own behavior and do not accidentally trigger row navigation.
+        - Production note: this Forms list navigation improvement requires GitHub push + production deployment before the production Forms table reflects it.
 
 ## Next Ordered Scenarios
 

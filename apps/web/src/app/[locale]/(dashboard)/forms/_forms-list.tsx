@@ -130,11 +130,22 @@ export function FormsList({
           </thead>
           <tbody className="divide-y divide-gray-100">
             {initialForms.map((form) => (
-              <tr key={form.id} className="transition-colors hover:bg-gray-50">
-                <td className="px-4 py-3 font-medium text-gray-900">{form.name}</td>
+              <tr
+                key={form.id}
+                onClick={() => router.push(`/${locale}/forms/${form.id}`)}
+                className="cursor-pointer transition-colors hover:bg-gray-50"
+              >
+                <td className="px-4 py-3 font-medium text-gray-900">
+                  <Link
+                    href={`/${locale}/forms/${form.id}`}
+                    className="hover:text-blue-700 hover:underline"
+                  >
+                    {form.name}
+                  </Link>
+                </td>
                 <td className="px-4 py-3 font-mono text-xs text-gray-500">{form.slug}</td>
                 <td className="px-4 py-3 text-center text-gray-700">{form.leadCount}</td>
-                <td className="px-4 py-3 text-center">
+                <td className="px-4 py-3 text-center" onClick={(event) => event.stopPropagation()}>
                   <button
                     onClick={() => void handleToggleActive(form)}
                     disabled={updatingActiveId === form.id}
@@ -147,7 +158,7 @@ export function FormsList({
                     {form.isActive ? t("active") : t("inactive")}
                   </button>
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-4 py-3" onClick={(event) => event.stopPropagation()}>
                   <div className="flex items-center justify-end gap-2">
                     <Link
                       href={`/${locale}/forms/${form.id}`}
