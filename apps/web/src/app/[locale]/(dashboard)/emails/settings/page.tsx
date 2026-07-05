@@ -161,6 +161,20 @@ export default function EmailSettingsPage() {
             </div>
           ))}
         </div>
+        {senderSettings && (
+          <div
+            className={`mt-4 rounded-lg border px-4 py-3 text-sm ${
+              senderSettings.canSendProduction
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                : "border-amber-200 bg-amber-50 text-amber-900"
+            }`}
+          >
+            <p className="font-semibold">
+              {senderSettings.canSendProduction ? "Sender can send email" : "Sender needs setup"}
+            </p>
+            <p className="mt-1">{senderSettings.readinessMessage}</p>
+          </div>
+        )}
         <div className="mt-4 rounded-lg bg-white px-4 py-3 text-sm text-blue-900">
           <p className="font-semibold">Setup checklist</p>
           <p className="mt-1">

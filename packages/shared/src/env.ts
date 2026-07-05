@@ -36,7 +36,9 @@ const schema = z.object({
   RESEND_WEBHOOK_SECRET: z.string().optional(),
   POSTMARK_API_KEY: z.string().optional(),
   // Sender address shown to recipients. Must be a verified domain in Resend.
-  EMAIL_FROM_ADDRESS: z.string().default("noreply@marketing.localhost"),
+  // The default is the platform sender for the Swiss SaaS deployment; override
+  // this per environment if the platform sending domain changes.
+  EMAIL_FROM_ADDRESS: z.string().default("Marketing AI <noreply@swiftapp.ch>"),
 
   // ─── AI — Text (Phase 4) ──────────────────────────────────────────────────
   // Primary: Anthropic Claude (Sonnet for content, Haiku for routing/eval)

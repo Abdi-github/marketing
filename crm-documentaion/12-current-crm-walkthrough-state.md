@@ -72,6 +72,14 @@ Latest Email automation implementation checkpoint:
   5. Test marketing/newsletter opt-in behavior separately and confirm non-opted-in contacts are skipped.
   6. Test bounce/suppression only with a safe test address/provider flow if available.
 
+Email settings walkthrough checkpoint:
+
+- Staff opened **Email settings** after deployment.
+- Current page correctly explains platform sender mode and Reply-To routing, but it exposed a production setup issue: `From` showed `noreply@marketing.localhost`, so `Sender ready` stayed in a needs-check state even though the Resend API key was configured.
+- Fix implemented immediately on 2026-07-05: the platform fallback sender now defaults to `Marketing AI <noreply@swiftapp.ch>` instead of localhost, and the Email settings card now shows the backend readiness message in plain English.
+- Deployment note: this fix requires GitHub push + Vercel deployment. The Vercel environment should also explicitly set `EMAIL_FROM_ADDRESS` to a Resend-verified sender such as `Marketing AI <noreply@swiftapp.ch>` so future domain changes are intentional.
+- Remaining setup item from the screenshot: `Webhook` showed `Needs check`, meaning `RESEND_WEBHOOK_SECRET` is probably not configured in production yet or not visible to the app. Email sending can still be tested, but delivery/open/click/bounce status tracking requires the webhook secret and Resend webhook endpoint.
+
 Previous Scenario 8 checkpoint:
 
 - Staff opened **Sequences** and saw the email sequence dashboard.
