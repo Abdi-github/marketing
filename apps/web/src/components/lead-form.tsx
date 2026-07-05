@@ -629,7 +629,7 @@ export default function LeadForm({
 
     try {
       const body: Record<string, unknown> = { ...payload };
-      if (honeypotEnabled) body["__hp"] = "";
+      if (honeypotEnabled) body["__hp"] = honeypotRef.current?.value ?? "";
       if (turnstileToken) body["__cf_turnstile"] = turnstileToken;
 
       const res = await fetch(`/api/forms/${tenantSlug}/${formSlug}`, {

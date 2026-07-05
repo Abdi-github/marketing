@@ -787,6 +787,12 @@ Use this section while teaching the Forms module after CRM/SMS automation.
   - Clarification: due time is a suggested staff response time, not an automation deadline. If it passes, the task moves to `Overdue`; the app does not send messages, change priorities, confirm/decline reservations, or close work automatically.
   - Improvement implemented immediately: the Contacts follow-up queue now includes helper copy explaining that due time is only a suggested response time and overdue tasks do not trigger automatic customer-facing changes.
   - Production note: this helper copy requires GitHub push and Vercel deployment before production reflects it.
+- Forms anti-spam Honeypot verification:
+  - User asked how to prove Honeypot protection works, because normal customer submissions are still accepted.
+  - Clarification: accepting normal customer submissions is the expected behavior. Honeypot should only catch bots that fill the hidden `__hp` field.
+  - Code issue found and fixed: the public form rendered the hidden Honeypot input, but the React submit handler always sent an empty `__hp` value instead of reading the hidden field. API-level bot simulation was protected, but browser-form bot simulation was weaker than intended.
+  - Fix implemented: the public form now submits the actual hidden Honeypot field value. If a bot fills it, the server returns a fake success response and does not create a submission, lead, contact update, CRM task, Inbox message, notification, or SMS automation trigger.
+  - Production note: this Honeypot fix requires GitHub push and Vercel deployment before the browser retest can reflect it.
 
 ## Next Ordered Scenarios
 
