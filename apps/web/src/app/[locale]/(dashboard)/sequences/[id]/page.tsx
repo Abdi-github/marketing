@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useParams, useRouter } from "next/navigation";
 import { createTRPCClient, httpBatchLink } from "@trpc/client";
@@ -49,6 +49,11 @@ type SenderSettings = {
   readinessMessage: string;
 };
 
+type LoadError = {
+  kind: "auth" | "not_found" | "other";
+  message: string;
+};
+
 function trpc() {
   return createTRPCClient<AppRouter>({
     links: [httpBatchLink({ url: "/api/trpc" })],
@@ -65,6 +70,43 @@ function delayLabel(minutes: number): string {
 
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function classifyLoadError(error: unknown): LoadError {
+  const message = error instanceof Error ? error.message : String(error);
+  const normalized = message.toLowerCase();
+
+  if (
+    normalized.includes("unauthorized") ||
+    normalized.includes("401") ||
+    normalized.includes("session")
+  ) {
+    return {
+      kind: "auth",
+      message: "Your session could not be confirmed. Log in again, then return to Email sequences.",
+    };
+  }
+
+  if (normalized.includes("not_found") || normalized.includes("not found")) {
+    return {
+      kind: "not_found",
+      message: "This email sequence is no longer available, or it belongs to another workspace.",
+    };
+  }
+
+  return {
+    kind: "other",
+    message:
+      "We could not load this email sequence right now. Try again, or go back to Email sequences and reopen it.",
+  };
+}
+
+function enrollmentBadgeClass(status: string): string {
+  if (status === "enrolled") return "bg-blue-50 text-blue-700";
+  if (status === "completed") return "bg-green-50 text-green-700";
+  if (status === "failed") return "bg-red-50 text-red-700";
+  if (status === "skipped" || status === "exited") return "bg-amber-50 text-amber-700";
+  return "bg-gray-100 text-gray-500";
 }
 
 export default function SequenceDetailPage() {
@@ -88,6 +130,7 @@ export default function SequenceDetailPage() {
   const [enrollError, setEnrollError] = useState<string | null>(null);
   const [templates, setTemplates] = useState<TemplateOption[]>([]);
   const [senderSettings, setSenderSettings] = useState<SenderSettings | null>(null);
+  const [loadError, setLoadError] = useState<LoadError | null>(null);
 
   useEffect(() => {
     const q = contactSearch.trim();
@@ -104,7 +147,9 @@ export default function SequenceDetailPage() {
     return () => window.clearTimeout(handle);
   }, [contactSearch]);
 
-  useEffect(() => {
+  const loadSequence = useCallback(() => {
+    setLoading(true);
+    setLoadError(null);
     Promise.all([
       trpc().sequences.getSequence.query({ sequenceId: id }),
       trpc().sequences.listEnrollments.query({ sequenceId: id }),
@@ -120,9 +165,16 @@ export default function SequenceDetailPage() {
         setTemplates(templateRows as TemplateOption[]);
         setSenderSettings(settings as SenderSettings);
       })
-      .catch(() => {})
+      .catch((err) => {
+        setSeq(null);
+        setLoadError(classifyLoadError(err));
+      })
       .finally(() => setLoading(false));
   }, [id]);
+
+  useEffect(() => {
+    loadSequence();
+  }, [loadSequence]);
 
   async function handleSave() {
     if (!seq || !name.trim()) return;
@@ -214,6 +266,48 @@ export default function SequenceDetailPage() {
     return (
       <div className="mx-auto max-w-7xl px-6 py-8">
         <p className="text-sm text-gray-500">{t("loading")}</p>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="mx-auto max-w-7xl px-6 py-8">
+        <div className="max-w-2xl rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
+          <p className="font-semibold">
+            {loadError.kind === "auth"
+              ? "Session check needed"
+              : loadError.kind === "not_found"
+                ? "Email sequence not available"
+                : "Email sequence could not load"}
+          </p>
+          <p className="mt-2">{loadError.message}</p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={loadSequence}
+              className="rounded-lg bg-amber-700 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-800"
+            >
+              Try again
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push(`/${locale}/sequences`)}
+              className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100"
+            >
+              Back to Email sequences
+            </button>
+            {loadError.kind === "auth" && (
+              <button
+                type="button"
+                onClick={() => router.push(`/${locale}/login`)}
+                className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100"
+              >
+                Log in
+              </button>
+            )}
+          </div>
+        </div>
       </div>
     );
   }
@@ -475,13 +569,7 @@ export default function SequenceDetailPage() {
                   <td className="px-4 py-3 text-gray-500">{e.currentStep + 1}</td>
                   <td className="px-4 py-3">
                     <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                        e.status === "enrolled"
-                          ? "bg-blue-50 text-blue-700"
-                          : e.status === "completed"
-                            ? "bg-green-50 text-green-700"
-                            : "bg-gray-100 text-gray-500"
-                      }`}
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${enrollmentBadgeClass(e.status)}`}
                     >
                       {e.status}
                     </span>

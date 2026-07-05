@@ -2,13 +2,12 @@
 // Mutations (pause/resume, delete) are handled by the SequencesList client component
 // which calls router.refresh() to re-run this server component after each mutation.
 
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
-import { auth } from "@marketing/auth";
 import { env } from "@marketing/shared";
 import { buildTenantContext } from "@marketing/tenancy";
+import { getSafeServerSession } from "@/server/auth/safe-session";
 import {
   db,
   contacts,
@@ -34,7 +33,7 @@ export default async function SequencesPage({ params }: Props) {
   const { locale } = await params;
   const t = await getTranslations("Sequences");
 
-  const session = await auth.api.getSession({ headers: await headers() });
+  const session = await getSafeServerSession("sequences-page");
   if (!session) redirect(`/${locale}/login`);
 
   const token = (session.session as { token: string }).token;
@@ -50,7 +49,15 @@ export default async function SequencesPage({ params }: Props) {
         .select({ total: count() })
         .from(emailTemplates)
         .where(eq(emailTemplates.tenantId, tenantId)),
-      db.select({ total: count() }).from(emailSends).where(eq(emailSends.tenantId, tenantId)),
+      db
+        .select({ total: count() })
+        .from(emailSends)
+        .where(
+          and(
+            eq(emailSends.tenantId, tenantId),
+            sql`${emailSends.status} IN ('sent', 'delivered', 'opened', 'clicked')`,
+          ),
+        ),
       db
         .select({ total: count() })
         .from(emailSends)

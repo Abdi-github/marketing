@@ -163,6 +163,13 @@ async function recordSkippedSend(input: {
     .onConflictDoNothing();
 }
 
+async function markEnrollmentFailed(enrollmentId: string): Promise<void> {
+  await db
+    .update(emailSequenceEnrollments)
+    .set({ status: "failed", updatedAt: new Date() })
+    .where(eq(emailSequenceEnrollments.id, enrollmentId));
+}
+
 export async function processEmailSequenceOutboxEnrollments(): Promise<number> {
   const pendingEvents = await db
     .select({
@@ -325,6 +332,19 @@ export async function sendDueEmailSequenceSteps(): Promise<number> {
         .where(
           and(eq(emailSends.tenantId, tenantId), eq(emailSends.idempotencyKey, idempotencyKey)),
         );
+
+      if (existingSend?.status === "failed") {
+        await markEnrollmentFailed(enrollment.id);
+        continue;
+      }
+
+      if (existingSend?.status === "skipped") {
+        await db
+          .update(emailSequenceEnrollments)
+          .set({ status: "exited", updatedAt: new Date() })
+          .where(eq(emailSequenceEnrollments.id, enrollment.id));
+        continue;
+      }
 
       if (
         existingSend &&
@@ -491,6 +511,7 @@ export async function sendDueEmailSequenceSteps(): Promise<number> {
             updatedAt: new Date(),
           })
           .where(eq(emailSends.id, sendId));
+        await markEnrollmentFailed(enrollment.id);
         continue;
       }
 
@@ -523,6 +544,7 @@ export async function sendDueEmailSequenceSteps(): Promise<number> {
               updatedAt: new Date(),
             })
             .where(eq(emailSends.id, sendId));
+          await markEnrollmentFailed(enrollment.id);
           continue;
         }
       } else {

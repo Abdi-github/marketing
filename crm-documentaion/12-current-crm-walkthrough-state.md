@@ -882,6 +882,17 @@ Use this section while teaching the Forms module after CRM/SMS automation.
   - Safety behavior preserved: duplicate-send idempotency, sender readiness checks, suppression checks, marketing opt-in rules, unsubscribe footer, Reply-To routing, and send failure recording still apply.
   - Production note: this cron fix requires GitHub push and Vercel deployment before stuck/due email enrollments can process in production.
   - Retest after deployment: wait one or two minutes, open the same sequence page, refresh, and confirm the enrollment moves from `enrolled` to `completed` or a clear failed/skipped status. Because the current contact email is `abdi.crm.manual@example.test`, real Gmail delivery should be tested with a real-email contact after cron processing is confirmed.
+- Email sequence retry/failure checkpoint:
+  - User deployed the cron fix and production started processing email sequence activity.
+  - The current enrolled contact used the fake address `abdi.crm.manual@example.test`, so Resend/provider delivery failed as expected.
+  - Bug found: provider-rejected sequence sends were recorded as failed, but the enrollment stayed `enrolled`, so the cron kept retrying the same permanently bad address and the dashboard showed repeated failed sends.
+  - Fix implemented immediately:
+    - Provider/configuration-rejected email sequence steps now mark the enrollment `failed`.
+    - Existing failed/skipped sends for the same enrollment step stop future retries through the idempotency key.
+    - The same fix was applied to both the Vercel cron processor and the persistent worker.
+    - The Email sequences dashboard now counts only accepted/sent email statuses in `Emails sent`, so failed sends do not inflate the sent count.
+    - The sequence detail page now shows a friendly session/load error instead of incorrectly displaying `Sequence not found` when the auth/session check fails during refresh.
+  - Production note: this retry/session fix requires GitHub push and Vercel deployment before production reflects the corrected failed-enrollment behavior.
 - Next email walkthrough action: deploy the email-sequence cron fix, then retest the stuck manual sequence enrollment and confirm the send history/status behavior.
 
 ## Next Ordered Scenarios

@@ -115,6 +115,13 @@ async function recordSkippedSend(input: {
     .onConflictDoNothing();
 }
 
+async function markEnrollmentFailed(enrollmentId: string): Promise<void> {
+  await db
+    .update(emailSequenceEnrollments)
+    .set({ status: "failed", updatedAt: new Date() })
+    .where(eq(emailSequenceEnrollments.id, enrollmentId));
+}
+
 async function resolveReplyToAddress(tenantId: string): Promise<string | undefined> {
   const [profile] = await db
     .select({ emailReplyTo: businessProfiles.emailReplyTo })
@@ -319,6 +326,19 @@ async function sendDueEmails(): Promise<number> {
           and(eq(emailSends.tenantId, tenantId), eq(emailSends.idempotencyKey, idempotencyKey)),
         );
 
+      if (existingSend?.status === "failed") {
+        await markEnrollmentFailed(enrollment.id);
+        continue;
+      }
+
+      if (existingSend?.status === "skipped") {
+        await db
+          .update(emailSequenceEnrollments)
+          .set({ status: "exited", updatedAt: new Date() })
+          .where(eq(emailSequenceEnrollments.id, enrollment.id));
+        continue;
+      }
+
       if (
         existingSend &&
         ["queued", "sent", "delivered", "bounced", "complained"].includes(existingSend.status)
@@ -512,6 +532,7 @@ async function sendDueEmails(): Promise<number> {
             updatedAt: new Date(),
           })
           .where(eq(emailSends.id, sendId));
+        await markEnrollmentFailed(enrollment.id);
         continue;
       }
 
@@ -549,6 +570,7 @@ async function sendDueEmails(): Promise<number> {
               updatedAt: new Date(),
             })
             .where(eq(emailSends.id, sendId));
+          await markEnrollmentFailed(enrollment.id);
           continue;
         }
       } else {
