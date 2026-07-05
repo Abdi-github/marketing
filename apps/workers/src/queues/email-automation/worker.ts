@@ -22,10 +22,25 @@ const CREATE_EMAIL_AUTOMATION_TOOL: ToolDefinition = {
   description: "Return a complete reviewable email automation package.",
   inputSchema: {
     type: "object",
-    required: ["name", "category", "trigger_filter", "steps"],
+    required: [
+      "name",
+      "category",
+      "purpose",
+      "vertical",
+      "consent_required",
+      "rationale",
+      "consent_notes",
+      "trigger_filter",
+      "steps",
+    ],
     properties: {
       name: { type: "string", maxLength: 120 },
       category: { type: "string", maxLength: 80 },
+      purpose: { type: "string", enum: ["transactional", "marketing"] },
+      vertical: { type: "string", maxLength: 80 },
+      consent_required: { type: "boolean" },
+      rationale: { type: "string", maxLength: 1200 },
+      consent_notes: { type: "string", maxLength: 1200 },
       trigger_filter: {
         type: "object",
         properties: {
@@ -35,17 +50,29 @@ const CREATE_EMAIL_AUTOMATION_TOOL: ToolDefinition = {
       },
       steps: {
         type: "array",
-        minItems: 2,
+        minItems: 1,
         maxItems: 4,
         items: {
           type: "object",
-          required: ["delay_minutes", "template_name", "subject", "body_html", "body_text"],
+          required: [
+            "delay_minutes",
+            "template_name",
+            "subject",
+            "body_html",
+            "body_text",
+            "purpose",
+            "consent_required",
+            "rationale",
+          ],
           properties: {
             delay_minutes: { type: "integer", minimum: 0 },
             template_name: { type: "string", maxLength: 120 },
             subject: { type: "string", maxLength: 160 },
             body_html: { type: "string" },
             body_text: { type: "string" },
+            purpose: { type: "string", enum: ["transactional", "marketing"] },
+            consent_required: { type: "boolean" },
+            rationale: { type: "string", maxLength: 800 },
           },
         },
       },
@@ -109,34 +136,71 @@ function fallbackAutomation(job: EmailAutomationJob) {
     job.intent === "booking" ||
     job.intent === "restaurant_reservation" ||
     /reservation|booking|table/i.test(job.purpose);
+  const isMarketing = job.intent === "newsletter_opt_in";
   const leadKind = isBooking ? "booking" : job.intent === "quote" ? "quote" : job.intent;
+  const purpose = isMarketing ? "marketing" : "transactional";
+  const consentRequired = isMarketing;
   return {
-    name: isBooking ? "Reservation request follow-up" : "Lead follow-up sequence",
+    name: isMarketing
+      ? "Newsletter welcome sequence"
+      : isBooking
+        ? "Reservation request follow-up"
+        : "Lead follow-up sequence",
     category: isBooking ? "restaurant_reservation" : leadKind,
+    purpose,
+    vertical: job.vertical || "SME",
+    consent_required: consentRequired,
+    rationale: isMarketing
+      ? "The customer explicitly subscribed, so a short welcome email confirms what they will receive."
+      : "The customer made an explicit request, so a practical acknowledgement helps staff respond clearly.",
+    consent_notes: isMarketing
+      ? "Marketing emails require the contact's opt-in and must include unsubscribe/preference links."
+      : "Transactional follow-up can acknowledge an explicit customer request.",
     trigger_filter: {
       leadKind,
-      requireMarketingConsent: false,
+      requireMarketingConsent: consentRequired,
     },
-    steps: [
-      {
-        delay_minutes: 0,
-        template_name: isBooking ? "Reservation request received" : "Request received",
-        subject: `Thanks for contacting {{business_name}}`,
-        body_html:
-          "<p>Hello {{first_name}},</p><p>Thanks for your request. Our team has received it and will reply shortly.</p><p>{{business_name}}</p>",
-        body_text:
-          "Hello {{first_name}},\n\nThanks for your request. Our team has received it and will reply shortly.\n\n{{business_name}}",
-      },
-      {
-        delay_minutes: 1440,
-        template_name: "Friendly follow-up",
-        subject: `Following up from {{business_name}}`,
-        body_html:
-          "<p>Hello {{first_name}},</p><p>We wanted to follow up and make sure you have everything you need from us.</p><p>{{business_name}}</p>",
-        body_text:
-          "Hello {{first_name}},\n\nWe wanted to follow up and make sure you have everything you need from us.\n\n{{business_name}}",
-      },
-    ],
+    steps: isMarketing
+      ? [
+          {
+            delay_minutes: 0,
+            template_name: "Newsletter welcome",
+            subject: `Welcome to {{business_name}} updates`,
+            body_html:
+              "<p>Hello {{first_name}},</p><p>Thanks for subscribing to updates from {{business_name}}. We will send useful news, invitations, and offers only when relevant.</p><p>You can unsubscribe at any time using the link below.</p><p>{{business_name}}</p>",
+            body_text:
+              "Hello {{first_name}},\n\nThanks for subscribing to updates from {{business_name}}. We will send useful news, invitations, and offers only when relevant.\n\nYou can unsubscribe at any time using the link below.\n\n{{business_name}}",
+            purpose: "marketing",
+            consent_required: true,
+            rationale: "Welcomes an opted-in subscriber and sets expectations.",
+          },
+        ]
+      : [
+          {
+            delay_minutes: 0,
+            template_name: isBooking ? "Reservation request received" : "Request received",
+            subject: `Thanks for contacting {{business_name}}`,
+            body_html:
+              "<p>Hello {{first_name}},</p><p>Thanks for your request. Our team has received it and will reply shortly.</p><p>{{business_name}}</p>",
+            body_text:
+              "Hello {{first_name}},\n\nThanks for your request. Our team has received it and will reply shortly.\n\n{{business_name}}",
+            purpose: "transactional",
+            consent_required: false,
+            rationale: "Acknowledges the customer's explicit request.",
+          },
+          {
+            delay_minutes: 1440,
+            template_name: "Friendly follow-up",
+            subject: `Following up from {{business_name}}`,
+            body_html:
+              "<p>Hello {{first_name}},</p><p>We wanted to follow up and make sure you have everything you need from us.</p><p>{{business_name}}</p>",
+            body_text:
+              "Hello {{first_name}},\n\nWe wanted to follow up and make sure you have everything you need from us.\n\n{{business_name}}",
+            purpose: "transactional",
+            consent_required: false,
+            rationale: "Gently follows up if staff have not resolved the request yet.",
+          },
+        ],
   };
 }
 

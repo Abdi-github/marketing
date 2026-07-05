@@ -29,6 +29,9 @@ export const emailTemplates = pgTable(
     locale: text("locale").notNull().default("de-CH"),
     presetKey: text("preset_key"),
     category: text("category").notNull().default("custom"),
+    purpose: text("purpose").notNull().default("transactional"),
+    vertical: text("vertical").notNull().default("generic"),
+    consentRequired: boolean("consent_required").notNull().default(false),
     aiDraftedAt: timestamp("ai_drafted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -62,6 +65,9 @@ export const emailSequences = pgTable(
     status: text("status").notNull().default("active"),
     presetKey: text("preset_key"),
     category: text("category").notNull().default("custom"),
+    purpose: text("purpose").notNull().default("transactional"),
+    vertical: text("vertical").notNull().default("generic"),
+    consentRequired: boolean("consent_required").notNull().default(false),
     steps: jsonb("steps")
       .notNull()
       .$default(() => []),
@@ -115,18 +121,27 @@ export const emailSends = pgTable(
     templateId: uuid("template_id")
       .notNull()
       .references(() => emailTemplates.id, { onDelete: "restrict" }),
+    stepIndex: integer("step_index"),
+    idempotencyKey: text("idempotency_key"),
     sendKind: text("send_kind").notNull().default("sequence_step"),
     resendMessageId: text("resend_message_id"),
     status: text("status").notNull().default("queued"),
+    providerStatus: text("provider_status"),
+    failureReason: text("failure_reason"),
     openedAt: timestamp("opened_at", { withTimezone: true }),
     clickedAt: timestamp("clicked_at", { withTimezone: true }),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+    bouncedAt: timestamp("bounced_at", { withTimezone: true }),
+    complainedAt: timestamp("complained_at", { withTimezone: true }),
     sentAt: timestamp("sent_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("email_sends_tenant_id_idx").on(t.tenantId),
     index("email_sends_contact_id_idx").on(t.contactId),
     index("email_sends_resend_msg_id_idx").on(t.resendMessageId),
+    uniqueIndex("email_sends_tenant_idempotency_unique").on(t.tenantId, t.idempotencyKey),
   ],
 );
 
@@ -226,6 +241,9 @@ export const emailSendingDomains = pgTable(
     fromName: text("from_name").notNull().default("MarketingAI CH"),
     fromLocalPart: text("from_local_part").notNull().default("hello"),
     isPrimary: boolean("is_primary").notNull().default(false),
+    providerDomainId: text("provider_domain_id"),
+    trackingStatus: text("tracking_status").notNull().default("unknown"),
+    providerRegion: text("provider_region"),
     verifiedAt: timestamp("verified_at", { withTimezone: true }),
     lastDnsCheckAt: timestamp("last_dns_check_at", { withTimezone: true }),
     lastDnsCheckError: text("last_dns_check_error"),
@@ -266,7 +284,15 @@ export interface SequenceTriggerFilter {
   lifecycle_stage?: string;
   min_delta?: number;
   min_score?: number;
-  leadKind?: "booking" | "callback" | "quote" | "generic";
+  leadKind?:
+    | "booking"
+    | "callback"
+    | "quote"
+    | "consultation"
+    | "property_inquiry"
+    | "private_event"
+    | "newsletter_opt_in"
+    | "generic";
   sourceChannel?: string;
   formId?: string;
   landingPageId?: string;

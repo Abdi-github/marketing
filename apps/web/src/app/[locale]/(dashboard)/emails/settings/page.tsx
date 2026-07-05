@@ -20,6 +20,12 @@ function statusClass(status: string): string {
   return "bg-amber-50 text-amber-700 border-amber-200";
 }
 
+function setupStatusClass(ready: boolean): string {
+  return ready
+    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+    : "border-amber-200 bg-amber-50 text-amber-800";
+}
+
 export default function EmailSettingsPage() {
   const params = useParams<{ locale: string }>();
   const locale = params.locale ?? "en";
@@ -137,6 +143,31 @@ export default function EmailSettingsPage() {
             </div>
           </div>
         </div>
+        <div className="mt-4 grid gap-2 text-sm md:grid-cols-5">
+          {[
+            ["Sender ready", Boolean(senderSettings?.canSendProduction)],
+            ["Resend API key", senderSettings?.resendApiStatus === "configured"],
+            ["Webhook", senderSettings?.webhookStatus === "configured"],
+            ["Tracking", senderSettings?.trackingStatus !== "unknown"],
+            ["Reply-To", Boolean(senderSettings?.replyTo)],
+          ].map(([label, ready]) => (
+            <div
+              key={label as string}
+              className={`rounded-lg border px-3 py-2 text-xs font-semibold ${setupStatusClass(
+                Boolean(ready),
+              )}`}
+            >
+              {ready ? "Ready" : "Needs check"} · {label as string}
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 rounded-lg bg-white px-4 py-3 text-sm text-blue-900">
+          <p className="font-semibold">Setup checklist</p>
+          <p className="mt-1">
+            1. Confirm sender ready. 2. Create a template. 3. Create an email sequence. 4. Send a
+            test email. 5. Activate only after reviewing consent rules.
+          </p>
+        </div>
       </section>
 
       <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5">
@@ -219,6 +250,10 @@ export default function EmailSettingsPage() {
                     </div>
                     <p className="mt-1 text-sm text-gray-500">
                       Sender: {item.fromName} &lt;{item.fromLocalPart}@{item.domain}&gt;
+                    </p>
+                    <p className="mt-1 text-sm text-gray-500">
+                      Tracking: {item.trackingStatus ?? "unknown"} · Provider domain:{" "}
+                      {item.providerDomainId ?? "not linked"}
                     </p>
                     {item.lastDnsCheckError && (
                       <p className="mt-1 text-sm text-amber-700">{item.lastDnsCheckError}</p>

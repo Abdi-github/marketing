@@ -166,11 +166,24 @@ export async function POST(req: NextRequest): Promise<Response> {
     const now = new Date();
 
     if (type === "email.delivered") {
-      await db.update(emailSends).set({ status: "delivered" }).where(eq(emailSends.id, sendId));
+      await db
+        .update(emailSends)
+        .set({
+          status: "delivered",
+          providerStatus: "delivered",
+          deliveredAt: now,
+          updatedAt: now,
+        })
+        .where(eq(emailSends.id, sendId));
     } else if (type === "email.opened") {
       await db
         .update(emailSends)
-        .set({ openedAt: now, status: "delivered" })
+        .set({
+          openedAt: now,
+          status: "delivered",
+          providerStatus: "opened",
+          updatedAt: now,
+        })
         .where(eq(emailSends.id, sendId));
 
       // Emit email_open event for lead scoring (step-25 events table).
@@ -195,7 +208,10 @@ export async function POST(req: NextRequest): Promise<Response> {
         }
       }
     } else if (type === "email.clicked") {
-      await db.update(emailSends).set({ clickedAt: now }).where(eq(emailSends.id, sendId));
+      await db
+        .update(emailSends)
+        .set({ clickedAt: now, providerStatus: "clicked", updatedAt: now })
+        .where(eq(emailSends.id, sendId));
 
       if (tenantId) {
         const [send] = await db
@@ -218,10 +234,28 @@ export async function POST(req: NextRequest): Promise<Response> {
         }
       }
     } else if (type === "email.bounced") {
-      await db.update(emailSends).set({ status: "bounced" }).where(eq(emailSends.id, sendId));
+      await db
+        .update(emailSends)
+        .set({
+          status: "bounced",
+          providerStatus: "bounced",
+          failureReason: "Recipient email bounced. Future sends are suppressed.",
+          bouncedAt: now,
+          updatedAt: now,
+        })
+        .where(eq(emailSends.id, sendId));
       await suppressSendContact(sendId, "bounced", type);
     } else if (type === "email.complained") {
-      await db.update(emailSends).set({ status: "complained" }).where(eq(emailSends.id, sendId));
+      await db
+        .update(emailSends)
+        .set({
+          status: "complained",
+          providerStatus: "complained",
+          failureReason: "Recipient marked the email as spam. Future sends are suppressed.",
+          complainedAt: now,
+          updatedAt: now,
+        })
+        .where(eq(emailSends.id, sendId));
       await suppressSendContact(sendId, "complained", type);
     }
 

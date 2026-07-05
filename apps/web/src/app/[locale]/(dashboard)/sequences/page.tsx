@@ -11,6 +11,7 @@ import { env } from "@marketing/shared";
 import { buildTenantContext } from "@marketing/tenancy";
 import {
   db,
+  contacts,
   emailSendingDomains,
   emailSequenceEnrollments,
   emailSequences,
@@ -104,6 +105,31 @@ export default async function SequencesPage({ params }: Props) {
   const verifiedTenantDomains = verifiedDomainCount[0]?.total ?? 0;
   const senderReady = verifiedTenantDomains > 0 || platformSenderReady;
 
+  const recentSends = await db
+    .select({
+      id: emailSends.id,
+      status: emailSends.status,
+      providerStatus: emailSends.providerStatus,
+      failureReason: emailSends.failureReason,
+      sentAt: emailSends.sentAt,
+      deliveredAt: emailSends.deliveredAt,
+      createdAt: emailSends.createdAt,
+      templateName: emailTemplates.name,
+      contactEmail: contacts.email,
+    })
+    .from(emailSends)
+    .innerJoin(
+      emailTemplates,
+      and(eq(emailTemplates.id, emailSends.templateId), eq(emailTemplates.tenantId, tenantId)),
+    )
+    .innerJoin(
+      contacts,
+      and(eq(contacts.id, emailSends.contactId), eq(contacts.tenantId, tenantId)),
+    )
+    .where(eq(emailSends.tenantId, tenantId))
+    .orderBy(desc(emailSends.createdAt))
+    .limit(8);
+
   return (
     <div className="mx-auto max-w-7xl px-6 py-8">
       <div className="mb-6 flex items-center justify-between">
@@ -155,6 +181,58 @@ export default async function SequencesPage({ params }: Props) {
             Open email settings
           </Link>
         </div>
+      </div>
+
+      <div className="mb-6 rounded-xl border border-gray-200 bg-white p-5">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-gray-900">Recent email activity</h2>
+            <p className="text-sm text-gray-500">
+              Latest sequence sends, skips, and delivery issues for troubleshooting.
+            </p>
+          </div>
+          <Link href={`/${locale}/emails/settings`} className="text-sm font-medium text-blue-600">
+            Sender setup
+          </Link>
+        </div>
+        {recentSends.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-gray-200 px-4 py-6 text-sm text-gray-500">
+            No email sends yet. Send a test or enroll a contact after creating a sequence.
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {recentSends.map((send) => {
+              const tone =
+                send.status === "failed" ||
+                send.status === "bounced" ||
+                send.status === "complained"
+                  ? "text-red-700 bg-red-50 border-red-200"
+                  : send.status === "skipped"
+                    ? "text-amber-800 bg-amber-50 border-amber-200"
+                    : "text-emerald-700 bg-emerald-50 border-emerald-200";
+              return (
+                <div
+                  key={send.id}
+                  className="flex flex-wrap items-center justify-between gap-3 py-3"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{send.templateName}</p>
+                    <p className="text-xs text-gray-500">
+                      {send.contactEmail} ·{" "}
+                      {(send.deliveredAt ?? send.sentAt ?? send.createdAt).toLocaleString(locale)}
+                    </p>
+                    {send.failureReason && (
+                      <p className="mt-1 text-xs text-red-700">{send.failureReason}</p>
+                    )}
+                  </div>
+                  <span className={`rounded-full border px-2 py-1 text-xs font-semibold ${tone}`}>
+                    {send.providerStatus ?? send.status}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <SequencesList initialSequences={sequences} locale={locale} senderReady={senderReady} />

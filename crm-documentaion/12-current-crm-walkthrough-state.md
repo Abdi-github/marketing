@@ -1,6 +1,6 @@
 # Current CRM Walkthrough State
 
-Last updated: 2026-07-04
+Last updated: 2026-07-05
 
 This file prevents the CRM walkthrough from losing track while we test, fix, and document the restaurant workflows.
 
@@ -11,21 +11,28 @@ We are in the manual CRM walkthrough for **Abdi Restaurant**.
 The active scenario is:
 
 ```text
-Forms module walkthrough
+Email automation walkthrough
 ```
 
-Current non-email walkthrough direction:
+Current walkthrough direction:
 
 - CRM and SMS automation modules are finalized enough for now.
-- Email settings, Email templates, and email Sequences are deferred because email automation is not finished yet.
-- Continue with the **Forms** module next.
-- Forms should be explained in plain English for non-technical restaurant staff:
-  - what a form is
-  - why the restaurant uses it
-  - how staff creates/edits one
-  - how it connects to landing pages/websites
-  - how submissions become leads, contacts, CRM tasks, Inbox messages, notifications, consent records, and automation triggers
-  - what practical scenarios a tenant might encounter
+- Forms module walkthrough is finalized enough for now except the deferred analytics card issue.
+- Email automation has now been implemented for walkthrough testing, using the hybrid sender model:
+  - default platform sender from verified `swiftapp.ch` / configured platform sender
+  - optional tenant-owned sending domains
+  - tenant reply-to where available
+  - Resend delivery webhooks and suppression handling
+- Continue next with the **Email settings -> Email templates -> Email sequences** module.
+- Explain email automation in plain English for non-technical tenant/staff users:
+  - what the sender setup means
+  - what From and Reply-To mean
+  - what transactional vs marketing email means
+  - when consent is required
+  - how templates are created and tested
+  - how AI drafts templates/sequences but never sends or activates automatically
+  - how sequences are activated, paused, enrolled, skipped, failed, delivered, bounced, or suppressed
+  - how this applies to restaurants, services, agencies, real estate, private events, consultations, quotes, callbacks, and newsletter opt-ins
 
 Scenario 8 working rule:
 
@@ -38,7 +45,34 @@ Scenario 8 working rule:
   - whether the issue is blocking or can wait
 - After the full application walkthrough is complete, come back and run a browser retest of Scenarios 1-7 to confirm the new CRM UX still behaves correctly after the latest UI changes.
 
-Latest Scenario 8 checkpoint:
+Latest Email automation implementation checkpoint:
+
+- Core implementation completed on 2026-07-05:
+  - email templates and sequences now carry `purpose`, `vertical`, and `consentRequired`
+  - sequence sends now record step index, idempotency key, provider status, failure reason, and provider timestamps
+  - duplicate sequence sends are blocked by a stable per-enrollment/per-step idempotency key
+  - marketing sequences require opt-in; skipped/suppressed sends are recorded for troubleshooting
+  - Resend delivered/opened/clicked/bounced/complained webhooks update send state and bounce/complaint suppressions
+  - sender settings show sender readiness, From, Reply-To, Resend API/webhook/tracking status, and setup checklist
+  - Email templates include purpose/consent metadata and AI rationale
+  - Email sequences page is now explicitly email-focused and shows recent email activity/troubleshooting
+  - business-type presets replace the restaurant-only path for booking, quote, callback, consultation, property inquiry, private event, newsletter opt-in, and generic inquiries
+  - AI draft output supports `en`, `fr-CH`, `de-CH`, `it-CH`, includes rationale/consent notes, and remains confirmation-gated
+- Deployment/migration note: this implementation includes DB migration `0048_email_automation_finalization.sql`. The migration was applied from this workspace on 2026-07-05 using `pnpm.cmd --filter @marketing/db db:apply 0048_email_automation_finalization.sql`. PostgreSQL reported only harmless notices about old purpose constraints not existing before applying the new constraints.
+- Verification completed locally:
+  - `pnpm.cmd --filter @marketing/db typecheck`
+  - `pnpm.cmd --filter @marketing/ai-router typecheck`
+  - `pnpm.cmd --filter @marketing/workers typecheck`
+  - `pnpm.cmd --filter @marketing/web typecheck`
+- Next guided walkthrough should start with Email settings:
+  1. Open `Email settings` and verify sender ready / webhook / reply-to state.
+  2. Open `Email templates`, create or AI-draft a transactional template, and send a test email.
+  3. Create a manual email sequence with a transactional template.
+  4. Enroll a test contact and confirm the send appears in recent email activity.
+  5. Test marketing/newsletter opt-in behavior separately and confirm non-opted-in contacts are skipped.
+  6. Test bounce/suppression only with a safe test address/provider flow if available.
+
+Previous Scenario 8 checkpoint:
 
 - Staff opened **Sequences** and saw the email sequence dashboard.
 - The page shows `Email sender not ready`, because email automation still depends on finalizing sender/domain configuration after Resend domain verification.

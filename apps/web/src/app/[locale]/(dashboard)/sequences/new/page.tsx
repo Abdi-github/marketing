@@ -13,7 +13,16 @@ type TriggerEvent =
   | "contact.lifecycle_changed"
   | "manual";
 
-type LeadIntent = "booking" | "callback" | "quote" | "generic";
+type LeadIntent =
+  | "booking"
+  | "quote"
+  | "callback"
+  | "consultation"
+  | "property_inquiry"
+  | "private_event"
+  | "newsletter_opt_in"
+  | "generic";
+type EmailPurpose = "transactional" | "marketing";
 
 type SuggestedStep = {
   delay_minutes: number;
@@ -60,6 +69,8 @@ export default function NewSequencePage() {
   const [saving, setSaving] = useState(false);
   const [suggestContext, setSuggestContext] = useState("");
   const [intent, setIntent] = useState<LeadIntent>("booking");
+  const [purpose, setPurpose] = useState<EmailPurpose>("transactional");
+  const [consentRequired, setConsentRequired] = useState(false);
   const [templates, setTemplates] = useState<TemplateOption[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(true);
   const [senderSettings, setSenderSettings] = useState<SenderSettings | null>(null);
@@ -109,14 +120,17 @@ export default function NewSequencePage() {
     }
   }
 
-  async function handleRestaurantPreset() {
+  async function handleBusinessPreset(presetIntent: LeadIntent) {
     setSuggesting(true);
     setSaveError(null);
     try {
-      const created = await trpc().sequences.createRestaurantPreset.mutate({ locale });
+      const created = await trpc().sequences.createBusinessPreset.mutate({
+        locale,
+        intent: presetIntent,
+      });
       router.push(`/${locale}/sequences/${created.sequenceId}`);
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : "Could not create restaurant preset.");
+      setSaveError(err instanceof Error ? err.message : "Could not create business preset.");
     } finally {
       setSuggesting(false);
     }
@@ -146,10 +160,17 @@ export default function NewSequencePage() {
     setSaving(true);
     setSaveError(null);
     try {
+      const needsMarketingConsent = purpose === "marketing" || consentRequired;
       const { id } = await trpc().sequences.createSequence.mutate({
         name: name.trim(),
         triggerEvent,
-        triggerFilter: triggerEvent === "lead.captured" ? { leadKind: intent } : {},
+        triggerFilter:
+          triggerEvent === "lead.captured"
+            ? { leadKind: intent, requireMarketingConsent: needsMarketingConsent }
+            : { requireMarketingConsent: needsMarketingConsent },
+        purpose,
+        consentRequired: needsMarketingConsent,
+        vertical: intent,
         steps: validSteps.map((s) => ({
           delay_minutes: s.delay_minutes,
           template_id: s.template_id!,
@@ -233,37 +254,72 @@ export default function NewSequencePage() {
       {/* AI Suggest */}
       <section className="mb-4 rounded-xl border border-gray-200 bg-white p-6">
         <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-emerald-900">
-                Restaurant reservation automation
-              </p>
-              <p className="mt-1 text-xs text-emerald-700">
-                Creates safe reservation follow-up templates and an intent-aware sequence.
-              </p>
-            </div>
-            <button
-              onClick={handleRestaurantPreset}
-              disabled={suggesting}
-              className="rounded-lg bg-emerald-700 px-4 py-2 text-sm text-white hover:bg-emerald-800 disabled:opacity-50"
-            >
-              Use restaurant preset
-            </button>
+          <p className="text-sm font-semibold text-emerald-900">Business-type presets</p>
+          <p className="mt-1 text-xs text-emerald-700">
+            Start with a safe sequence for the request type, then review and edit before activation.
+          </p>
+          <div className="mt-3 grid gap-2 md:grid-cols-4">
+            {[
+              ["booking", "Booking"],
+              ["quote", "Quote request"],
+              ["callback", "Callback"],
+              ["consultation", "Consultation"],
+              ["property_inquiry", "Property inquiry"],
+              ["private_event", "Private event"],
+              ["newsletter_opt_in", "Newsletter opt-in"],
+              ["generic", "General inquiry"],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => handleBusinessPreset(value as LeadIntent)}
+                disabled={suggesting}
+                className="rounded-lg border border-emerald-200 bg-white px-3 py-2 text-left text-xs font-medium text-emerald-800 hover:bg-emerald-100 disabled:opacity-50"
+              >
+                {label}
+              </button>
+            ))}
           </div>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-[180px_1fr_auto] md:items-end">
+        <div className="grid gap-3 md:grid-cols-[180px_160px_1fr_auto] md:items-end">
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">Lead intent</label>
             <select
               value={intent}
-              onChange={(e) => setIntent(e.target.value as LeadIntent)}
+              onChange={(e) => {
+                const nextIntent = e.target.value as LeadIntent;
+                setIntent(nextIntent);
+                if (nextIntent === "newsletter_opt_in") {
+                  setPurpose("marketing");
+                  setConsentRequired(true);
+                }
+              }}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="booking">Reservation / booking</option>
               <option value="quote">Quote request</option>
               <option value="callback">Callback request</option>
+              <option value="consultation">Consultation</option>
+              <option value="property_inquiry">Property inquiry</option>
+              <option value="private_event">Private event</option>
+              <option value="newsletter_opt_in">Newsletter opt-in</option>
               <option value="generic">General inquiry</option>
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Purpose</label>
+            <select
+              value={purpose}
+              onChange={(e) => {
+                const nextPurpose = e.target.value as EmailPurpose;
+                setPurpose(nextPurpose);
+                if (nextPurpose === "marketing") setConsentRequired(true);
+              }}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="transactional">Transactional</option>
+              <option value="marketing">Marketing</option>
             </select>
           </div>
           <div className="flex-1">
@@ -286,7 +342,21 @@ export default function NewSequencePage() {
             {suggesting ? "Generating..." : "Generate with AI"}
           </button>
         </div>
-        <p className="mt-2 text-xs text-gray-400">{t("aiSuggestHint")}</p>
+        <label className="mt-3 flex items-start gap-2 text-xs text-gray-600">
+          <input
+            type="checkbox"
+            checked={consentRequired}
+            onChange={(e) => setConsentRequired(e.target.checked)}
+            disabled={purpose === "marketing"}
+            className="mt-0.5"
+          />
+          Require email marketing opt-in before enrolling contacts in this sequence.
+        </label>
+        <p className="mt-2 text-xs text-gray-400">
+          {purpose === "marketing"
+            ? "Marketing sequences are skipped unless the contact opted in."
+            : t("aiSuggestHint")}
+        </p>
       </section>
 
       {/* Steps editor */}

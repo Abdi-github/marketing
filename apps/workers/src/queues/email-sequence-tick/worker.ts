@@ -68,6 +68,53 @@ function isUsableSenderAddress(address: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && !email.endsWith(".localhost");
 }
 
+function buildEmailSendIdempotencyKey(enrollmentId: string, stepIndex: number): string {
+  return `email-sequence:${enrollmentId}:step:${stepIndex}`;
+}
+
+function isMarketingEmail(input: {
+  sequencePurpose?: string | null;
+  sequenceConsentRequired?: boolean | null;
+  templatePurpose?: string | null;
+  templateConsentRequired?: boolean | null;
+  triggerFilter?: SequenceTriggerFilter | null;
+}): boolean {
+  return (
+    input.sequencePurpose === "marketing" ||
+    input.templatePurpose === "marketing" ||
+    input.sequenceConsentRequired === true ||
+    input.templateConsentRequired === true ||
+    input.triggerFilter?.requireMarketingConsent === true
+  );
+}
+
+async function recordSkippedSend(input: {
+  tenantId: string;
+  enrollmentId: string;
+  contactId: string;
+  templateId: string;
+  stepIndex: number;
+  idempotencyKey: string;
+  reason: string;
+}): Promise<void> {
+  await db
+    .insert(emailSends)
+    .values({
+      tenantId: input.tenantId,
+      enrollmentId: input.enrollmentId,
+      contactId: input.contactId,
+      templateId: input.templateId,
+      stepIndex: input.stepIndex,
+      idempotencyKey: input.idempotencyKey,
+      sendKind: "sequence_step",
+      status: "skipped",
+      providerStatus: "skipped",
+      failureReason: input.reason,
+      updatedAt: new Date(),
+    })
+    .onConflictDoNothing();
+}
+
 async function resolveReplyToAddress(tenantId: string): Promise<string | undefined> {
   const [owner] = await db
     .select({ email: users.email })
@@ -226,7 +273,13 @@ async function sendDueEmails(): Promise<number> {
     try {
       // 1. Load the sequence steps.
       const [seq] = await db
-        .select({ steps: emailSequences.steps, status: emailSequences.status })
+        .select({
+          steps: emailSequences.steps,
+          status: emailSequences.status,
+          purpose: emailSequences.purpose,
+          consentRequired: emailSequences.consentRequired,
+          triggerFilter: emailSequences.triggerFilter,
+        })
         .from(emailSequences)
         .where(and(eq(emailSequences.tenantId, tenantId), eq(emailSequences.id, sequenceId)));
 
@@ -240,12 +293,43 @@ async function sendDueEmails(): Promise<number> {
 
       const steps = (seq.steps ?? []) as SequenceStep[];
       const step = steps[currentStep];
+      const idempotencyKey = buildEmailSendIdempotencyKey(enrollment.id, currentStep);
 
       if (!step) {
         // No more steps — mark as completed.
         await db
           .update(emailSequenceEnrollments)
           .set({ status: "completed", updatedAt: new Date() })
+          .where(eq(emailSequenceEnrollments.id, enrollment.id));
+        continue;
+      }
+
+      const [existingSend] = await db
+        .select({ id: emailSends.id, status: emailSends.status })
+        .from(emailSends)
+        .where(
+          and(eq(emailSends.tenantId, tenantId), eq(emailSends.idempotencyKey, idempotencyKey)),
+        );
+
+      if (
+        existingSend &&
+        ["queued", "sent", "delivered", "bounced", "complained"].includes(existingSend.status)
+      ) {
+        logger.info(
+          { enrollmentId: enrollment.id, sendId: existingSend.id, step: currentStep },
+          "[seq-tick] duplicate step send skipped by idempotency key",
+        );
+        const nextStep = currentStep + 1;
+        const hasMoreSteps = nextStep < steps.length;
+        const nextStepDelay = hasMoreSteps ? (steps[nextStep]?.delay_minutes ?? 0) : 0;
+        await db
+          .update(emailSequenceEnrollments)
+          .set({
+            currentStep: hasMoreSteps ? nextStep : currentStep,
+            status: hasMoreSteps ? "enrolled" : "completed",
+            nextRunAt: new Date(Date.now() + nextStepDelay * 60 * 1000),
+            updatedAt: new Date(),
+          })
           .where(eq(emailSequenceEnrollments.id, enrollment.id));
         continue;
       }
@@ -257,6 +341,8 @@ async function sendDueEmails(): Promise<number> {
             subject: emailTemplates.subject,
             bodyHtml: emailTemplates.bodyHtml,
             bodyText: emailTemplates.bodyText,
+            purpose: emailTemplates.purpose,
+            consentRequired: emailTemplates.consentRequired,
           })
           .from(emailTemplates)
           .where(
@@ -304,6 +390,15 @@ async function sendDueEmails(): Promise<number> {
           { enrollmentId: enrollment.id, contactId, reason: suppression.reason },
           "[seq-tick] suppressed contact skipped",
         );
+        await recordSkippedSend({
+          tenantId,
+          enrollmentId: enrollment.id,
+          contactId,
+          templateId: step.template_id,
+          stepIndex: currentStep,
+          idempotencyKey,
+          reason: `Suppressed email address (${suppression.reason}).`,
+        });
         await db
           .update(emailSequenceEnrollments)
           .set({ status: "exited", updatedAt: new Date() })
@@ -318,11 +413,33 @@ async function sendDueEmails(): Promise<number> {
           and(eq(emailPreferences.tenantId, tenantId), eq(emailPreferences.email, normalizedEmail)),
         );
 
-      if (preference?.marketingOptIn === false) {
+      const requiresMarketingConsent = isMarketingEmail({
+        sequencePurpose: seq.purpose,
+        sequenceConsentRequired: seq.consentRequired,
+        templatePurpose: template.purpose,
+        templateConsentRequired: template.consentRequired,
+        triggerFilter: (seq.triggerFilter ?? {}) as SequenceTriggerFilter,
+      });
+
+      if (
+        preference?.marketingOptIn === false ||
+        (requiresMarketingConsent && preference?.marketingOptIn !== true)
+      ) {
         logger.info(
-          { enrollmentId: enrollment.id, contactId },
-          "[seq-tick] opted-out contact skipped",
+          { enrollmentId: enrollment.id, contactId, requiresMarketingConsent },
+          "[seq-tick] contact skipped by email consent rule",
         );
+        await recordSkippedSend({
+          tenantId,
+          enrollmentId: enrollment.id,
+          contactId,
+          templateId: step.template_id,
+          stepIndex: currentStep,
+          idempotencyKey,
+          reason: requiresMarketingConsent
+            ? "Marketing email requires opt-in."
+            : "Contact opted out of email.",
+        });
         await db
           .update(emailSequenceEnrollments)
           .set({ status: "exited", updatedAt: new Date() })
@@ -349,12 +466,25 @@ async function sendDueEmails(): Promise<number> {
           enrollmentId: enrollment.id,
           contactId,
           templateId: step.template_id,
+          stepIndex: currentStep,
+          idempotencyKey,
           sendKind: "sequence_step",
           status: "queued",
+          providerStatus: "queued",
         })
+        .onConflictDoNothing()
         .returning({ id: emailSends.id });
 
-      const unsubscribeUrl = buildUnsubscribeUrl(env.APP_URL, sendRow!.id);
+      const sendId = sendRow?.id ?? existingSend?.id;
+      if (!sendId) {
+        logger.info(
+          { enrollmentId: enrollment.id, step: currentStep },
+          "[seq-tick] send row already exists; skipping duplicate attempt",
+        );
+        continue;
+      }
+
+      const unsubscribeUrl = buildUnsubscribeUrl(env.APP_URL, sendId);
       const { html, text } = withUnsubscribeFooter(baseHtml, baseText, unsubscribeUrl);
       const from = await resolveSenderAddress(tenantId);
       const replyTo = await resolveReplyToAddress(tenantId);
@@ -364,7 +494,16 @@ async function sendDueEmails(): Promise<number> {
           { enrollmentId: enrollment.id, tenantId, from },
           "[seq-tick] Email sender is not configured for production delivery",
         );
-        await db.update(emailSends).set({ status: "failed" }).where(eq(emailSends.id, sendRow!.id));
+        await db
+          .update(emailSends)
+          .set({
+            status: "failed",
+            providerStatus: "configuration_error",
+            failureReason:
+              "Email sender is not configured. Configure the platform sender or verify a sending domain.",
+            updatedAt: new Date(),
+          })
+          .where(eq(emailSends.id, sendId));
         continue;
       }
 
@@ -384,7 +523,7 @@ async function sendDueEmails(): Promise<number> {
             tags: [
               { name: "tenant_id", value: tenantId },
               { name: "enrollment_id", value: enrollment.id },
-              { name: "send_id", value: sendRow!.id },
+              { name: "send_id", value: sendId },
             ],
           });
           resendMessageId = result.id;
@@ -395,8 +534,13 @@ async function sendDueEmails(): Promise<number> {
           );
           await db
             .update(emailSends)
-            .set({ status: "failed" })
-            .where(eq(emailSends.id, sendRow!.id));
+            .set({
+              status: "failed",
+              providerStatus: "provider_rejected",
+              failureReason: err instanceof Error ? err.message : String(err),
+              updatedAt: new Date(),
+            })
+            .where(eq(emailSends.id, sendId));
           continue;
         }
       } else {
@@ -415,8 +559,14 @@ async function sendDueEmails(): Promise<number> {
       await db.transaction(async (tx) => {
         await tx
           .update(emailSends)
-          .set({ status: "sent", resendMessageId, sentAt: new Date() })
-          .where(eq(emailSends.id, sendRow!.id));
+          .set({
+            status: "sent",
+            providerStatus: resendMessageId ? "accepted" : "sandbox",
+            resendMessageId,
+            sentAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(emailSends.id, sendId));
 
         await tx
           .update(emailSequenceEnrollments)

@@ -32,18 +32,41 @@ const sequenceStepSchema = z.object({
   template_id: z.string().uuid(),
 });
 
+const emailPurposeSchema = z.enum(["transactional", "marketing"]);
+const leadIntentSchema = z.enum([
+  "booking",
+  "callback",
+  "quote",
+  "consultation",
+  "property_inquiry",
+  "private_event",
+  "newsletter_opt_in",
+  "generic",
+  "restaurant_reservation",
+  "restaurant_event",
+]);
+
 const sequenceTriggerFilterSchema = z
   .object({
     lifecycle_stage: z.string().optional(),
     min_delta: z.number().optional(),
     min_score: z.number().optional(),
-    leadKind: z.enum(["booking", "callback", "quote", "generic"]).optional(),
+    leadKind: leadIntentSchema.optional(),
     sourceChannel: z.string().optional(),
     formId: z.string().uuid().optional(),
     landingPageId: z.string().uuid().optional(),
     requireMarketingConsent: z.boolean().optional(),
   })
   .default({});
+
+function applyMarketingConsentToTriggerFilter(
+  triggerFilter: z.infer<typeof sequenceTriggerFilterSchema>,
+  purpose: z.infer<typeof emailPurposeSchema>,
+  consentRequired: boolean,
+): z.infer<typeof sequenceTriggerFilterSchema> {
+  if (purpose !== "marketing" && !consentRequired) return triggerFilter;
+  return { ...triggerFilter, requireMarketingConsent: true };
+}
 
 const triggerEventEnum = z.enum([
   "lead.captured",
@@ -121,6 +144,7 @@ async function resolveSenderAddress(tenantId: string): Promise<string> {
       domain: emailSendingDomains.domain,
       fromName: emailSendingDomains.fromName,
       fromLocalPart: emailSendingDomains.fromLocalPart,
+      trackingStatus: emailSendingDomains.trackingStatus,
     })
     .from(emailSendingDomains)
     .where(
@@ -151,6 +175,7 @@ async function resolveSenderSettings(tenantId: string) {
       domain: emailSendingDomains.domain,
       fromName: emailSendingDomains.fromName,
       fromLocalPart: emailSendingDomains.fromLocalPart,
+      trackingStatus: emailSendingDomains.trackingStatus,
     })
     .from(emailSendingDomains)
     .where(
@@ -173,11 +198,14 @@ async function resolveSenderSettings(tenantId: string) {
     platformSenderConfigured,
     sender: tenantSender ?? env.EMAIL_FROM_ADDRESS,
     replyTo: replyTo ?? null,
+    trackingStatus: domain?.trackingStatus ?? "platform-managed",
+    webhookStatus: env.RESEND_WEBHOOK_SECRET ? "configured" : "not_configured",
+    resendApiStatus: env.RESEND_API_KEY ? "configured" : "not_configured",
     canSendProduction: Boolean(tenantSender || platformSenderConfigured),
     readinessMessage: tenantSender
       ? "Business sender verified."
       : platformSenderConfigured
-        ? "Platform sender configured. Verify it in Resend before production delivery."
+        ? "Platform sender configured. Keep Resend DNS and webhook settings healthy for production delivery."
         : "Configure a real platform sender or verify a business sending domain before activating automations.",
   };
 }
@@ -220,11 +248,19 @@ type AutomationStepDraft = {
   subject: string;
   body_html: string;
   body_text: string;
+  purpose?: "transactional" | "marketing";
+  consent_required?: boolean;
+  rationale?: string;
 };
 
 type AutomationDraftResult = {
   name: string;
   category?: string;
+  purpose?: "transactional" | "marketing";
+  vertical?: string;
+  consent_required?: boolean;
+  rationale?: string;
+  consent_notes?: string;
   trigger_filter?: Record<string, unknown>;
   steps: AutomationStepDraft[];
 };
@@ -311,10 +347,177 @@ Thank you for choosing us. We hope you enjoyed your experience. Your feedback he
   };
 }
 
+function businessAutomationPreset(input: {
+  businessName: string;
+  intent: z.infer<typeof leadIntentSchema>;
+}): AutomationDraftResult {
+  const { businessName, intent } = input;
+  const normalizedIntent =
+    intent === "restaurant_reservation" || intent === "restaurant_event" ? "booking" : intent;
+  if (normalizedIntent === "newsletter_opt_in") {
+    return {
+      name: "Newsletter welcome sequence",
+      category: "newsletter_opt_in",
+      purpose: "marketing",
+      vertical: "generic",
+      consent_required: true,
+      rationale: "Guests who explicitly subscribe should receive a clear welcome and expectations.",
+      consent_notes: "Only enroll contacts who opted in to marketing emails.",
+      trigger_filter: { leadKind: "newsletter_opt_in", requireMarketingConsent: true },
+      steps: [
+        {
+          delay_minutes: 0,
+          template_name: "Newsletter welcome",
+          subject: `Welcome to {{business_name}} updates`,
+          body_text: `Hello {{first_name}},
+
+Thanks for subscribing to updates from ${businessName}. We will only send useful news, offers, and announcements.
+
+You can unsubscribe at any time using the link below.
+
+{{business_name}}`,
+          body_html: htmlShell(`Hello {{first_name}},
+
+Thanks for subscribing to updates from ${businessName}. We will only send useful news, offers, and announcements.
+
+You can unsubscribe at any time using the link below.
+
+{{business_name}}`),
+          purpose: "marketing",
+          consent_required: true,
+        },
+      ],
+    };
+  }
+
+  const labels: Record<string, { name: string; category: string; subject: string; body: string }> =
+    {
+      booking: {
+        name: "Booking request follow-up",
+        category: "booking",
+        subject: `Your request to {{business_name}}`,
+        body: `Hello {{first_name}},
+
+Thanks for your booking request for ${businessName}. We received your details and our team will confirm shortly.
+
+If anything changes, simply reply to this email.
+
+{{business_name}}`,
+      },
+      quote: {
+        name: "Quote request follow-up",
+        category: "quote",
+        subject: `Your quote request to {{business_name}}`,
+        body: `Hello {{first_name}},
+
+Thanks for your request. We received the details and will prepare a reply as soon as possible.
+
+If there is a deadline, budget, or extra detail we should know, simply reply to this email.
+
+{{business_name}}`,
+      },
+      callback: {
+        name: "Callback request follow-up",
+        category: "callback",
+        subject: `We received your callback request`,
+        body: `Hello {{first_name}},
+
+Thanks for asking us to call you. Our team received your request and will get back to you shortly.
+
+{{business_name}}`,
+      },
+      consultation: {
+        name: "Consultation inquiry follow-up",
+        category: "consultation",
+        subject: `Your consultation request`,
+        body: `Hello {{first_name}},
+
+Thanks for contacting {{business_name}}. We received your consultation request and will review the details before replying.
+
+{{business_name}}`,
+      },
+      property_inquiry: {
+        name: "Property inquiry follow-up",
+        category: "property_inquiry",
+        subject: `Your property inquiry`,
+        body: `Hello {{first_name}},
+
+Thanks for your property inquiry. We received your message and will check the details before contacting you.
+
+{{business_name}}`,
+      },
+      private_event: {
+        name: "Private event follow-up",
+        category: "private_event",
+        subject: `Your private event request`,
+        body: `Hello {{first_name}},
+
+Thanks for your private event request. We received the details and will review availability, group size, and any special requirements.
+
+{{business_name}}`,
+      },
+      generic: {
+        name: "General inquiry follow-up",
+        category: "generic",
+        subject: `Thanks for contacting {{business_name}}`,
+        body: `Hello {{first_name}},
+
+Thanks for your request. Our team has received it and will reply shortly.
+
+{{business_name}}`,
+      },
+    };
+
+  const selected = labels[normalizedIntent] ?? labels.generic!;
+  return {
+    name: selected.name,
+    category: selected.category,
+    purpose: "transactional",
+    vertical: selected.category,
+    consent_required: false,
+    rationale: "This acknowledges an explicit customer request and tells staff what happens next.",
+    consent_notes: "Transactional because the customer contacted the business first.",
+    trigger_filter: { leadKind: normalizedIntent, requireMarketingConsent: false },
+    steps: [
+      {
+        delay_minutes: 0,
+        template_name: selected.name.replace(" sequence", ""),
+        subject: selected.subject,
+        body_text: selected.body,
+        body_html: htmlShell(selected.body),
+        purpose: "transactional",
+        consent_required: false,
+      },
+      {
+        delay_minutes: 1440,
+        template_name: "Friendly follow-up",
+        subject: `Following up from {{business_name}}`,
+        body_text: `Hello {{first_name}},
+
+We wanted to follow up and make sure you have everything you need from us.
+
+{{business_name}}`,
+        body_html: htmlShell(`Hello {{first_name}},
+
+We wanted to follow up and make sure you have everything you need from us.
+
+{{business_name}}`),
+        purpose: "transactional",
+        consent_required: false,
+      },
+    ],
+  };
+}
+
 function parseAutomationDraft(value: unknown): AutomationDraftResult {
   const schema = z.object({
     name: z.string().min(1).max(120),
     category: z.string().max(80).optional(),
+    purpose: emailPurposeSchema.optional(),
+    vertical: z.string().max(80).optional(),
+    consent_required: z.boolean().optional(),
+    rationale: z.string().max(1200).optional(),
+    consent_notes: z.string().max(1200).optional(),
     trigger_filter: z.record(z.string(), z.unknown()).optional(),
     steps: z
       .array(
@@ -324,6 +527,9 @@ function parseAutomationDraft(value: unknown): AutomationDraftResult {
           subject: z.string().min(1).max(200),
           body_html: z.string().min(1).max(50_000),
           body_text: z.string().min(1).max(20_000),
+          purpose: emailPurposeSchema.optional(),
+          consent_required: z.boolean().optional(),
+          rationale: z.string().max(800).optional(),
         }),
       )
       .min(1)
@@ -340,6 +546,9 @@ async function createAutomationFromDraft(input: {
 }) {
   const { tenantId, draft, presetKey, locale } = input;
   const category = draft.category ?? "custom";
+  const purpose = draft.purpose ?? "transactional";
+  const vertical = draft.vertical ?? category;
+  const consentRequired = draft.consent_required ?? purpose === "marketing";
   const sender = await resolveSenderSettings(tenantId);
 
   const [existing] = await db
@@ -362,6 +571,9 @@ async function createAutomationFromDraft(input: {
           locale,
           presetKey,
           category,
+          purpose: step.purpose ?? purpose,
+          vertical,
+          consentRequired: step.consent_required ?? consentRequired,
           aiDraftedAt: presetKey.startsWith("ai:") ? new Date() : null,
         })
         .returning({ id: emailTemplates.id });
@@ -377,11 +589,18 @@ async function createAutomationFromDraft(input: {
         tenantId,
         name: draft.name,
         triggerEvent: "lead.captured",
-        triggerFilter: draft.trigger_filter ?? {},
+        triggerFilter: applyMarketingConsentToTriggerFilter(
+          (draft.trigger_filter ?? {}) as z.infer<typeof sequenceTriggerFilterSchema>,
+          purpose,
+          consentRequired,
+        ),
         steps: sequenceSteps,
         status: sender.canSendProduction ? "active" : "paused",
         presetKey,
         category,
+        purpose,
+        vertical,
+        consentRequired,
       })
       .returning({ id: emailSequences.id });
 
@@ -450,8 +669,16 @@ export const sequencesRouter = router({
       .select({
         id: emailSends.id,
         status: emailSends.status,
+        providerStatus: emailSends.providerStatus,
+        failureReason: emailSends.failureReason,
         sendKind: emailSends.sendKind,
+        stepIndex: emailSends.stepIndex,
         sentAt: emailSends.sentAt,
+        deliveredAt: emailSends.deliveredAt,
+        openedAt: emailSends.openedAt,
+        clickedAt: emailSends.clickedAt,
+        bouncedAt: emailSends.bouncedAt,
+        complainedAt: emailSends.complainedAt,
         createdAt: emailSends.createdAt,
         subject: emailTemplates.subject,
         templateName: emailTemplates.name,
@@ -498,6 +725,31 @@ export const sequencesRouter = router({
       });
     }),
 
+  createBusinessPreset: tenantProcedure
+    .input(
+      z.object({
+        locale: z.string().default("en"),
+        intent: leadIntentSchema.default("booking"),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { tenantId } = ctx.tenantCtx;
+      const [profile] = await db
+        .select({ businessName: businessProfiles.businessName })
+        .from(businessProfiles)
+        .where(eq(businessProfiles.tenantId, tenantId));
+
+      return createAutomationFromDraft({
+        tenantId,
+        draft: businessAutomationPreset({
+          businessName: profile?.businessName ?? "our business",
+          intent: input.intent,
+        }),
+        presetKey: `preset:${input.intent}:v1`,
+        locale: input.locale,
+      });
+    }),
+
   startAutomationDraft: tenantProcedure
     .input(
       z.object({
@@ -508,16 +760,7 @@ export const sequencesRouter = router({
         tone: z.string().max(120).optional(),
         locale: z.string().default("de-CH"),
         triggerEvent: triggerEventEnum.default("lead.captured"),
-        intent: z
-          .enum([
-            "booking",
-            "callback",
-            "quote",
-            "generic",
-            "restaurant_reservation",
-            "restaurant_event",
-          ])
-          .default("generic"),
+        intent: leadIntentSchema.default("generic"),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -814,6 +1057,9 @@ export const sequencesRouter = router({
         name: emailTemplates.name,
         subject: emailTemplates.subject,
         locale: emailTemplates.locale,
+        purpose: emailTemplates.purpose,
+        vertical: emailTemplates.vertical,
+        consentRequired: emailTemplates.consentRequired,
         aiDraftedAt: emailTemplates.aiDraftedAt,
         createdAt: emailTemplates.createdAt,
       })
@@ -843,6 +1089,9 @@ export const sequencesRouter = router({
         bodyText: z.string().max(20_000),
         locale: z.string().default("de-CH"),
         category: z.string().max(80).optional(),
+        purpose: emailPurposeSchema.default("transactional"),
+        vertical: z.string().max(80).optional(),
+        consentRequired: z.boolean().optional(),
         aiDraftedAt: z.string().datetime().optional(),
       }),
     )
@@ -858,6 +1107,9 @@ export const sequencesRouter = router({
           bodyText: input.bodyText,
           locale: input.locale,
           category: input.category ?? "custom",
+          purpose: input.purpose,
+          vertical: input.vertical ?? input.category ?? "generic",
+          consentRequired: input.consentRequired ?? input.purpose === "marketing",
           aiDraftedAt: input.aiDraftedAt ? new Date(input.aiDraftedAt) : null,
         })
         .returning({ id: emailTemplates.id });
@@ -873,6 +1125,10 @@ export const sequencesRouter = router({
         bodyHtml: z.string().max(50_000).optional(),
         bodyText: z.string().max(20_000).optional(),
         locale: z.string().optional(),
+        category: z.string().max(80).optional(),
+        purpose: emailPurposeSchema.optional(),
+        vertical: z.string().max(80).optional(),
+        consentRequired: z.boolean().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -883,6 +1139,10 @@ export const sequencesRouter = router({
       if (input.bodyHtml !== undefined) patch.bodyHtml = input.bodyHtml;
       if (input.bodyText !== undefined) patch.bodyText = input.bodyText;
       if (input.locale !== undefined) patch.locale = input.locale;
+      if (input.category !== undefined) patch.category = input.category;
+      if (input.purpose !== undefined) patch.purpose = input.purpose;
+      if (input.vertical !== undefined) patch.vertical = input.vertical;
+      if (input.consentRequired !== undefined) patch.consentRequired = input.consentRequired;
       await db
         .update(emailTemplates)
         .set(patch)
@@ -1051,6 +1311,9 @@ export const sequencesRouter = router({
         triggerFilter: emailSequences.triggerFilter,
         status: emailSequences.status,
         category: emailSequences.category,
+        purpose: emailSequences.purpose,
+        vertical: emailSequences.vertical,
+        consentRequired: emailSequences.consentRequired,
         presetKey: emailSequences.presetKey,
         steps: emailSequences.steps,
         createdAt: emailSequences.createdAt,
@@ -1099,12 +1362,16 @@ export const sequencesRouter = router({
         triggerFilter: sequenceTriggerFilterSchema,
         steps: z.array(sequenceStepSchema).max(10).default([]),
         category: z.string().max(80).optional(),
+        purpose: emailPurposeSchema.default("transactional"),
+        vertical: z.string().max(80).optional(),
+        consentRequired: z.boolean().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       const { tenantId } = ctx.tenantCtx;
       await assertTemplatesBelongToTenant(tenantId, input.steps);
       const sender = await resolveSenderSettings(tenantId);
+      const consentRequired = input.consentRequired ?? input.purpose === "marketing";
 
       const [created] = await db
         .insert(emailSequences)
@@ -1112,10 +1379,17 @@ export const sequencesRouter = router({
           tenantId,
           name: input.name,
           triggerEvent: input.triggerEvent,
-          triggerFilter: input.triggerFilter,
+          triggerFilter: applyMarketingConsentToTriggerFilter(
+            input.triggerFilter,
+            input.purpose,
+            consentRequired,
+          ),
           steps: input.steps,
           status: sender.canSendProduction ? "active" : "paused",
           category: input.category ?? "custom",
+          purpose: input.purpose,
+          vertical: input.vertical ?? input.category ?? "generic",
+          consentRequired,
         })
         .returning({ id: emailSequences.id });
       return created!;
@@ -1131,12 +1405,20 @@ export const sequencesRouter = router({
         steps: z.array(sequenceStepSchema).max(10).optional(),
         status: z.enum(["active", "paused"]).optional(),
         category: z.string().max(80).optional(),
+        purpose: emailPurposeSchema.optional(),
+        vertical: z.string().max(80).optional(),
+        consentRequired: z.boolean().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       const { tenantId } = ctx.tenantCtx;
       const [existing] = await db
-        .select({ id: emailSequences.id })
+        .select({
+          id: emailSequences.id,
+          purpose: emailSequences.purpose,
+          consentRequired: emailSequences.consentRequired,
+          triggerFilter: emailSequences.triggerFilter,
+        })
         .from(emailSequences)
         .where(and(eq(emailSequences.tenantId, tenantId), eq(emailSequences.id, input.sequenceId)));
       if (!existing) throw new TRPCError({ code: "NOT_FOUND" });
@@ -1146,10 +1428,29 @@ export const sequencesRouter = router({
       const patch: Record<string, unknown> = { updatedAt: new Date() };
       if (input.name !== undefined) patch.name = input.name;
       if (input.triggerEvent !== undefined) patch.triggerEvent = input.triggerEvent;
-      if (input.triggerFilter !== undefined) patch.triggerFilter = input.triggerFilter;
       if (input.steps !== undefined) patch.steps = input.steps;
       if (input.status !== undefined) patch.status = input.status;
       if (input.category !== undefined) patch.category = input.category;
+      if (input.purpose !== undefined) patch.purpose = input.purpose;
+      if (input.vertical !== undefined) patch.vertical = input.vertical;
+      if (input.consentRequired !== undefined) patch.consentRequired = input.consentRequired;
+      if (
+        input.triggerFilter !== undefined ||
+        input.purpose !== undefined ||
+        input.consentRequired !== undefined
+      ) {
+        const nextTriggerFilter =
+          input.triggerFilter ??
+          ((existing.triggerFilter ?? {}) as z.infer<typeof sequenceTriggerFilterSchema>);
+        const nextPurpose =
+          input.purpose ?? (existing.purpose as z.infer<typeof emailPurposeSchema>);
+        const nextConsentRequired = input.consentRequired ?? existing.consentRequired;
+        patch.triggerFilter = applyMarketingConsentToTriggerFilter(
+          nextTriggerFilter,
+          nextPurpose,
+          nextConsentRequired,
+        );
+      }
       await db
         .update(emailSequences)
         .set(patch)
@@ -1328,7 +1629,7 @@ export const sequencesRouter = router({
         triggerEvent: triggerEventEnum,
         context: z.string().max(300).optional(),
         locale: z.string().default("de-CH"),
-        intent: z.enum(["booking", "callback", "quote", "generic"]).default("generic"),
+        intent: leadIntentSchema.default("generic"),
       }),
     )
     .mutation(async ({ ctx, input }) => {

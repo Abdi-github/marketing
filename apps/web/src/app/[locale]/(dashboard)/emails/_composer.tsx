@@ -13,6 +13,9 @@ type TemplateRecord = {
   bodyHtml: string;
   bodyText: string;
   locale: string;
+  purpose: "transactional" | "marketing";
+  vertical: string;
+  consentRequired: boolean;
 };
 
 type AutomationDraftResult = {
@@ -21,7 +24,17 @@ type AutomationDraftResult = {
     subject?: string;
     body_html?: string;
     body_text?: string;
+    purpose?: "transactional" | "marketing";
+    vertical?: string;
+    consent_required?: boolean;
+    rationale?: string;
+    consent_notes?: string;
   }>;
+  purpose?: "transactional" | "marketing";
+  vertical?: string;
+  consent_required?: boolean;
+  rationale?: string;
+  consent_notes?: string;
 };
 
 // The merge tags users can insert. Matches the interpolate() helper in
@@ -51,6 +64,9 @@ export default function EmailComposer({ templateId }: { templateId?: string }) {
   const [name, setName] = useState("");
   const [subject, setSubject] = useState("");
   const [bodyText, setBodyText] = useState("");
+  const [purpose, setPurpose] = useState<"transactional" | "marketing">("transactional");
+  const [vertical, setVertical] = useState("generic");
+  const [consentRequired, setConsentRequired] = useState(false);
   const [activeField, setActiveField] = useState<"subject" | "body">("body");
 
   const [loading, setLoading] = useState(!isNew);
@@ -64,6 +80,8 @@ export default function EmailComposer({ templateId }: { templateId?: string }) {
   const [aiPurpose, setAiPurpose] = useState("");
   const [aiTone, setAiTone] = useState("");
   const [aiDrafting, setAiDrafting] = useState(false);
+  const [aiRationale, setAiRationale] = useState<string | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   // Load existing template when editing.
   useEffect(() => {
@@ -75,6 +93,9 @@ export default function EmailComposer({ templateId }: { templateId?: string }) {
         setName(t.name);
         setSubject(t.subject);
         setBodyText(t.bodyText);
+        setPurpose(t.purpose ?? "transactional");
+        setVertical(t.vertical ?? "generic");
+        setConsentRequired(t.consentRequired ?? false);
       })
       .catch(() => setError("Konnte Vorlage nicht laden."))
       .finally(() => setLoading(false));
@@ -99,6 +120,9 @@ export default function EmailComposer({ templateId }: { templateId?: string }) {
           bodyHtml,
           bodyText: bodyText.trim(),
           locale: localeToBcp47(locale),
+          purpose,
+          vertical,
+          consentRequired: consentRequired || purpose === "marketing",
         });
         setSavedAt(new Date());
         router.replace(`/${locale}/emails/${created.id}`);
@@ -109,6 +133,9 @@ export default function EmailComposer({ templateId }: { templateId?: string }) {
           subject: subject.trim(),
           bodyHtml,
           bodyText: bodyText.trim(),
+          purpose,
+          vertical,
+          consentRequired: consentRequired || purpose === "marketing",
         });
         setSavedAt(new Date());
       }
@@ -139,7 +166,6 @@ export default function EmailComposer({ templateId }: { templateId?: string }) {
 
   async function handleDelete() {
     if (!templateId) return;
-    if (!confirm(t("deleteConfirm"))) return;
     try {
       await trpc.sequences.deleteTemplate.mutate({ templateId });
       router.push(`/${locale}/emails`);
@@ -174,6 +200,19 @@ export default function EmailComposer({ templateId }: { templateId?: string }) {
       if (!first) throw new Error("AI draft is still running. Try again in a moment.");
       setSubject(first.subject ?? "");
       setBodyText(first.body_text ?? "");
+      const draftPurpose = first.purpose ?? draft?.purpose ?? "transactional";
+      setPurpose(draftPurpose);
+      setVertical(draft?.vertical ?? "generic");
+      setConsentRequired(Boolean(first.consent_required ?? draft?.consent_required));
+      setAiRationale(
+        [
+          draft?.rationale,
+          draft?.consent_notes,
+          first.rationale ? `First email: ${first.rationale}` : null,
+        ]
+          .filter(Boolean)
+          .join(" "),
+      );
       if (!name) setName(aiPurpose.slice(0, 60));
       setShowAiDraft(false);
     } catch (e) {
@@ -222,7 +261,7 @@ export default function EmailComposer({ templateId }: { templateId?: string }) {
           )}
           {!isNew && (
             <button
-              onClick={handleDelete}
+              onClick={() => setDeleteConfirmOpen(true)}
               className="rounded px-3 py-1.5 text-sm text-red-600 hover:bg-red-50"
             >
               {t("delete")}
@@ -242,6 +281,37 @@ export default function EmailComposer({ templateId }: { templateId?: string }) {
         <p className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-600">
           {error}
         </p>
+      )}
+
+      {deleteConfirmOpen && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span>{t("deleteConfirm")}</span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmOpen(false)}
+                className="rounded border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-700"
+              >
+                {t("cancel")}
+              </button>
+              <button
+                type="button"
+                onClick={handleDelete}
+                className="rounded bg-red-600 px-3 py-1.5 text-xs font-medium text-white"
+              >
+                {t("delete")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {aiRationale && (
+        <div className="mb-4 rounded border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-800">
+          <p className="font-semibold">AI recommendation</p>
+          <p className="mt-1">{aiRationale}</p>
+        </div>
       )}
 
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
@@ -319,6 +389,46 @@ export default function EmailComposer({ templateId }: { templateId?: string }) {
               placeholder={t("fieldSubjectPlaceholder")}
               className="w-full rounded border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
+          </div>
+
+          <div className="grid gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4 md:grid-cols-[180px_1fr]">
+            <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-gray-600">
+              Purpose
+              <select
+                value={purpose}
+                onChange={(e) => {
+                  const next = e.target.value as "transactional" | "marketing";
+                  setPurpose(next);
+                  if (next === "marketing") setConsentRequired(true);
+                }}
+                className="rounded border border-gray-300 px-3 py-2 text-sm font-normal normal-case tracking-normal"
+              >
+                <option value="transactional">Transactional</option>
+                <option value="marketing">Marketing</option>
+              </select>
+            </label>
+            <div className="grid gap-2">
+              <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-gray-600">
+                Business category
+                <input
+                  value={vertical}
+                  onChange={(e) => setVertical(e.target.value)}
+                  placeholder="booking, quote, callback, property..."
+                  className="rounded border border-gray-300 px-3 py-2 text-sm font-normal normal-case tracking-normal"
+                />
+              </label>
+              <label className="flex items-start gap-2 text-xs text-gray-600">
+                <input
+                  type="checkbox"
+                  checked={consentRequired || purpose === "marketing"}
+                  disabled={purpose === "marketing"}
+                  onChange={(e) => setConsentRequired(e.target.checked)}
+                  className="mt-0.5"
+                />
+                Marketing opt-in is required before this template can be used in marketing
+                sequences.
+              </label>
+            </div>
           </div>
 
           {/* Body */}
