@@ -793,6 +793,15 @@ Use this section while teaching the Forms module after CRM/SMS automation.
   - Code issue found and fixed: the public form rendered the hidden Honeypot input, but the React submit handler always sent an empty `__hp` value instead of reading the hidden field. API-level bot simulation was protected, but browser-form bot simulation was weaker than intended.
   - Fix implemented: the public form now submits the actual hidden Honeypot field value. If a bot fills it, the server returns a fake success response and does not create a submission, lead, contact update, CRM task, Inbox message, notification, or SMS automation trigger.
   - Production note: this Honeypot fix requires GitHub push and Vercel deployment before the browser retest can reflect it.
+  - Live verification: user confirmed Honeypot works perfectly in production after the fix.
+- Forms anti-spam Cloudflare Turnstile setup:
+  - User has not configured production Cloudflare Turnstile keys yet.
+  - App wiring expects `NEXT_PUBLIC_TURNSTILE_SITE_KEY` for the browser widget and `TURNSTILE_SECRET_KEY` for server-side token validation.
+  - Walkthrough should guide the user to create a production Turnstile widget in Cloudflare, restrict it to the production hostname, add both keys to Vercel Production environment variables, redeploy, then enable the Turnstile checkbox on the form and submit a production test request.
+  - Live verification: user configured the keys in Vercel, redeployed, enabled Turnstile, and confirmed Turnstile works on the public form.
+  - UX observation: Turnstile appears as soon as the guest reaches the final step, before the guest has filled the final-step fields. This is technically correct because verification can run while the guest completes the last step, but it needs a plain-English explanation so customers understand why it appears.
+  - Improvement implemented: the public form now shows a small `Security check` explanation above the Turnstile widget: `This quick check helps protect the restaurant from fake requests.`
+  - Production note: this Turnstile UX copy requires GitHub push and Vercel deployment before production reflects it.
 
 ## Next Ordered Scenarios
 

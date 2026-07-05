@@ -418,7 +418,36 @@ function SmartFormBody({
       ))}
 
       {isLastStep && showTurnstile && (
-        <TurnstileWidget siteKey={siteKey} onToken={setTurnstileToken} />
+        <div
+          style={{
+            border: "1px solid var(--lp-border,#d1d5db)",
+            borderRadius: 8,
+            padding: "0.75rem",
+            background: "rgba(255,255,255,0.55)",
+          }}
+        >
+          <p
+            style={{
+              margin: "0 0 0.25rem",
+              fontSize: "0.85rem",
+              fontWeight: 700,
+              color: "var(--lp-text,#111827)",
+            }}
+          >
+            Security check
+          </p>
+          <p
+            style={{
+              margin: 0,
+              fontSize: "0.8rem",
+              lineHeight: 1.45,
+              color: "var(--lp-muted,#6b7280)",
+            }}
+          >
+            This quick check helps protect the restaurant from fake requests.
+          </p>
+          <TurnstileWidget siteKey={siteKey} onToken={setTurnstileToken} />
+        </div>
       )}
 
       {(validationError || error) && (
