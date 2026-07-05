@@ -132,6 +132,16 @@ const CRM_STAFF_ASSISTANT_TOOL: ToolDefinition = {
   },
 };
 
+function leadSummaryLooksConfirmed(leadSummary: string): boolean {
+  const lead = leadSummary.toLowerCase();
+  return (
+    lead.includes("workflow state: confirmed") ||
+    lead.includes("status: confirmed") ||
+    lead.includes('"workflow_state": "confirmed"') ||
+    lead.includes('"status": "confirmed"')
+  );
+}
+
 function fallbackCrmAssistant(input: {
   contactName: string;
   leadSummary: string;
@@ -139,6 +149,7 @@ function fallbackCrmAssistant(input: {
 }): CrmAssistantResult {
   const lead = input.leadSummary.toLowerCase();
   const firstName = input.contactName.split(/\s+/)[0] || input.contactName;
+  const isConfirmed = leadSummaryLooksConfirmed(input.leadSummary);
   const isQuote =
     lead.includes('"quote"') || lead.includes("quote") || lead.includes("private dining");
   const isMissing =
@@ -146,6 +157,23 @@ function fallbackCrmAssistant(input: {
     lead.includes("missing details") ||
     lead.includes("date") === false ||
     lead.includes("time") === false;
+
+  if (isConfirmed) {
+    return {
+      situationSummary:
+        "This reservation is already confirmed, so staff mainly need to keep the customer history and only follow up if something changes.",
+      recommendedAction: "no_action",
+      recommendationLabel: "No immediate action",
+      reason:
+        "The reservation has already been handled, so confirming it again could confuse the customer.",
+      replyDraft: `Hi ${firstName},\n\nYour reservation is confirmed. We look forward to welcoming you. If anything changes, please let us know.\n\nKind regards`,
+      suggestedNote: input.notes
+        ? undefined
+        : "Reservation is confirmed. Keep this contact history for future reminders or changes.",
+      safetyReminder:
+        "AI only prepared this suggestion. Staff should review before sending or saving anything.",
+    };
+  }
 
   if (isQuote) {
     return {
@@ -194,6 +222,27 @@ function fallbackCrmAssistant(input: {
     safetyReminder:
       "AI only prepared this suggestion. Staff should review and confirm or send manually.",
   };
+}
+
+function enforceCrmAssistantStatusSafety(input: {
+  assistant: CrmAssistantResult;
+  contactName: string;
+  leadSummary: string;
+  notes: string;
+}): CrmAssistantResult {
+  if (
+    leadSummaryLooksConfirmed(input.leadSummary) &&
+    (input.assistant.recommendedAction === "confirm_reservation" ||
+      /confirm/i.test(input.assistant.recommendationLabel))
+  ) {
+    return fallbackCrmAssistant({
+      contactName: input.contactName,
+      leadSummary: input.leadSummary,
+      notes: input.notes,
+    });
+  }
+
+  return input.assistant;
 }
 
 type EmailStatus = "active" | "unsubscribed" | "bounced" | "complained";
@@ -846,7 +895,12 @@ ${JSON.stringify(latestLeads[0].payload, null, 2)}`
           : null;
 
         const parsed = crmAssistantSchema.safeParse(result?.toolResult);
-        const assistant = parsed.success ? parsed.data : fallback;
+        const assistant = enforceCrmAssistantStatusSafety({
+          assistant: parsed.success ? parsed.data : fallback,
+          contactName,
+          leadSummary,
+          notes: contact.notes ?? "",
+        });
         return { draft: assistant.replyDraft, assistant };
       } catch {
         return { draft: fallback.replyDraft, assistant: fallback };

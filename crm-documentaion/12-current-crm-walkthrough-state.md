@@ -770,6 +770,11 @@ Use this section while teaching the Forms module after CRM/SMS automation.
   - The CRM contact drawer now shows this as a beginner-friendly AI card instead of only a raw paragraph.
   - Staff can copy the draft reply, prefill the task title field, or append the suggested note, but AI does not send messages, create tasks, save notes, confirm reservations, or change CRM state automatically.
   - Production note: this enhancement requires GitHub push and Vercel deployment before production retesting reflects it.
+- CRM AI confirmed-state refinement:
+  - Live retest showed the new AI card rendered correctly, but when the reservation was already `Confirmed`, the AI still recommended `Review and confirm`.
+  - Fix implemented: the CRM AI prompt now explicitly says confirmed reservations must not be recommended for confirmation again.
+  - Server-side safety was also added so if the model still returns a confirmation recommendation for a confirmed reservation, the app replaces it with a safer `No immediate action` suggestion and an optional customer follow-up draft.
+  - Production note: this refinement requires GitHub push and Vercel deployment before production retesting reflects it.
 
 ## Next Ordered Scenarios
 
