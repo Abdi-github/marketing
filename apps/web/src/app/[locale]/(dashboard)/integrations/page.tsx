@@ -1094,6 +1094,11 @@ function IntegrationsPageContent() {
           return (
             <div
               key={key}
+              className={
+                key === "gastrofix" || key === "lightspeed_ch" || key === "eversports"
+                  ? "hidden"
+                  : undefined
+              }
               style={{
                 border: "1px solid #e5e7eb",
                 borderRadius: 10,
