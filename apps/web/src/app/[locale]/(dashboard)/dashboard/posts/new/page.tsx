@@ -177,6 +177,7 @@ function NewPostPageContent() {
   const [publishingJobId, setPublishingJobId] = useState<string | null>(null);
   const [publishedJobIds, setPublishedJobIds] = useState<Set<string>>(new Set());
   const [previewPost, setPreviewPost] = useState<ThreadPost | null>(null);
+  const [brokenMediaUrls, setBrokenMediaUrls] = useState<Set<string>>(new Set());
 
   // Designed social graphic state.
   const [creativeAspectRatio, setCreativeAspectRatio] = useState<SocialCreativeAspectRatio>("4:5");
@@ -510,6 +511,16 @@ function NewPostPageContent() {
     setEditingTextJobId(null);
     setEditTextError(null);
     setPreviewPost(null);
+    setBrokenMediaUrls(new Set());
+  }
+
+  function markMediaBroken(url: string | null | undefined) {
+    if (!url) return;
+    setBrokenMediaUrls((prev) => {
+      const next = new Set(prev);
+      next.add(url);
+      return next;
+    });
   }
 
   async function openImagePrompt(post: ThreadPost) {
@@ -616,10 +627,14 @@ function NewPostPageContent() {
     ? (thread.find((post) => post.jobId === previewPost.jobId) ?? previewPost)
     : null;
   const previewCreativeUrl = getDisplayCreativeUrl(previewPostLive);
-  const previewMediaUrl = previewCreativeUrl ?? previewPostLive?.imageUrl ?? null;
+  const previewImageUrl =
+    previewPostLive?.imageUrl && !brokenMediaUrls.has(previewPostLive.imageUrl)
+      ? previewPostLive.imageUrl
+      : null;
+  const previewMediaUrl = previewCreativeUrl ?? previewImageUrl;
   const previewMediaLabel = previewCreativeUrl
     ? t("previewDesignedGraphic")
-    : previewPostLive?.imageUrl
+    : previewImageUrl
       ? t("previewGeneratedImage")
       : t("previewTextOnly");
 
@@ -716,27 +731,31 @@ function NewPostPageContent() {
               <div className="flex-1 space-y-3 rounded-lg bg-white p-4 shadow">
                 {post.status === "completed" && post.generatedText && (
                   <>
-                    {/* Generated image */}
-                    {post.imageUrl && (
-                      <div className="overflow-hidden rounded border border-gray-100">
-                        <img
-                          src={post.imageUrl}
-                          alt={t("imageAlt")}
-                          className="max-h-72 w-full object-cover"
-                        />
-                      </div>
-                    )}
-
                     {/* Designed social graphic preview */}
                     {getDisplayCreativeUrl(post) && (
                       <div className="overflow-hidden rounded border border-gray-100">
                         <img
                           src={getDisplayCreativeUrl(post) ?? ""}
                           alt={t("creativeAlt")}
+                          onError={() => markMediaBroken(getDisplayCreativeUrl(post))}
                           className="w-full object-cover"
                         />
                       </div>
                     )}
+
+                    {/* Generated image */}
+                    {!getDisplayCreativeUrl(post) &&
+                      post.imageUrl &&
+                      !brokenMediaUrls.has(post.imageUrl) && (
+                        <div className="overflow-hidden rounded border border-gray-100">
+                          <img
+                            src={post.imageUrl}
+                            alt={t("imageAlt")}
+                            onError={() => markMediaBroken(post.imageUrl)}
+                            className="max-h-72 w-full object-cover"
+                          />
+                        </div>
+                      )}
 
                     {/* Post text â€” editable */}
                     {editingTextJobId === post.jobId ? (
@@ -1215,6 +1234,7 @@ function NewPostPageContent() {
                       <img
                         src={previewMediaUrl}
                         alt={previewCreativeUrl ? t("creativeAlt") : t("imageAlt")}
+                        onError={() => markMediaBroken(previewMediaUrl)}
                         className="max-h-[68vh] w-full bg-gray-100 object-contain"
                       />
                     ) : (

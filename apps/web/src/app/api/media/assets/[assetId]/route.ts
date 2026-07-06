@@ -1,4 +1,4 @@
-import { db, mediaAssets } from "@marketing/db";
+import { db, mediaAssets, socialPosts } from "@marketing/db";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { eq } from "drizzle-orm";
@@ -11,10 +11,11 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ assetId: string }> },
 ): Promise<Response> {
   const { assetId } = await params;
+  const requestedPublicUrl = `/api/media/assets/${assetId}`;
 
   const [assetById] = await db
     .select({
@@ -38,10 +39,12 @@ export async function GET(
           status: mediaAssets.status,
         })
         .from(mediaAssets)
-        .where(eq(mediaAssets.publicUrl, `/api/media/assets/${assetId}`));
+        .where(eq(mediaAssets.publicUrl, requestedPublicUrl));
   const asset = assetById ?? assetByPublicUrl;
 
   if (!asset || asset.visibility !== "public" || asset.status !== "uploaded") {
+    const creativeRedirect = await redirectMissingSocialCreative(req, requestedPublicUrl);
+    if (creativeRedirect) return creativeRedirect;
     return new Response("Not found", { status: 404 });
   }
 
@@ -86,4 +89,21 @@ export async function GET(
       "content-type": asset.contentType,
     },
   });
+}
+
+async function redirectMissingSocialCreative(
+  req: Request,
+  requestedPublicUrl: string,
+): Promise<Response | null> {
+  const [post] = await db
+    .select({ jobId: socialPosts.jobId, creativeUpdatedAt: socialPosts.creativeUpdatedAt })
+    .from(socialPosts)
+    .where(eq(socialPosts.creativeImageUrl, requestedPublicUrl));
+  if (!post) return null;
+
+  const redirectUrl = new URL(`/api/social-creatives/${post.jobId}/image`, req.url);
+  if (post.creativeUpdatedAt) {
+    redirectUrl.searchParams.set("v", String(post.creativeUpdatedAt.getTime()));
+  }
+  return Response.redirect(redirectUrl, 307);
 }

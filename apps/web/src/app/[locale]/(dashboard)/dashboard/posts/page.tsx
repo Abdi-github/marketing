@@ -122,6 +122,7 @@ export default function PostsDashboardPage() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [brokenMediaUrls, setBrokenMediaUrls] = useState<Set<string>>(new Set());
 
   const fetchPage = useCallback(async (p: number, f: Filter) => {
     setIsLoading(true);
@@ -254,6 +255,9 @@ export default function PostsDashboardPage() {
             const topic = getTopic(post.promptInput);
             const preview = post.generatedText?.slice(0, 140) ?? "";
             const isDeleting = deletingId === post.jobId;
+            const thumbnailUrl = post.creativeUrl ?? post.imageUrl;
+            const visibleThumbnailUrl =
+              thumbnailUrl && !brokenMediaUrls.has(thumbnailUrl) ? thumbnailUrl : null;
 
             return (
               <div
@@ -273,11 +277,18 @@ export default function PostsDashboardPage() {
                 </button>
 
                 {/* Image thumbnail */}
-                {(post.creativeUrl ?? post.imageUrl) ? (
+                {visibleThumbnailUrl ? (
                   <div className="h-44 overflow-hidden bg-gray-100">
                     <img
-                      src={post.creativeUrl ?? post.imageUrl ?? ""}
+                      src={visibleThumbnailUrl}
                       alt={topic}
+                      onError={() =>
+                        setBrokenMediaUrls((prev) => {
+                          const next = new Set(prev);
+                          next.add(visibleThumbnailUrl);
+                          return next;
+                        })
+                      }
                       className="h-full w-full object-cover"
                     />
                   </div>
