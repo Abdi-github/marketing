@@ -44,7 +44,18 @@ type ActiveJob = {
 };
 
 function getDisplayCreativeUrl(post: ThreadPost | null | undefined): string | null {
-  return post?.creativeUrl ?? null;
+  if (!post) return null;
+  if (post.creativeStatus === "pending") return null;
+  if (post.creativeStatus === "completed" || post.creativeUrl) {
+    const version =
+      post.creativeUpdatedAt instanceof Date
+        ? String(post.creativeUpdatedAt.getTime())
+        : post.creativeUpdatedAt
+          ? String(post.creativeUpdatedAt)
+          : "latest";
+    return `/api/social-creatives/${post.jobId}/image?v=${encodeURIComponent(version)}`;
+  }
+  return null;
 }
 
 const ACTIVE_JOB_POLL_MS = 2000;

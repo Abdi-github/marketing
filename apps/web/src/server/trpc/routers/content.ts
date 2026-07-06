@@ -13,7 +13,6 @@ import { and, eq, asc, desc, isNull, isNotNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   getSocialCreativePath,
-  normalizeSocialCreativeUrl,
   type SocialCreativeAspectRatio,
   type SocialCreativeTemplate,
 } from "../../../lib/social-creative";
@@ -64,9 +63,7 @@ function withCreativeUrl<
 >(row: T): T & { creativeUrl: string | null } {
   const creativeUrl =
     (row.creativeImageUrl || row.creativePlan) && row.creativeStatus !== "pending"
-      ? row.creativeImageUrl
-        ? normalizeSocialCreativeUrl(row.creativeImageUrl)
-        : getSocialCreativePath(row.jobId, row.creativeUpdatedAt ?? "latest")
+      ? getSocialCreativePath(row.jobId, row.creativeUpdatedAt ?? "latest")
       : null;
 
   return {

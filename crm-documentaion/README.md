@@ -63,3 +63,4 @@ Observed product notes:
 11. [Manual CRM scenario playbook](11-manual-crm-scenario-playbook.md)
 12. [Current CRM walkthrough state](12-current-crm-walkthrough-state.md)
 13. [Landing generator visual QA walkthrough](13-landing-generator-visual-qa-walkthrough.md)
+14. [Full SaaS demo walkthrough: Sweet Restaurant](14-full-restaurant-saas-demo-walkthrough.md)

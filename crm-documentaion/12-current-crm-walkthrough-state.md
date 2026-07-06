@@ -1,8 +1,18 @@
 # Current CRM Walkthrough State
 
-Last updated: 2026-07-05
+Last updated: 2026-07-06
 
 This file prevents the CRM walkthrough from losing track while we test, fix, and document the restaurant workflows.
+
+## Active Presentation Walkthrough
+
+The current production client-demo walkthrough is now:
+
+[Full SaaS demo walkthrough: Sweet Restaurant](14-full-restaurant-saas-demo-walkthrough.md)
+
+Use this as the main guide for a fresh restaurant tenant from signup through landing page, forms,
+CRM, and SMS automation. The earlier Abdi Restaurant CRM notes remain useful regression history,
+but the Sweet Restaurant walkthrough is the active presentation path.
 
 ## Where We Are Now
 
