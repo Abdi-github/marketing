@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
+import { useSearchParams } from "next/navigation";
 
 type LoginErrorKind = "invalid" | "session" | "server";
 
@@ -40,7 +41,15 @@ async function classifySignInFailure(res: Response): Promise<LoginErrorKind> {
 export default function LoginPage() {
   const locale = useLocale();
   const t = useTranslations("Login");
-  const [error, setError] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const initialError = searchParams.get("error");
+  const [error, setError] = useState<string | null>(
+    initialError === "invalid"
+      ? t("invalidCredentials")
+      : initialError === "server"
+        ? t("genericError")
+        : null,
+  );
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -74,10 +83,12 @@ export default function LoginPage() {
         credentials: "include",
       });
 
-      if (!sessionCheck.ok) {
-        throw new Error("session");
+      if (sessionCheck.ok) {
+        window.location.href = `/${locale}/dashboard`;
+        return;
       }
 
+      setError(t("sessionUnavailable"));
       window.location.href = `/${locale}/dashboard`;
     } catch (err) {
       if (err instanceof Error && err.message === "invalid") {
@@ -97,7 +108,13 @@ export default function LoginPage() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="w-full space-y-4">
+    <form
+      action="/api/auth/login"
+      method="post"
+      onSubmit={handleSubmit}
+      className="w-full space-y-4"
+    >
+      <input type="hidden" name="locale" value={locale} />
       <h1 className="text-2xl font-bold">{t("title")}</h1>
 
       {error && (

@@ -60,14 +60,22 @@ function isLocalhostUrl(value: string): boolean {
 }
 
 function getProductionAuthBaseUrl(): string {
-  const candidates = [
-    env.BETTER_AUTH_URL,
-    env.APP_URL,
+  const explicitCandidates = [env.BETTER_AUTH_URL, env.APP_URL];
+
+  for (const candidate of explicitCandidates) {
+    const origin = toTrustedOrigin(candidate);
+    if (!origin) continue;
+    if (env.NODE_ENV === "production" && isLocalhostUrl(origin)) continue;
+    return origin;
+  }
+
+  // Last-resort Vercel fallback. Auth cookies must be scoped to the canonical
+  // app host, not to a redeploy-specific URL, so production should normally set
+  // BETTER_AUTH_URL or APP_URL explicitly.
+  for (const candidate of [
     process.env["VERCEL_PROJECT_PRODUCTION_URL"],
     process.env["VERCEL_URL"],
-  ];
-
-  for (const candidate of candidates) {
+  ]) {
     const origin = toTrustedOrigin(candidate);
     if (!origin) continue;
     if (env.NODE_ENV === "production" && isLocalhostUrl(origin)) continue;
