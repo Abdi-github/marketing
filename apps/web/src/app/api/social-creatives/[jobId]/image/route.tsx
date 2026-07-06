@@ -111,15 +111,35 @@ export async function GET(
   const imageUrl = await resolveOgImageSrc(plan.backgroundImageUrl ?? post.imageUrl, requestOrigin);
   const logoUrl = await resolveOgImageSrc(brand?.logoUrl ?? null, requestOrigin);
 
-  return new ImageResponse(
-    renderSocialCreative({
-      plan,
-      imageUrl,
-      businessName: profile?.businessName ?? "My Business",
-      brand: brand ? { ...brand, logoUrl } : brand,
-    }),
-    { width, height },
-  );
+  const businessName = profile?.businessName ?? "My Business";
+  try {
+    return new ImageResponse(
+      renderSocialCreative({
+        plan,
+        imageUrl,
+        businessName,
+        brand: brand ? { ...brand, logoUrl } : brand,
+      }),
+      { width, height },
+    );
+  } catch (err) {
+    console.error("[social-creatives] ImageResponse render failed", {
+      jobId,
+      err: String(err),
+    });
+    return svgFallbackResponse({
+      width,
+      height,
+      businessName,
+      headline: plan.headline,
+      subheading: plan.subheading,
+      badge: plan.badge,
+      cta: plan.cta,
+      footer: plan.footer,
+      primary: brand?.colorPrimary ?? "#111827",
+      secondary: brand?.colorSecondary ?? "#f59e0b",
+    });
+  }
 }
 
 async function resolveOgImageSrc(
@@ -321,6 +341,135 @@ function pngResponse(bytes: Uint8Array): Response {
       "content-type": "image/png",
     },
   });
+}
+
+function svgFallbackResponse(input: {
+  width: number;
+  height: number;
+  businessName: string;
+  headline: string;
+  subheading: string;
+  badge: string;
+  cta: string;
+  footer: string;
+  primary: string;
+  secondary: string;
+}): Response {
+  const primary = normalizeHexColor(input.primary, "#111827");
+  const secondary = normalizeHexColor(input.secondary, "#f59e0b");
+  const bg = mixHex(primary, "#ffffff", 0.92);
+  const soft = mixHex(secondary, "#ffffff", 0.78);
+  const headlineLines = wrapSvgText(input.headline, 18).slice(0, 3);
+  const subheadingLines = wrapSvgText(input.subheading, 34).slice(0, 3);
+  const isTall = input.height > input.width;
+  const headlineSize = isTall ? 78 : 72;
+  const subheadingSize = isTall ? 32 : 30;
+  const left = isTall ? 64 : 76;
+  const top = isTall ? 72 : 68;
+
+  const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${input.width}" height="${input.height}" viewBox="0 0 ${input.width} ${input.height}">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="${escapeXml(bg)}"/>
+      <stop offset="58%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="${escapeXml(soft)}"/>
+    </linearGradient>
+  </defs>
+  <rect width="100%" height="100%" fill="url(#bg)"/>
+  <circle cx="${input.width * 0.86}" cy="${input.height * 0.16}" r="${input.width * 0.22}" fill="${escapeXml(secondary)}" opacity="0.18"/>
+  <circle cx="${input.width * 0.1}" cy="${input.height * 0.88}" r="${input.width * 0.3}" fill="${escapeXml(primary)}" opacity="0.08"/>
+  <rect x="${left}" y="${top}" width="${input.width - left * 2}" height="${input.height - top * 2}" rx="42" fill="#ffffff" opacity="0.84"/>
+  <text x="${left + 42}" y="${top + 72}" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="800" fill="${escapeXml(primary)}">${escapeXml(input.businessName)}</text>
+  <rect x="${left + 42}" y="${top + 108}" width="210" height="56" rx="28" fill="${escapeXml(primary)}"/>
+  <text x="${left + 66}" y="${top + 146}" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="800" fill="#ffffff">${escapeXml(clampText(input.badge, 18))}</text>
+  ${headlineLines
+    .map(
+      (line, index) =>
+        `<text x="${left + 42}" y="${top + 250 + index * (headlineSize + 8)}" font-family="Arial, Helvetica, sans-serif" font-size="${headlineSize}" font-weight="900" fill="${escapeXml(primary)}">${escapeXml(line)}</text>`,
+    )
+    .join("")}
+  ${subheadingLines
+    .map(
+      (line, index) =>
+        `<text x="${left + 44}" y="${top + 510 + index * (subheadingSize + 10)}" font-family="Arial, Helvetica, sans-serif" font-size="${subheadingSize}" font-weight="600" fill="#475569">${escapeXml(line)}</text>`,
+    )
+    .join("")}
+  <rect x="${left + 42}" y="${input.height - top - 106}" width="270" height="64" rx="32" fill="${escapeXml(secondary)}"/>
+  <text x="${left + 72}" y="${input.height - top - 64}" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="900" fill="${escapeXml(primary)}">${escapeXml(clampText(input.cta, 22))}</text>
+  <text x="${input.width - left - 42}" y="${input.height - top - 62}" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700" fill="#64748b">${escapeXml(clampText(input.footer, 34))}</text>
+</svg>`;
+
+  return new Response(svg, {
+    headers: {
+      "cache-control": "public, max-age=300",
+      "content-type": "image/svg+xml; charset=utf-8",
+    },
+  });
+}
+
+function wrapSvgText(value: string, maxChars: number): string[] {
+  const words = value.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+  const lines: string[] = [];
+  let current = "";
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (next.length > maxChars && current) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = next;
+    }
+  }
+  if (current) lines.push(current);
+  return lines.length ? lines : ["Your update"];
+}
+
+function clampText(value: string, maxChars: number): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxChars) return normalized;
+  return `${normalized.slice(0, Math.max(0, maxChars - 1)).trim()}…`;
+}
+
+function escapeXml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function normalizeHexColor(value: string | null | undefined, fallback: string): string {
+  if (!value) return fallback;
+  const trimmed = value.trim();
+  if (/^#[0-9a-f]{6}$/i.test(trimmed)) return trimmed;
+  if (/^#[0-9a-f]{3}$/i.test(trimmed)) {
+    return `#${trimmed
+      .slice(1)
+      .split("")
+      .map((char) => `${char}${char}`)
+      .join("")}`;
+  }
+  return fallback;
+}
+
+function mixHex(a: string, b: string, weight: number): string {
+  const ca = parseHex(a);
+  const cb = parseHex(b);
+  const mix = (x: number, y: number) => Math.round(x * (1 - weight) + y * weight);
+  return `#${[mix(ca[0], cb[0]), mix(ca[1], cb[1]), mix(ca[2], cb[2])]
+    .map((value) => value.toString(16).padStart(2, "0"))
+    .join("")}`;
+}
+
+function parseHex(value: string): [number, number, number] {
+  const hex = normalizeHexColor(value, "#000000").slice(1);
+  return [
+    parseInt(hex.slice(0, 2), 16),
+    parseInt(hex.slice(2, 4), 16),
+    parseInt(hex.slice(4, 6), 16),
+  ];
 }
 
 function encodeS3Key(key: string): string {

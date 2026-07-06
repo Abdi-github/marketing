@@ -247,6 +247,34 @@ export async function handleSocialCreativeJob(job: Job<SocialCreativeJob>): Prom
       throw new Error(`Social creative render failed (${response.status}): ${body.slice(0, 240)}`);
     }
 
+    const contentType = response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase();
+    if (contentType !== "image/png") {
+      await db
+        .update(socialPosts)
+        .set({
+          creativePlan: renderPlan,
+          creativeTemplate: renderPlan.template,
+          creativeAspectRatio: renderPlan.aspectRatio,
+          creativeImageUrl: null,
+          creativeStorageKey: null,
+          creativeStatus: "completed",
+          creativeError: null,
+          creativeUpdatedAt: now,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(socialPosts.tenantId, data.tenantId), eq(socialPosts.jobId, data.postJobId)));
+
+      logger.warn(
+        {
+          postJobId: data.postJobId,
+          tenantId: data.tenantId,
+          contentType,
+        },
+        "[social-creative] render returned fallback image; skipped PNG storage",
+      );
+      return;
+    }
+
     const png = new Uint8Array(await response.arrayBuffer());
     const stored = await storeSocialCreativePng({
       tenantId: data.tenantId,
