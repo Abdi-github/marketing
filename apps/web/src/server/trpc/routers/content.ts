@@ -12,7 +12,9 @@ import { TRPCError } from "@trpc/server";
 import { and, eq, asc, desc, isNull, isNotNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
+  buildSocialCreativePlan,
   getSocialCreativePath,
+  parsePromptInput,
   type SocialCreativeAspectRatio,
   type SocialCreativeTemplate,
 } from "../../../lib/social-creative";
@@ -549,7 +551,8 @@ export const contentRouter = router({
     }),
 
   // Create or refresh a designed graphic for a completed post.
-  // The worker plans, renders, uploads, and stores the final PNG URL.
+  // This uses the registered server-side graphic renderer immediately so demos
+  // do not depend on a background worker being healthy before a preview appears.
   generateSocialCreative: tenantProcedure
     .input(
       z.object({
@@ -560,12 +563,14 @@ export const contentRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const { tenantId, userId } = ctx.tenantCtx;
+      const { tenantId } = ctx.tenantCtx;
 
       const [post] = await db
         .select({
           status: socialPosts.status,
           generatedText: socialPosts.generatedText,
+          imageUrl: socialPosts.imageUrl,
+          promptInput: socialPosts.promptInput,
         })
         .from(socialPosts)
         .where(and(eq(socialPosts.tenantId, tenantId), eq(socialPosts.jobId, input.jobId)));
@@ -575,40 +580,52 @@ export const contentRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: "Post is not yet completed." });
       }
 
+      const [profile] = await db
+        .select({
+          businessName: businessProfiles.businessName,
+          vertical: businessProfiles.vertical,
+          city: businessProfiles.addressCity,
+        })
+        .from(businessProfiles)
+        .where(eq(businessProfiles.tenantId, tenantId));
+
       const now = new Date();
+      const promptInput = parsePromptInput(post.promptInput);
+      const creativePlan = buildSocialCreativePlan({
+        businessName: profile?.businessName ?? "My Business",
+        vertical: profile?.vertical,
+        city: profile?.city,
+        topic: promptInput.topic,
+        highlights: promptInput.highlights,
+        postText: post.generatedText,
+        imageUrl: post.imageUrl,
+        aspectRatio: input.aspectRatio,
+        template: input.template,
+        creativeDirection: input.creativeDirection,
+      });
 
       await db
         .update(socialPosts)
         .set({
           creativeTemplate: input.template,
           creativeAspectRatio: input.aspectRatio,
-          creativePlan: null,
+          creativePlan,
           creativeImageUrl: null,
           creativeStorageKey: null,
-          creativeStatus: "pending",
+          creativeStatus: "completed",
           creativeError: null,
           creativeUpdatedAt: now,
           updatedAt: now,
         })
         .where(and(eq(socialPosts.tenantId, tenantId), eq(socialPosts.jobId, input.jobId)));
 
-      const creativeJobId = await enqueueSocialCreative({
-        tenantId,
-        userId,
-        postJobId: input.jobId,
-        aspectRatio: input.aspectRatio,
-        template: input.template,
-        creativeDirection: input.creativeDirection,
-        renderAppUrl: ctx.requestOrigin,
-      });
-
       return {
-        creativeJobId,
+        creativeJobId: null,
         creativeTemplate: input.template,
         creativeAspectRatio: input.aspectRatio,
-        creativeStatus: "pending",
+        creativeStatus: "completed",
         creativeUpdatedAt: now,
-        creativeUrl: null,
+        creativeUrl: getSocialCreativePath(input.jobId, now),
       };
     }),
 
@@ -632,6 +649,13 @@ export const contentRouter = router({
       if (!post) throw new TRPCError({ code: "NOT_FOUND", message: "Post not found." });
       if (post.status !== "completed")
         throw new TRPCError({ code: "BAD_REQUEST", message: "Post is not yet completed." });
+      if (!env.REPLICATE_API_TOKEN) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message:
+            "AI photo generation is not configured in this environment. Add REPLICATE_API_TOKEN in Vercel, or use Create graphic for a branded social image.",
+        });
+      }
 
       const imageJobId = await enqueueSocialImage({
         tenantId,

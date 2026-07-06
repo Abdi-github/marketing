@@ -319,9 +319,14 @@ async function maybeGenerateCreativeBackground(input: {
   if (!direction) return input.plan;
 
   if (!env.REPLICATE_API_TOKEN) {
-    throw new Error(
-      "Premium graphic background generation is unavailable: REPLICATE_API_TOKEN is not set.",
+    logger.warn(
+      {
+        postJobId: input.data.postJobId,
+        tenantId: input.data.tenantId,
+      },
+      "[social-creative] premium background skipped because REPLICATE_API_TOKEN is not set",
     );
+    return input.plan;
   }
 
   const prompt = buildCreativeBackgroundPrompt({
@@ -333,26 +338,47 @@ async function maybeGenerateCreativeBackground(input: {
   });
   const provider = createReplicateProvider(env.REPLICATE_API_TOKEN);
   const backgroundJobId = deriveUuid(input.data.idempotencyKey, "social-creative-background");
-  const result = await provider.generateImage(
-    {
-      prompt,
-      aspectRatio: input.data.aspectRatio,
-      preferredModelId: REPLICATE_MODEL_FLUX_2_PRO,
-      allowedModelIds: [
-        REPLICATE_MODEL_FLUX_2_PRO,
-        REPLICATE_MODEL_NANO_BANANA_2,
-        "google/imagen-4",
-        "ideogram-ai/ideogram-v3-turbo",
-        "black-forest-labs/flux-1.1-pro",
-      ],
-    },
-    { tenantId: input.data.tenantId, jobId: backgroundJobId },
-  );
+  let result: Awaited<ReturnType<typeof provider.generateImage>>;
+  try {
+    result = await provider.generateImage(
+      {
+        prompt,
+        aspectRatio: input.data.aspectRatio,
+        preferredModelId: REPLICATE_MODEL_FLUX_2_PRO,
+        allowedModelIds: [
+          REPLICATE_MODEL_FLUX_2_PRO,
+          REPLICATE_MODEL_NANO_BANANA_2,
+          "google/imagen-4",
+          "ideogram-ai/ideogram-v3-turbo",
+          "black-forest-labs/flux-1.1-pro",
+        ],
+      },
+      { tenantId: input.data.tenantId, jobId: backgroundJobId },
+    );
+  } catch (err) {
+    logger.warn(
+      {
+        postJobId: input.data.postJobId,
+        tenantId: input.data.tenantId,
+        err: String(err),
+      },
+      "[social-creative] premium background generation failed; using designed fallback",
+    );
+    return input.plan;
+  }
 
   if (result.costUsd * 100 > input.planCaps.perJobBudgetCents) {
-    throw new Error(
-      `Social creative background exceeded per-job budget (${result.model}: USD ${result.costUsd.toFixed(2)}).`,
+    logger.warn(
+      {
+        postJobId: input.data.postJobId,
+        tenantId: input.data.tenantId,
+        model: result.model,
+        costUsd: result.costUsd,
+        budgetCents: input.planCaps.perJobBudgetCents,
+      },
+      "[social-creative] premium background exceeded per-job budget; using designed fallback",
     );
+    return input.plan;
   }
 
   await insertAiUsage({
