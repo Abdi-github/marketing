@@ -71,6 +71,114 @@ const VARIANTS: Partial<Record<SectionType, Record<string, VariantInfo>>> = {
         </div>
       ),
     },
+    "editorial-bold": {
+      label: "Editorial bold",
+      description: "Oversized magazine-style headline with a restrained CTA row.",
+      preview: (
+        <div className="flex h-full flex-col justify-center gap-2 rounded bg-stone-50 p-3">
+          <div className="h-2 w-3/4 rounded bg-gray-950" />
+          <div className="h-2 w-2/3 rounded bg-gray-950" />
+          <div className="mt-2 flex items-end justify-between gap-2">
+            <div className="h-1 w-1/2 rounded bg-gray-400" />
+            <div className="h-2 w-12 rounded-full bg-gray-950" />
+          </div>
+        </div>
+      ),
+    },
+    "gradient-spotlight": {
+      label: "Spotlight",
+      description: "Dark startup-style hero with premium radial glow and centered CTA.",
+      preview: (
+        <div className="relative flex h-full flex-col items-center justify-center gap-1.5 overflow-hidden rounded bg-gray-950 p-3">
+          <div className="absolute left-3 top-2 h-10 w-10 rounded-full bg-purple-500/50 blur-md" />
+          <div className="absolute bottom-2 right-4 h-12 w-12 rounded-full bg-blue-500/40 blur-md" />
+          <div className="relative h-2 w-3/4 rounded bg-white/90" />
+          <div className="bg-white/45 relative h-1 w-1/2 rounded" />
+          <div className="relative mt-1 h-2 w-14 rounded-full bg-white" />
+        </div>
+      ),
+    },
+    "agency-bento": {
+      label: "Agency bento",
+      description: "Premium dark agency hero with proof stats and a bento showcase panel.",
+      preview: (
+        <div className="grid h-full grid-cols-2 gap-2 rounded bg-gray-950 p-2">
+          <div className="flex flex-col justify-center gap-1">
+            <div className="h-1.5 w-4/5 rounded bg-white/90" />
+            <div className="h-1.5 w-3/5 rounded bg-white/90" />
+            <div className="mt-1 h-1 w-2/3 rounded bg-white/40" />
+            <div className="mt-2 grid grid-cols-3 gap-1">
+              <div className="border-white/15 h-5 rounded border bg-white/10" />
+              <div className="border-white/15 h-5 rounded border bg-white/10" />
+              <div className="border-white/15 h-5 rounded border bg-white/10" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-1">
+            <div className="col-span-1 row-span-2 rounded bg-white/90" />
+            <div className="rounded bg-purple-400" />
+            <div className="border-white/15 rounded border bg-white/10" />
+          </div>
+        </div>
+      ),
+    },
+    "property-showcase": {
+      label: "Property showcase",
+      description: "Real-estate hero with editorial copy, image-led media, and detail card.",
+      preview: (
+        <div className="grid h-full grid-cols-2 overflow-hidden rounded bg-stone-100">
+          <div className="flex flex-col justify-center gap-1.5 p-2">
+            <div className="h-1.5 w-3/4 rounded bg-gray-900" />
+            <div className="h-1.5 w-2/3 rounded bg-gray-900" />
+            <div className="h-1 w-1/2 rounded bg-gray-400" />
+            <div className="mt-2 grid grid-cols-3 gap-1">
+              <div className="h-4 border-t border-emerald-700/40" />
+              <div className="h-4 border-t border-emerald-700/40" />
+              <div className="h-4 border-t border-emerald-700/40" />
+            </div>
+          </div>
+          <div className="relative bg-gradient-to-br from-stone-400 to-emerald-700">
+            <div className="bg-white/85 absolute inset-x-2 bottom-2 rounded p-1 shadow">
+              <div className="h-1 w-3/4 rounded bg-gray-800" />
+              <div className="mt-1 grid grid-cols-3 gap-1">
+                <div className="h-2 rounded bg-gray-200" />
+                <div className="h-2 rounded bg-gray-200" />
+                <div className="h-2 rounded bg-gray-200" />
+              </div>
+            </div>
+          </div>
+        </div>
+      ),
+    },
+    "clinic-trust": {
+      label: "Clinic trust",
+      description: "Calm healthcare hero with appointment CTA, assurances, and trust card.",
+      preview: (
+        <div className="grid h-full grid-cols-2 gap-2 rounded bg-emerald-50 p-2">
+          <div className="flex flex-col justify-center gap-1.5">
+            <div className="h-2 w-3/4 rounded bg-gray-900" />
+            <div className="h-2 w-2/3 rounded bg-gray-900" />
+            <div className="h-1 w-4/5 rounded bg-gray-400" />
+            <div className="mt-2 grid grid-cols-3 gap-1">
+              <div className="h-5 rounded bg-white shadow-sm" />
+              <div className="h-5 rounded bg-white shadow-sm" />
+              <div className="h-5 rounded bg-white shadow-sm" />
+            </div>
+          </div>
+          <div className="relative overflow-hidden rounded bg-gradient-to-br from-emerald-100 to-white shadow-sm">
+            <div className="absolute inset-x-2 bottom-2 rounded bg-white/90 p-1 shadow">
+              <div className="flex items-center gap-1">
+                <div className="h-4 w-4 rounded-full bg-emerald-200" />
+                <div className="h-1 w-2/3 rounded bg-gray-800" />
+              </div>
+              <div className="mt-1 grid grid-cols-2 gap-1">
+                <div className="h-3 rounded bg-emerald-50" />
+                <div className="h-3 rounded bg-emerald-50" />
+              </div>
+            </div>
+          </div>
+        </div>
+      ),
+    },
   },
   about: {
     "text-image-split": {
@@ -136,6 +244,35 @@ const VARIANTS: Partial<Record<SectionType, Record<string, VariantInfo>>> = {
         </div>
       ),
     },
+    "trust-proof": {
+      label: "Trust proof",
+      description: "Trust-led layout with reassurance points and proof metrics.",
+      preview: (
+        <div className="grid h-full grid-cols-2 gap-2 rounded bg-emerald-50 p-2">
+          <div className="flex flex-col justify-center gap-1">
+            <div className="h-1.5 w-4/5 rounded bg-gray-900" />
+            <div className="h-1 w-full rounded bg-gray-400" />
+            <div className="mt-1 grid grid-cols-2 gap-1">
+              <div className="h-5 rounded bg-white shadow-sm" />
+              <div className="h-5 rounded bg-white shadow-sm" />
+              <div className="h-5 rounded bg-white shadow-sm" />
+              <div className="h-5 rounded bg-white shadow-sm" />
+            </div>
+          </div>
+          <div className="flex flex-col justify-between rounded bg-white p-1.5 shadow-sm">
+            <div className="flex items-center gap-1">
+              <div className="h-4 w-4 rounded-full bg-emerald-200" />
+              <div className="h-1 w-1/2 rounded bg-gray-700" />
+            </div>
+            <div className="grid grid-cols-3 gap-1">
+              <div className="h-5 rounded bg-emerald-50" />
+              <div className="h-5 rounded bg-emerald-50" />
+              <div className="h-5 rounded bg-emerald-50" />
+            </div>
+          </div>
+        </div>
+      ),
+    },
   },
   gallery: {
     "masonry-3": {
@@ -188,6 +325,18 @@ const VARIANTS: Partial<Record<SectionType, Record<string, VariantInfo>>> = {
             <div className="flex-1 rounded bg-gray-300" />
             <div className="flex-1 rounded bg-gray-300" />
           </div>
+        </div>
+      ),
+    },
+    "portfolio-bento": {
+      label: "Portfolio bento",
+      description: "Premium case-study grid with one featured tile and proof captions.",
+      preview: (
+        <div className="grid h-full grid-cols-3 grid-rows-2 gap-1 rounded bg-white p-2">
+          <div className="row-span-2 rounded bg-gradient-to-br from-gray-300 to-gray-500" />
+          <div className="rounded bg-gray-200" />
+          <div className="rounded bg-gray-300" />
+          <div className="col-span-2 rounded bg-gradient-to-br from-purple-200 to-gray-300" />
         </div>
       ),
     },
@@ -360,6 +509,36 @@ const VARIANTS: Partial<Record<SectionType, Record<string, VariantInfo>>> = {
         </div>
       ),
     },
+    "quote-path": {
+      label: "Quote path",
+      description: "Three-step service path with CTA and optional price or offer chip.",
+      preview: (
+        <div className="flex h-full flex-col gap-1.5 rounded bg-gray-50 p-2">
+          <div className="flex items-end justify-between gap-2">
+            <div className="h-2 w-1/2 rounded bg-gray-900" />
+            <div className="h-1 w-1/3 rounded bg-gray-400" />
+          </div>
+          <div className="grid flex-1 grid-cols-3 gap-1">
+            <div className="flex flex-col justify-between rounded bg-white p-1 shadow-sm">
+              <div className="h-3 w-3 rounded-full bg-purple-500" />
+              <div className="h-1 w-3/4 rounded bg-gray-700" />
+            </div>
+            <div className="flex flex-col justify-between rounded bg-white p-1 shadow-sm">
+              <div className="h-3 w-3 rounded-full bg-purple-500" />
+              <div className="h-1 w-3/4 rounded bg-gray-700" />
+            </div>
+            <div className="flex flex-col justify-between rounded bg-white p-1 shadow-sm">
+              <div className="h-3 w-3 rounded-full bg-purple-500" />
+              <div className="h-1 w-3/4 rounded bg-gray-700" />
+            </div>
+          </div>
+          <div className="flex items-center justify-between rounded bg-white p-1 shadow-sm">
+            <div className="h-1.5 w-1/3 rounded bg-gray-800" />
+            <div className="h-2 w-10 rounded-full bg-purple-500" />
+          </div>
+        </div>
+      ),
+    },
   },
   faq: {
     accordion: {
@@ -515,6 +694,33 @@ const VARIANTS: Partial<Record<SectionType, Record<string, VariantInfo>>> = {
             <div className="h-1.5 flex-1 rounded bg-gray-200" />
             <div className="h-1.5 flex-1 rounded bg-gray-200" />
             <div className="h-1.5 w-3 rounded bg-purple-500" />
+          </div>
+        </div>
+      ),
+    },
+    "consultation-panel": {
+      label: "Consultation panel",
+      description: "Premium conversion panel with assurances beside the form.",
+      preview: (
+        <div className="grid h-full grid-cols-2 gap-2 rounded bg-white p-2">
+          <div className="flex flex-col justify-center gap-1">
+            <div className="h-2 w-3/4 rounded bg-gray-900" />
+            <div className="h-1 w-full rounded bg-gray-400" />
+            <div className="mt-2 grid grid-cols-3 gap-1">
+              <div className="h-5 rounded bg-gray-100" />
+              <div className="h-5 rounded bg-gray-100" />
+              <div className="h-5 rounded bg-gray-100" />
+            </div>
+          </div>
+          <div className="rounded bg-gray-50 p-1">
+            <div className="mb-1 rounded bg-purple-500 p-1">
+              <div className="h-1.5 w-3/4 rounded bg-white" />
+            </div>
+            <div className="flex flex-col gap-1 rounded bg-white p-1 shadow-sm">
+              <div className="h-1.5 rounded bg-gray-200" />
+              <div className="h-1.5 rounded bg-gray-200" />
+              <div className="h-2 rounded bg-purple-500" />
+            </div>
           </div>
         </div>
       ),

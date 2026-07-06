@@ -28,13 +28,18 @@ import {
   HeroSplitFormRight,
   HeroEditorialBold,
   HeroGradientSpotlight,
+  HeroAgencyBento,
+  HeroPropertyShowcase,
+  HeroClinicTrust,
   AboutTextImageSplit,
   AboutTeamGrid,
   AboutValues3col,
+  AboutTrustProof,
   GalleryMasonry3,
   GalleryGrid2x2,
   GalleryCarouselStrip,
   GalleryFeatureSide,
+  GalleryPortfolioBento,
   TestimonialsCards3col,
   TestimonialsLargeQuote,
   TestimonialsListWithAvatars,
@@ -45,6 +50,7 @@ import {
   OfferBannerCentered,
   OfferSplitImagePrice,
   OfferCountdownBold,
+  OfferQuotePath,
   FAQAccordion,
   FAQTwoColumn,
   FAQNumberedList,
@@ -54,6 +60,7 @@ import {
   LeadFormCardCentered,
   LeadFormSplitSideImage,
   LeadFormFullWidthBar,
+  LeadFormConsultationPanel,
   WhatsAppCtaCenteredButton,
   WhatsAppCtaBannerStrip,
 } from "./sections";
@@ -121,6 +128,9 @@ export function SectionBlock({
       if (v === "editorial-bold") return <HeroEditorialBold section={s} brandPrimary={bp} />;
       if (v === "gradient-spotlight")
         return <HeroGradientSpotlight section={s} brandPrimary={bp} />;
+      if (v === "agency-bento") return <HeroAgencyBento section={s} brandPrimary={bp} />;
+      if (v === "property-showcase") return <HeroPropertyShowcase section={s} brandPrimary={bp} />;
+      if (v === "clinic-trust") return <HeroClinicTrust section={s} brandPrimary={bp} />;
       return <HeroCentered section={s} brandPrimary={bp} />;
     }
 
@@ -131,6 +141,7 @@ export function SectionBlock({
       if (v === "team-grid") return <AboutTeamGrid section={s} brandPrimary={bp} />;
       if (v === "values-3col")
         return <AboutValues3col section={s} brandPrimary={bp} darkMode={dark} />;
+      if (v === "trust-proof") return <AboutTrustProof section={s} brandPrimary={bp} />;
       return <AboutTextImageSplit section={s} brandPrimary={bp} />;
     }
 
@@ -140,6 +151,7 @@ export function SectionBlock({
       if (v === "grid-2x2") return <GalleryGrid2x2 section={s} brandPrimary={bp} />;
       if (v === "carousel-strip") return <GalleryCarouselStrip section={s} brandPrimary={bp} />;
       if (v === "feature-side") return <GalleryFeatureSide section={s} brandPrimary={bp} />;
+      if (v === "portfolio-bento") return <GalleryPortfolioBento section={s} brandPrimary={bp} />;
       return <GalleryMasonry3 section={s} brandPrimary={bp} />;
     }
 
@@ -169,6 +181,7 @@ export function SectionBlock({
       const accent = section.tone === "accent";
       if (v === "split-image-price") return <OfferSplitImagePrice section={s} brandPrimary={bp} />;
       if (v === "countdown-bold") return <OfferCountdownBold section={s} brandPrimary={bp} />;
+      if (v === "quote-path") return <OfferQuotePath section={s} brandPrimary={bp} />;
       return <OfferBannerCentered section={s} brandPrimary={bp} accentMode={accent} />;
     }
 
@@ -206,6 +219,14 @@ export function SectionBlock({
             brandPrimary={bp}
             formContent={formContent}
             accentMode={accent}
+          />
+        );
+      if (v === "consultation-panel")
+        return (
+          <LeadFormConsultationPanel
+            section={section}
+            brandPrimary={bp}
+            formContent={formContent}
           />
         );
       return <LeadFormCardCentered section={section} brandPrimary={bp} formContent={formContent} />;

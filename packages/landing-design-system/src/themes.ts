@@ -5,6 +5,7 @@
 import type { PaletteKey } from "./palettes";
 import type { FontPairKey } from "./fonts";
 import type { RadiusDensity, TypeRatio, ShadowKey } from "./tokens";
+import type { BackgroundStyleKey } from "./backgrounds";
 
 export type ThemeVibe =
   | "minimal"
@@ -28,6 +29,8 @@ export type Theme = {
   typeRatio: TypeRatio;
   /** Default section shadow key. */
   shadow: ShadowKey;
+  /** Registered page background treatment. */
+  backgroundStyle?: BackgroundStyleKey;
   vibe: ThemeVibe;
   swissCoded: boolean;
   /** Verticals this theme is best matched to (informs gallery filter + wizard scoring). */
@@ -113,6 +116,7 @@ export const THEMES: readonly Theme[] = [
     radius: "modest",
     typeRatio: "cozy",
     shadow: "xs",
+    backgroundStyle: "clean",
     vibe: "minimal",
     swissCoded: false,
     bestFor: ["service", "agency", "software", "real-estate"],
@@ -126,6 +130,7 @@ export const THEMES: readonly Theme[] = [
     radius: "sharp",
     typeRatio: "compact",
     shadow: "sm",
+    backgroundStyle: "grid",
     vibe: "minimal",
     swissCoded: false,
     bestFor: ["agency", "software", "service"],
@@ -139,6 +144,7 @@ export const THEMES: readonly Theme[] = [
     radius: "rounded",
     typeRatio: "airy",
     shadow: "sm",
+    backgroundStyle: "paper",
     vibe: "elegant",
     swissCoded: false,
     bestFor: ["clinic", "retail", "service"],
@@ -153,6 +159,7 @@ export const THEMES: readonly Theme[] = [
     radius: "modest",
     typeRatio: "airy",
     shadow: "lg",
+    backgroundStyle: "image-led",
     vibe: "luxe",
     swissCoded: false,
     bestFor: ["real-estate", "event", "service", "retail"],
@@ -166,6 +173,7 @@ export const THEMES: readonly Theme[] = [
     radius: "rounded",
     typeRatio: "cozy",
     shadow: "sm",
+    backgroundStyle: "subtle-noise",
     vibe: "minimal",
     swissCoded: false,
     bestFor: ["clinic", "real-estate", "service"],
@@ -179,6 +187,7 @@ export const THEMES: readonly Theme[] = [
     radius: "rounded",
     typeRatio: "airy",
     shadow: "md",
+    backgroundStyle: "paper",
     vibe: "elegant",
     swissCoded: false,
     bestFor: ["clinic", "cafe", "retail", "service"],
@@ -192,6 +201,7 @@ export const THEMES: readonly Theme[] = [
     radius: "sharp",
     typeRatio: "compact",
     shadow: "xs",
+    backgroundStyle: "clean",
     vibe: "minimal",
     swissCoded: false,
     bestFor: ["service", "real-estate", "clinic", "trades"],
@@ -206,6 +216,7 @@ export const THEMES: readonly Theme[] = [
     radius: "modest",
     typeRatio: "cozy",
     shadow: "sm",
+    backgroundStyle: "grid",
     vibe: "swiss",
     swissCoded: true,
     bestFor: ["service", "agency", "software", "trades"],
@@ -219,6 +230,7 @@ export const THEMES: readonly Theme[] = [
     radius: "rounded",
     typeRatio: "airy",
     shadow: "md",
+    backgroundStyle: "spotlight",
     vibe: "editorial",
     swissCoded: true,
     bestFor: ["event", "restaurant", "cafe"],
@@ -232,6 +244,7 @@ export const THEMES: readonly Theme[] = [
     radius: "sharp",
     typeRatio: "compact",
     shadow: "xs",
+    backgroundStyle: "clean",
     vibe: "swiss",
     swissCoded: true,
     bestFor: ["trades", "service", "clinic"],

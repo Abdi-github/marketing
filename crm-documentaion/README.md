@@ -61,3 +61,5 @@ Observed product notes:
 9. [CRM UX audit results](09-crm-ux-audit-results-and-improvements.md)
 10. [Full CRM browser walkthrough plan](10-full-crm-browser-walkthrough-plan.md)
 11. [Manual CRM scenario playbook](11-manual-crm-scenario-playbook.md)
+12. [Current CRM walkthrough state](12-current-crm-walkthrough-state.md)
+13. [Landing generator visual QA walkthrough](13-landing-generator-visual-qa-walkthrough.md)

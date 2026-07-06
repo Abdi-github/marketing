@@ -15,6 +15,8 @@ import {
   FONT_PAIRS_BY_KEY,
   PALETTES_BY_KEY,
   THEMES,
+  BACKGROUND_STYLES,
+  type BackgroundStyleKey,
   type Theme,
 } from "@marketing/landing-design-system";
 import { trpc } from "../../../../../../lib/trpc";
@@ -204,6 +206,59 @@ function radiusLabel(radius: Theme["radius"]): string {
   if (radius === "sharp") return "Sharp";
   if (radius === "rounded") return "Rounded";
   return "Soft";
+}
+
+function backgroundStyleForTheme(theme: Theme): BackgroundStyleKey {
+  if (theme.backgroundStyle) return theme.backgroundStyle;
+  if (theme.vibe === "bold") return "spotlight";
+  if (theme.vibe === "editorial" || theme.vibe === "elegant") return "paper";
+  if (theme.vibe === "luxe") return "image-led";
+  if (theme.vibe === "swiss") return "grid";
+  return "clean";
+}
+
+function themePreviewBackground(theme: Theme): React.CSSProperties {
+  const palette = paletteForTheme(theme);
+  const surface = palette?.colors.surface ?? "#f8fafc";
+  const primary = palette?.colors.primary ?? "#111827";
+  const accent = palette?.colors.accent ?? primary;
+  const text = palette?.colors.text ?? "#111827";
+  const style = backgroundStyleForTheme(theme);
+
+  if (style === "grid") {
+    return {
+      backgroundColor: surface,
+      backgroundImage: `linear-gradient(${text}12 1px, transparent 1px), linear-gradient(90deg, ${text}12 1px, transparent 1px)`,
+      backgroundSize: "24px 24px",
+    };
+  }
+  if (style === "paper") {
+    return {
+      backgroundColor: surface,
+      backgroundImage: `radial-gradient(circle at 16% 18%, ${accent}24, transparent 34%), linear-gradient(135deg, ${text}0d 0 1px, transparent 1px)`,
+      backgroundSize: "auto, 14px 14px",
+    };
+  }
+  if (style === "subtle-noise") {
+    return {
+      backgroundColor: surface,
+      backgroundImage: `radial-gradient(circle at 1px 1px, ${text}18 1px, transparent 0), radial-gradient(circle at 82% 10%, ${primary}1f, transparent 30%)`,
+      backgroundSize: "16px 16px, auto",
+    };
+  }
+  if (style === "spotlight") {
+    return {
+      backgroundColor: surface,
+      backgroundImage: `radial-gradient(circle at 24% 12%, ${primary}30, transparent 38%), radial-gradient(circle at 80% 18%, ${accent}24, transparent 32%)`,
+    };
+  }
+  if (style === "image-led") {
+    return {
+      backgroundColor: surface,
+      backgroundImage: `linear-gradient(135deg, ${primary}18, transparent 42%)`,
+    };
+  }
+  return { background: surface };
 }
 
 function scoreThemeForState(theme: Theme, state: WizardState): number {
@@ -1209,6 +1264,7 @@ function StepTheme({ state, setState }: StepProps) {
         {visible.map((theme) => {
           const palette = paletteForTheme(theme);
           const font = FONT_PAIRS_BY_KEY.get(theme.fontPairKey);
+          const backgroundStyle = backgroundStyleForTheme(theme);
           return (
             <button
               key={theme.key}
@@ -1221,10 +1277,7 @@ function StepTheme({ state, setState }: StepProps) {
               }
               className={`overflow-hidden rounded-xl border-2 bg-white text-left transition-all ${state.paletteKey === theme.key ? "scale-[1.02] border-purple-600 shadow-lg" : "border-gray-200 hover:border-purple-300"}`}
             >
-              <div
-                className="relative h-28"
-                style={{ background: palette?.colors.surface ?? "#f8fafc" }}
-              >
+              <div className="relative h-28" style={themePreviewBackground(theme)}>
                 <div className="absolute right-4 top-4 flex -space-x-2">
                   {palette &&
                     [
@@ -1261,6 +1314,9 @@ function StepTheme({ state, setState }: StepProps) {
                   </span>
                   <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600">
                     {radiusLabel(theme.radius)}
+                  </span>
+                  <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600">
+                    {BACKGROUND_STYLES[backgroundStyle].name}
                   </span>
                   {theme.bestFor.slice(0, 2).map((tag) => (
                     <span

@@ -245,3 +245,106 @@ export function OfferCountdownBold({ section, brandPrimary }: Props) {
     </>
   );
 }
+
+export function OfferQuotePath({ section, brandPrimary }: Props) {
+  const { heading, body, extras } = section;
+  const ctaHref = normalizeLandingCtaHref(extras?.ctaHref, {
+    preferLeadForContact: isLeadActionLabel(extras?.ctaText),
+  });
+  const steps = [
+    {
+      title: "Choose the right path",
+      body: "Start with the service, property, treatment, or project you need.",
+    },
+    {
+      title: "Share the essentials",
+      body: "Send the key details so the team can qualify the request quickly.",
+    },
+    {
+      title: "Get a clear next step",
+      body: "Receive a practical reply, appointment option, or tailored quote.",
+    },
+  ];
+  return (
+    <>
+      <style>{`
+        .lp-oqp { position:relative; overflow:hidden; background:var(--lp-surface,#f9fafb); padding:6.5rem 0; }
+        .lp-oqp::before { content:""; position:absolute; inset:0; pointer-events:none; background:radial-gradient(circle at 18% 8%, ${brandPrimary}14, transparent 32%), radial-gradient(circle at 90% 20%, ${brandPrimary}0f, transparent 28%); }
+        .lp-oqp__inner { position:relative; z-index:1; max-width:1160px; margin:0 auto; padding:0 1.5rem; }
+        .lp-oqp__top { display:grid; grid-template-columns:minmax(0,0.86fr) minmax(280px,0.46fr); gap:2rem; align-items:end; margin-bottom:2.25rem; }
+        .lp-oqp__eyebrow { font-size:0.72rem; font-weight:800; letter-spacing:0.14em; text-transform:uppercase; color:${brandPrimary}; margin:0 0 1rem; }
+        .lp-oqp__h2 { font-family:var(--font-heading,system-ui); font-size:clamp(2rem,4.8vw,3.8rem); font-weight:850; color:var(--lp-text,#111827); line-height:1.03; letter-spacing:-0.035em; margin:0; max-width:12ch; }
+        .lp-oqp__body { color:var(--lp-muted,#6b7280); font-size:1.02rem; line-height:1.75; margin:0; }
+        .lp-oqp__grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:0.9rem; }
+        .lp-oqp__card { position:relative; min-height:250px; display:flex; flex-direction:column; justify-content:space-between; border:1px solid var(--lp-border,rgba(17,24,39,0.1)); border-radius:var(--lp-radius-xl,24px); background:var(--lp-card,#fff); padding:1.15rem; box-shadow:var(--lp-shadow-card,0 18px 46px rgba(17,24,39,0.08)); overflow:hidden; }
+        .lp-oqp__card::before { content:""; position:absolute; inset:auto -28% -38% auto; width:12rem; height:12rem; border-radius:999px; background:${brandPrimary}10; }
+        .lp-oqp__num { position:relative; z-index:1; width:2.25rem; height:2.25rem; border-radius:999px; display:flex; align-items:center; justify-content:center; background:${brandPrimary}; color:var(--lp-on-primary,#fff); font-weight:900; box-shadow:0 12px 30px ${brandPrimary}30; }
+        .lp-oqp__title { position:relative; z-index:1; font-family:var(--font-heading,system-ui); color:var(--lp-text,#111827); font-size:1.25rem; line-height:1.18; letter-spacing:-0.02em; font-weight:850; margin:1.5rem 0 0.65rem; }
+        .lp-oqp__copy { position:relative; z-index:1; color:var(--lp-muted,#6b7280); font-size:0.94rem; line-height:1.65; margin:0; }
+        .lp-oqp__footer { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:1rem; margin-top:1rem; border:1px solid var(--lp-border,rgba(17,24,39,0.1)); border-radius:var(--lp-radius-xl,24px); background:var(--lp-card,#fff); padding:1rem; box-shadow:var(--lp-shadow-card,0 18px 46px rgba(17,24,39,0.07)); }
+        .lp-oqp__deal { display:flex; align-items:baseline; gap:0.7rem; min-width:0; }
+        .lp-oqp__price { color:var(--lp-text,#111827); font-weight:900; font-size:1.35rem; letter-spacing:-0.03em; }
+        .lp-oqp__old { color:var(--lp-muted,#9ca3af); text-decoration:line-through; font-weight:700; }
+        .lp-oqp__valid { color:var(--lp-muted,#6b7280); font-size:0.82rem; }
+        .lp-oqp__cta { display:inline-flex; align-items:center; justify-content:center; gap:0.55rem; padding:0.96rem 1.25rem; border-radius:999px; background:${brandPrimary}; color:var(--lp-on-primary,#fff); font-weight:850; text-decoration:none; box-shadow:0 14px 38px ${brandPrimary}35; }
+        @media(max-width:900px){ .lp-oqp__top{grid-template-columns:1fr;} .lp-oqp__h2{max-width:14ch;} .lp-oqp__grid{grid-template-columns:1fr;} .lp-oqp__card{min-height:210px;} }
+        @media(max-width:640px){ .lp-oqp{padding:5rem 0;} .lp-oqp__inner{padding:0 1rem;} .lp-oqp__footer{align-items:stretch;flex-direction:column;} .lp-oqp__cta{width:100%;} }
+      `}</style>
+      <section className="lp-oqp">
+        <div className="lp-oqp__inner">
+          <div className="lp-oqp__top">
+            <div>
+              <p className="lp-oqp__eyebrow">Start here</p>
+              <h2 className="lp-oqp__h2">{renderRich(heading)}</h2>
+            </div>
+            {body && <p className="lp-oqp__body">{renderRich(body)}</p>}
+          </div>
+          <div className="lp-oqp__grid">
+            {steps.map((step, index) => (
+              <article key={step.title} className="lp-oqp__card">
+                <div>
+                  <div className="lp-oqp__num">{index + 1}</div>
+                  <h3 className="lp-oqp__title">{step.title}</h3>
+                  <p className="lp-oqp__copy">{step.body}</p>
+                </div>
+              </article>
+            ))}
+          </div>
+          <div className="lp-oqp__footer">
+            <div className="lp-oqp__deal">
+              {extras?.price ? (
+                <span className="lp-oqp__price">{extras.price}</span>
+              ) : (
+                <span className="lp-oqp__price">Tailored next step</span>
+              )}
+              {extras?.oldPrice && <span className="lp-oqp__old">{extras.oldPrice}</span>}
+              {extras?.validUntil && (
+                <span className="lp-oqp__valid">Until {extras.validUntil}</span>
+              )}
+            </div>
+            {extras?.ctaText && (
+              <a
+                href={ctaHref}
+                className="lp-oqp__cta"
+                {...buildTrackedCtaProps({
+                  label: extras.ctaText,
+                  href: ctaHref,
+                  section: "offer",
+                })}
+              >
+                {extras.ctaText}
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+                  <path
+                    fillRule="evenodd"
+                    d="M2 8a.75.75 0 01.75-.75h8.69L8.22 4.03a.75.75 0 011.06-1.06l4.5 4.5a.75.75 0 010 1.06l-4.5 4.5a.75.75 0 01-1.06-1.06l3.22-3.22H2.75A.75.75 0 012 8z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </a>
+            )}
+          </div>
+        </div>
+      </section>
+    </>
+  );
+}

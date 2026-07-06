@@ -1026,6 +1026,13 @@ Goal-Übersetzung:
 - "appointment_booking" → Vertrauen + Verfügbarkeit betonen.
 - "info_brochure"       → erzählend, atmosphärisch, ohne harten CTA.
 
+Section role rules:
+- hero = one concrete promise, audience fit, and action direction.
+- about = trust proof: team, process, credentials, local context, or values.
+- gallery = proof captions: real work, spaces, products, outcomes, or atmosphere.
+- offer = conversion path: benefit, eligibility/timing, and why act now.
+- lead_form = expectation setting: what to send and what happens next.
+
 Sprache: Schweizerdeutsch-nahem Hochdeutsch. Keine Marketingfloskeln.
 Pro Sektion: prägnante Überschrift + 2–4 Sätze Fliesstext.
 Du MUSST ALLE vorgegebenen Sektionen befüllen — keine hinzufügen, keine weglassen.
@@ -1061,6 +1068,13 @@ Goal translation:
 - "event_signup"        → date/place prominent + social proof.
 - "appointment_booking" → trust + availability.
 - "info_brochure"       → narrative, atmospheric, no hard CTA.
+
+Section role rules:
+- hero = one concrete promise, audience fit, and action direction.
+- about = trust proof: team, process, credentials, local context, or values.
+- gallery = proof captions: real work, spaces, products, outcomes, or atmosphere.
+- offer = conversion path: benefit, eligibility/timing, and why act now.
+- lead_form = expectation setting: what to send and what happens next.
 
 Language: clear, direct English. No marketing clichés.
 Per section: concise heading + 2–4 sentences of body copy.
@@ -1099,6 +1113,13 @@ Traduction d'objectif :
 - « appointment_booking » → confiance + disponibilité.
 - « info_brochure »       → narratif, atmosphérique, sans CTA dur.
 
+Section role rules:
+- hero = one concrete promise, audience fit, and action direction.
+- about = trust proof: team, process, credentials, local context, or values.
+- gallery = proof captions: real work, spaces, products, outcomes, or atmosphere.
+- offer = conversion path: benefit, eligibility/timing, and why act now.
+- lead_form = expectation setting: what to send and what happens next.
+
 Langue : français de Suisse romande, ton chaleureux et direct. Pas de clichés.
 Par section : titre concis + 2–4 phrases de texte.
 Vous DEVEZ remplir TOUTES les sections — pas d'ajouts, pas de suppressions.
@@ -1135,6 +1156,13 @@ Traduzione obiettivo:
 - "event_signup"        → data/luogo in evidenza + prova sociale.
 - "appointment_booking" → fiducia + disponibilità.
 - "info_brochure"       → narrativo, atmosferico, senza CTA forte.
+
+Section role rules:
+- hero = one concrete promise, audience fit, and action direction.
+- about = trust proof: team, process, credentials, local context, or values.
+- gallery = proof captions: real work, spaces, products, outcomes, or atmosphere.
+- offer = conversion path: benefit, eligibility/timing, and why act now.
+- lead_form = expectation setting: what to send and what happens next.
 
 Lingua: italiano di Svizzera, tono caldo e diretto. Niente clichés.
 Per ogni sezione: titolo conciso + 2–4 frasi di testo.

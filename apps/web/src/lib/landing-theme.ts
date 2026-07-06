@@ -3,9 +3,11 @@ import {
   getPalette,
   RADIUS_DENSITIES,
   SHADOWS,
+  isBackgroundStyleKey,
   getTheme,
   googleFontsUrlForPair,
 } from "@marketing/landing-design-system";
+import type { BackgroundStyleKey, Theme } from "@marketing/landing-design-system";
 import type { CSSProperties } from "react";
 
 type BrandThemeFallback = {
@@ -88,6 +90,80 @@ function fontStack(font?: string | null, fallback = "system-ui, sans-serif"): st
   return font?.trim() ? font : fallback;
 }
 
+function backgroundStyleForTheme(theme: Theme | undefined): BackgroundStyleKey {
+  if (theme?.backgroundStyle) return theme.backgroundStyle;
+  if (!theme) return "clean";
+  if (theme.vibe === "bold") return "spotlight";
+  if (theme.vibe === "editorial" || theme.vibe === "elegant") return "paper";
+  if (theme.vibe === "luxe") return "image-led";
+  if (theme.vibe === "swiss") return "grid";
+  return "clean";
+}
+
+function backgroundStyleFromStepData(
+  stepData: Record<string, unknown> | null | undefined,
+): BackgroundStyleKey | null {
+  const value = stepData?.["backgroundStyle"];
+  return typeof value === "string" && isBackgroundStyleKey(value) ? value : null;
+}
+
+function pageBackgroundVars({
+  style,
+  canvas,
+  surface,
+  primary,
+  accent,
+  text,
+}: {
+  style: BackgroundStyleKey;
+  canvas: string;
+  surface: string;
+  primary: string;
+  accent: string;
+  text: string;
+}): CSSProperties {
+  if (style === "paper") {
+    return {
+      ["--lp-page-bg" as string]: canvas,
+      ["--lp-page-bg-image" as string]: `radial-gradient(circle at 18% 12%, ${rgba(accent, 0.12)}, transparent 30%), linear-gradient(135deg, ${rgba(text, 0.035)} 0 1px, transparent 1px)`,
+      ["--lp-page-bg-size" as string]: "auto, 18px 18px",
+    };
+  }
+  if (style === "grid") {
+    return {
+      ["--lp-page-bg" as string]: canvas,
+      ["--lp-page-bg-image" as string]: `linear-gradient(${rgba(text, 0.055)} 1px, transparent 1px), linear-gradient(90deg, ${rgba(text, 0.055)} 1px, transparent 1px)`,
+      ["--lp-page-bg-size" as string]: "56px 56px, 56px 56px",
+    };
+  }
+  if (style === "subtle-noise") {
+    return {
+      ["--lp-page-bg" as string]: canvas,
+      ["--lp-page-bg-image" as string]: `radial-gradient(circle at 1px 1px, ${rgba(text, 0.075)} 1px, transparent 0), radial-gradient(circle at 82% 8%, ${rgba(primary, 0.1)}, transparent 28%)`,
+      ["--lp-page-bg-size" as string]: "22px 22px, auto",
+    };
+  }
+  if (style === "spotlight") {
+    return {
+      ["--lp-page-bg" as string]: surface,
+      ["--lp-page-bg-image" as string]: `radial-gradient(circle at 24% 8%, ${rgba(primary, 0.18)}, transparent 34%), radial-gradient(circle at 86% 18%, ${rgba(accent, 0.12)}, transparent 30%)`,
+      ["--lp-page-bg-size" as string]: "auto, auto",
+    };
+  }
+  if (style === "image-led") {
+    return {
+      ["--lp-page-bg" as string]: surface,
+      ["--lp-page-bg-image" as string]: `linear-gradient(180deg, ${rgba(primary, 0.045)}, transparent 34%)`,
+      ["--lp-page-bg-size" as string]: "auto",
+    };
+  }
+  return {
+    ["--lp-page-bg" as string]: canvas,
+    ["--lp-page-bg-image" as string]: "none",
+    ["--lp-page-bg-size" as string]: "auto",
+  };
+}
+
 export function resolveLandingTheme(input: ResolveLandingThemeInput): ResolvedLandingTheme {
   const theme = input.themeKey ? getTheme(input.themeKey) : undefined;
   const palette = theme
@@ -116,6 +192,8 @@ export function resolveLandingTheme(input: ResolveLandingThemeInput): ResolvedLa
     luminance(surface) < 0.25 ? mixHex(surface, "#ffffff", 0.16) : mixHex(surface, "#ffffff", 0.66);
   const radius = theme ? RADIUS_DENSITIES[theme.radius] : RADIUS_DENSITIES.modest;
   const themeShadow = theme ? SHADOWS[theme.shadow] : `0 8px 28px ${rgba(text, 0.08)}`;
+  const backgroundStyle =
+    backgroundStyleFromStepData(input.stepData) ?? backgroundStyleForTheme(theme);
 
   const fontHeading = fontPair
     ? `'${fontPair.heading.family}', ${fontPair.heading.fallback}`
@@ -155,6 +233,14 @@ export function resolveLandingTheme(input: ResolveLandingThemeInput): ResolvedLa
     ["--lp-nav-border" as string]: rgba(text, 0.1),
     ["--lp-shadow-soft" as string]: `0 18px 46px ${rgba(text, 0.1)}`,
     ["--lp-shadow-card" as string]: themeShadow,
+    ...pageBackgroundVars({
+      style: backgroundStyle,
+      canvas,
+      surface,
+      primary,
+      accent,
+      text,
+    }),
   };
 
   return {
@@ -173,7 +259,9 @@ export const LANDING_THEME_GLOBAL_CSS = `
   body { margin: 0; background: var(--lp-canvas, #ffffff); color: var(--lp-text, #111827); }
   .lp-themed-page {
     min-height: 100vh;
-    background: var(--lp-canvas, #ffffff);
+    background-color: var(--lp-page-bg, var(--lp-canvas, #ffffff));
+    background-image: var(--lp-page-bg-image, none);
+    background-size: var(--lp-page-bg-size, auto);
     color: var(--lp-text, #111827);
     font-family: var(--font-body, system-ui, sans-serif);
   }

@@ -167,6 +167,10 @@ describe("landing-page designPlan", () => {
       goals: ["lead_capture"],
       vibe: { minimalBold: 0.65, classicModern: 0.8, calmEnergetic: 0.3 },
       expectedSubvertical: "agency-digital",
+      expectedHeroVariant: "agency-bento",
+      expectedGalleryVariant: "portfolio-bento",
+      expectedOfferVariant: "quote-path",
+      expectedLeadFormVariant: "consultation-panel",
     },
     {
       name: "boutique real estate agency",
@@ -175,6 +179,10 @@ describe("landing-page designPlan", () => {
       goals: ["lead_capture"],
       vibe: { minimalBold: -0.1, classicModern: 0.55, calmEnergetic: -0.2 },
       expectedSubvertical: "real-estate-luxury",
+      expectedHeroVariant: "property-showcase",
+      expectedGalleryVariant: "portfolio-bento",
+      expectedOfferVariant: "quote-path",
+      expectedLeadFormVariant: "consultation-panel",
     },
     {
       name: "clinic appointment",
@@ -183,6 +191,10 @@ describe("landing-page designPlan", () => {
       goals: ["appointment_booking"],
       vibe: { minimalBold: -0.35, classicModern: 0.15, calmEnergetic: -0.5 },
       expectedSubvertical: "clinic-trust",
+      expectedHeroVariant: "clinic-trust",
+      expectedAboutVariant: "trust-proof",
+      expectedOfferVariant: "quote-path",
+      expectedLeadFormVariant: "consultation-panel",
     },
     {
       name: "local quote service",
@@ -191,6 +203,9 @@ describe("landing-page designPlan", () => {
       goals: ["lead_capture"],
       vibe: { minimalBold: 0.15, classicModern: 0.25, calmEnergetic: 0.35 },
       expectedSubvertical: "local-trades",
+      expectedAboutVariant: "trust-proof",
+      expectedOfferVariant: "quote-path",
+      expectedLeadFormVariant: "consultation-panel",
     },
     {
       name: "retail boutique",
@@ -225,6 +240,21 @@ describe("landing-page designPlan", () => {
     }
     expect(KNOWN_THEME_KEYS.has(recipe.themeKey)).toBe(true);
     expect(recipe.paletteKey).toBe(recipe.themeKey);
+    if ("expectedHeroVariant" in fixture) {
+      expect(plan.styleContract.heroVariants).toContain(fixture.expectedHeroVariant);
+    }
+    if ("expectedGalleryVariant" in fixture) {
+      expect(plan.styleContract.variantPools.gallery).toContain(fixture.expectedGalleryVariant);
+    }
+    if ("expectedAboutVariant" in fixture) {
+      expect(plan.styleContract.variantPools.about).toContain(fixture.expectedAboutVariant);
+    }
+    if ("expectedOfferVariant" in fixture) {
+      expect(plan.styleContract.variantPools.offer).toContain(fixture.expectedOfferVariant);
+    }
+    if ("expectedLeadFormVariant" in fixture) {
+      expect(plan.styleContract.variantPools.lead_form).toContain(fixture.expectedLeadFormVariant);
+    }
     for (const [type, variant] of Object.entries(recipe.variants)) {
       expect(
         (SECTION_VARIANTS[type as VariantSectionType] as readonly string[]).includes(variant!),
@@ -1003,6 +1033,16 @@ describe.each(PERSONALIZE_LOCALES)(
       expect(p.systemPrompt).toContain("event_signup");
       expect(p.systemPrompt).toContain("appointment_booking");
       expect(p.systemPrompt).toContain("info_brochure");
+    });
+
+    it("system prompt declares section role rules for conversion-quality copy", () => {
+      const p = getPrompt(promptId);
+      expect(p.systemPrompt).toContain("Section role rules");
+      expect(p.systemPrompt).toContain("hero = one concrete promise");
+      expect(p.systemPrompt).toContain("about = trust proof");
+      expect(p.systemPrompt).toContain("gallery = proof captions");
+      expect(p.systemPrompt).toContain("offer = conversion path");
+      expect(p.systemPrompt).toContain("lead_form = expectation setting");
     });
 
     it("system prompt enforces generate_sections tool usage", () => {

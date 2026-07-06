@@ -172,3 +172,103 @@ export function AboutValues3col({ section, brandPrimary, darkMode = false }: Pro
     </>
   );
 }
+
+export function AboutTrustProof({ section, brandPrimary }: Props) {
+  const { heading, body, extras } = section;
+  const values = (
+    extras?.values ?? ["Clear communication", "Reliable follow-up", "Experienced local team"]
+  ).slice(0, 4);
+  const members = extras?.teamMembers ?? [];
+  const leadMember = members[0];
+  const proofItems = [
+    { value: "24h", label: "Typical response window" },
+    { value: "1:1", label: "Personal guidance" },
+    { value: "Local", label: "Swiss SME care" },
+  ];
+  return (
+    <>
+      <style>{`
+        .lp-atp { background:var(--lp-surface,#f9fafb); padding:6.5rem 0; overflow:hidden; }
+        .lp-atp__inner { max-width:1120px; margin:0 auto; padding:0 1.5rem; display:grid; grid-template-columns:minmax(0,0.92fr) minmax(340px,0.72fr); gap:2.5rem; align-items:center; }
+        .lp-atp__eyebrow { font-size:0.72rem; font-weight:800; letter-spacing:0.14em; text-transform:uppercase; color:${brandPrimary}; margin:0 0 1rem; }
+        .lp-atp__h2 { font-family:var(--font-heading,system-ui); font-size:clamp(2rem,4.6vw,3.6rem); font-weight:850; color:var(--lp-text,#111827); line-height:1.04; letter-spacing:-0.035em; margin:0 0 1.25rem; max-width:12ch; }
+        .lp-atp__body { color:var(--lp-muted,#6b7280); font-size:1.05rem; line-height:1.8; margin:0 0 2rem; max-width:620px; }
+        .lp-atp__values { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0.8rem; margin:0; padding:0; list-style:none; }
+        .lp-atp__value { display:flex; gap:0.75rem; align-items:flex-start; border:1px solid var(--lp-border,rgba(17,24,39,0.1)); border-radius:var(--lp-radius-lg,16px); background:var(--lp-card,#fff); padding:0.9rem; box-shadow:var(--lp-shadow-card,0 10px 28px rgba(17,24,39,0.06)); color:var(--lp-text-soft,#374151); font-weight:700; line-height:1.35; }
+        .lp-atp__check { flex:0 0 auto; width:1.35rem; height:1.35rem; border-radius:999px; background:${brandPrimary}14; color:${brandPrimary}; display:flex; align-items:center; justify-content:center; margin-top:0.02rem; }
+        .lp-atp__panel { position:relative; border:1px solid var(--lp-border,rgba(17,24,39,0.1)); border-radius:var(--lp-radius-xl,24px); background:var(--lp-card,#fff); padding:1rem; box-shadow:0 24px 80px rgba(17,24,39,0.1); }
+        .lp-atp__panel::before { content:""; position:absolute; inset:-3rem -2rem auto auto; width:12rem; height:12rem; border-radius:999px; background:${brandPrimary}14; z-index:0; }
+        .lp-atp__card { position:relative; z-index:1; border-radius:calc(var(--lp-radius-xl,24px) - 8px); background:linear-gradient(135deg,${brandPrimary}10,var(--lp-subtle,#f3f4f6)); padding:1.2rem; min-height:320px; display:flex; flex-direction:column; justify-content:space-between; }
+        .lp-atp__person { display:flex; align-items:center; gap:0.85rem; }
+        .lp-atp__avatar { width:3.4rem; height:3.4rem; border-radius:999px; object-fit:cover; background:${brandPrimary}; color:var(--lp-on-primary,#fff); display:flex; align-items:center; justify-content:center; font-weight:900; font-size:1.2rem; flex:0 0 auto; overflow:hidden; }
+        .lp-atp__name { margin:0; color:var(--lp-text,#111827); font-weight:850; }
+        .lp-atp__role { margin:0.2rem 0 0; color:var(--lp-muted,#6b7280); font-size:0.82rem; }
+        .lp-atp__proof { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:0.6rem; }
+        .lp-atp__proof-item { border-radius:var(--lp-radius-md,12px); background:rgba(255,255,255,0.72); padding:0.8rem; border:1px solid rgba(255,255,255,0.74); }
+        .lp-atp__proof-item strong { display:block; color:var(--lp-text,#111827); font-size:1.1rem; line-height:1; letter-spacing:-0.03em; }
+        .lp-atp__proof-item span { display:block; margin-top:0.3rem; color:var(--lp-muted,#6b7280); font-size:0.72rem; line-height:1.25; }
+        .lp-atp__note { margin:1rem 0 0; color:var(--lp-muted,#6b7280); font-size:0.88rem; line-height:1.55; }
+        @media(max-width:900px){ .lp-atp__inner{grid-template-columns:1fr;} .lp-atp__h2{max-width:14ch;} }
+        @media(max-width:640px){ .lp-atp{padding:5rem 0;} .lp-atp__inner{padding:0 1rem;} .lp-atp__values{grid-template-columns:1fr;} .lp-atp__proof{grid-template-columns:1fr;} }
+      `}</style>
+      <section className="lp-atp">
+        <div className="lp-atp__inner">
+          <div>
+            <p className="lp-atp__eyebrow">Trust built in</p>
+            <h2 className="lp-atp__h2">{renderRich(heading)}</h2>
+            {body && <p className="lp-atp__body">{renderRich(body)}</p>}
+            <ul className="lp-atp__values">
+              {values.map((value, i) => (
+                <li key={i} className="lp-atp__value">
+                  <span className="lp-atp__check" aria-hidden="true">
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+                      <path d="M10.3 2.7 4.8 8.2 2 5.4.9 6.5l3.9 3.9 6.6-6.6z" />
+                    </svg>
+                  </span>
+                  <span>{value}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="lp-atp__panel">
+            <div className="lp-atp__card">
+              <div>
+                <div className="lp-atp__person">
+                  <div className="lp-atp__avatar">
+                    {leadMember?.photoUrl ? (
+                      <img
+                        src={leadMember.photoUrl}
+                        alt={leadMember.name}
+                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                      />
+                    ) : (
+                      (leadMember?.name ?? "SME").slice(0, 2).toUpperCase()
+                    )}
+                  </div>
+                  <div>
+                    <p className="lp-atp__name">{leadMember?.name ?? "Local specialist team"}</p>
+                    <p className="lp-atp__role">
+                      {leadMember?.role ?? "Advice, service, follow-up"}
+                    </p>
+                  </div>
+                </div>
+                <p className="lp-atp__note">
+                  A clear process helps visitors understand what happens after they enquire, book,
+                  or request a quote.
+                </p>
+              </div>
+              <div className="lp-atp__proof" aria-label="Proof points">
+                {proofItems.map((item) => (
+                  <div key={item.label} className="lp-atp__proof-item">
+                    <strong>{item.value}</strong>
+                    <span>{item.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </>
+  );
+}

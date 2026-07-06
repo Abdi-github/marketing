@@ -534,15 +534,15 @@ function heroVariantsFor(
   if (isDigital(input.subvertical)) {
     return era === "classic"
       ? ["split-image-right", "centered"]
-      : ["gradient-spotlight", "editorial-bold", "split-image-right"];
+      : ["agency-bento", "gradient-spotlight", "editorial-bold", "split-image-right"];
   }
   if (isProperty(input.subvertical)) {
     return era === "classic"
       ? ["split-image-right", "image-bg-overlay", "centered"]
-      : ["image-bg-overlay", "split-image-right", "editorial-bold"];
+      : ["property-showcase", "image-bg-overlay", "split-image-right", "editorial-bold"];
   }
   if (isClinic(input.subvertical)) {
-    return ["split-form-right", "split-image-right", "centered"];
+    return ["clinic-trust", "split-form-right", "split-image-right", "centered"];
   }
   if (isTrades(input.subvertical)) {
     return ["split-form-right", "image-bg-overlay", "split-image-right"];
@@ -564,12 +564,12 @@ function variantPoolsFor(
       ...base,
       hero: heroVariantsFor(input, input.era, base.hero ?? []),
       about: ["team-grid", "values-3col", "text-image-split"],
-      offer: ["banner-centered", "countdown-bold", "split-image-price"],
-      gallery: ["feature-side", "carousel-strip", "masonry-3"],
+      offer: ["quote-path", "banner-centered", "countdown-bold", "split-image-price"],
+      gallery: ["portfolio-bento", "feature-side", "carousel-strip", "masonry-3"],
       testimonials: ["marquee", "large-quote", "cards-3col"],
       faq: ["two-column", "numbered-list"],
       contact: ["cards-row", "split-map"],
-      lead_form: ["full-width-bar", "split-side-image", "card-centered"],
+      lead_form: ["consultation-panel", "full-width-bar", "split-side-image", "card-centered"],
     };
   }
   if (isProperty(input.subvertical)) {
@@ -577,35 +577,37 @@ function variantPoolsFor(
       ...base,
       hero: heroVariantsFor(input, input.era, base.hero ?? []),
       about: ["values-3col", "text-image-split"],
-      offer: ["split-image-price", "banner-centered"],
-      gallery: ["feature-side", "grid-2x2", "masonry-3"],
+      offer: ["quote-path", "split-image-price", "banner-centered"],
+      gallery: ["portfolio-bento", "feature-side", "grid-2x2", "masonry-3"],
       testimonials: ["large-quote", "cards-3col"],
       faq: ["two-column", "accordion"],
       contact: ["split-map", "cards-row"],
-      lead_form: ["split-side-image", "card-centered"],
+      lead_form: ["consultation-panel", "split-side-image", "card-centered"],
     };
   }
   if (isClinic(input.subvertical)) {
     return {
       ...base,
       hero: heroVariantsFor(input, input.era, base.hero ?? []),
-      about: ["team-grid", "values-3col", "text-image-split"],
+      about: ["trust-proof", "team-grid", "values-3col", "text-image-split"],
+      offer: ["quote-path", "banner-centered", "split-image-price"],
       gallery: ["feature-side", "grid-2x2"],
       testimonials: ["list-with-avatars", "cards-3col", "large-quote"],
       faq: ["accordion", "two-column"],
       contact: ["cards-row", "split-map"],
-      lead_form: ["card-centered", "split-side-image"],
+      lead_form: ["consultation-panel", "card-centered", "split-side-image"],
     };
   }
   if (isTrades(input.subvertical)) {
     return {
       ...base,
       hero: heroVariantsFor(input, input.era, base.hero ?? []),
-      offer: ["banner-centered", "split-image-price"],
+      offer: ["quote-path", "banner-centered", "split-image-price"],
+      about: ["trust-proof", "values-3col", "text-image-split"],
       testimonials: ["cards-3col", "list-with-avatars"],
       faq: ["numbered-list", "accordion"],
       contact: ["cards-row", "split-map"],
-      lead_form: ["full-width-bar", "card-centered", "split-side-image"],
+      lead_form: ["consultation-panel", "full-width-bar", "card-centered", "split-side-image"],
     };
   }
   if (isEventVenue(input.subvertical)) {

@@ -68,6 +68,10 @@ const mockRouteWithTools = vi.fn().mockResolvedValue({
   latencyMs: 800,
 });
 
+const { mockBuildUserPrompt } = vi.hoisted(() => ({
+  mockBuildUserPrompt: vi.fn().mockReturnValue("Erstelle eine Landing Page für Café Züri"),
+}));
+
 vi.mock("@marketing/ai-router", () => ({
   ProviderRouter: vi.fn().mockImplementation(() => ({
     route: mockRoute,
@@ -80,15 +84,47 @@ vi.mock("@marketing/ai-router", () => ({
     complete: vi.fn(),
     isHealthy: vi.fn().mockResolvedValue(true),
   })),
-  createAnthropicSonnet: vi.fn().mockReturnValue({ id: "anthropic:sonnet", isHealthy: vi.fn().mockResolvedValue(true) }),
-  createAnthropicHaiku: vi.fn().mockReturnValue({ id: "anthropic:haiku", isHealthy: vi.fn().mockResolvedValue(true) }),
-  createOpenAIMini: vi.fn().mockReturnValue({ id: "openai:mini", isHealthy: vi.fn().mockResolvedValue(true) }),
+  createAnthropicSonnet: vi
+    .fn()
+    .mockReturnValue({ id: "anthropic:sonnet", isHealthy: vi.fn().mockResolvedValue(true) }),
+  createAnthropicHaiku: vi
+    .fn()
+    .mockReturnValue({ id: "anthropic:haiku", isHealthy: vi.fn().mockResolvedValue(true) }),
+  createOpenAIMini: vi
+    .fn()
+    .mockReturnValue({ id: "openai:mini", isHealthy: vi.fn().mockResolvedValue(true) }),
   getPrompt: vi.fn().mockReturnValue({
     id: "landing-page-brief-v1",
     version: 1,
     systemPrompt: "Du bist Landing-Page-Experte…",
-    buildUserPrompt: vi.fn().mockReturnValue("Erstelle eine Landing Page für Café Züri"),
+    buildUserPrompt: mockBuildUserPrompt,
   }),
+  createLandingPageDesignPlan: vi.fn().mockReturnValue({
+    subvertical: "agency-digital",
+    archetype: "bold-agency",
+    conversionGoal: "lead_capture",
+    sectionTopology: "conversion-first",
+    heroTreatment: "gradient-spotlight",
+    navStyle: "bold-pill",
+    motionStyle: "soft-reveal",
+    density: "balanced",
+    imageDirection: "portfolio-proof",
+    styleContract: {
+      era: "modern",
+      navStyle: "bold-pill",
+      heroVariants: ["agency-bento"],
+      sectionOrder: ["hero", "offer", "lead_form"],
+      variantPools: {},
+      palettePool: [],
+      fontPairPool: [],
+      rhythmStyle: "balanced-contrast",
+      spacing: "balanced",
+      motionStyle: "soft-reveal",
+    },
+    uniquenessSeed: "seed",
+    uniquenessFingerprint: "fingerprint",
+  }),
+  designPlanSeed: vi.fn().mockReturnValue("seed"),
   landingPageJobSchema: { parse: (d: unknown) => d },
   landingPageCompositionSchema: {
     safeParse: (d: unknown) => ({ success: true, data: d }),
@@ -117,6 +153,8 @@ vi.mock("@marketing/shared", () => ({
     AI_PROVIDER_FALLBACK: "echo",
   },
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+  recordMetric: vi.fn(),
+  hashId: vi.fn().mockImplementation((value: string) => `hash:${value}`),
 }));
 
 // Mutable DB state.
@@ -126,9 +164,9 @@ vi.mock("@marketing/db", () => ({
   db: {
     select: vi.fn().mockImplementation(() => ({
       from: vi.fn().mockReturnValue({
-        where: vi.fn().mockImplementation(async () =>
-          Object.keys(_landingPage).length ? [_landingPage] : []
-        ),
+        where: vi
+          .fn()
+          .mockImplementation(async () => (Object.keys(_landingPage).length ? [_landingPage] : [])),
       }),
     })),
     insert: vi.fn().mockImplementation(() => ({
@@ -169,28 +207,33 @@ vi.mock("drizzle-orm", () => ({
 
 // ─── Import handler after mocks ───────────────────────────────────────────────
 
-import { handleLandingPageJob, setRouterForTest } from "../queues/landing-page/worker";
+import {
+  enrichConversionSections,
+  handleLandingPageJob,
+  setRouterForTest,
+} from "../queues/landing-page/worker";
 import { ProviderRouter } from "@marketing/ai-router";
+import type { LandingPageComposition, LandingPageDesignPlan } from "@marketing/ai-router";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
 const TENANT_ID = "00000000-0000-0000-0000-000000000001";
-const PAGE_ID   = "00000000-0000-0000-0000-000000000099";
+const PAGE_ID = "00000000-0000-0000-0000-000000000099";
 
 const BASE_DATA = {
-  tenantId:       TENANT_ID,
-  landingPageId:  PAGE_ID,
-  userId:         "00000000-0000-0000-0000-000000000003",
-  businessName:   "Café Züri",
-  vertical:       "cafe" as const,
-  city:           "Zürich",
-  locale:         "de-CH",
-  userPrompt:     "Zeig unsere saisonalen Kuchen und Kaffeespezialitäten",
+  tenantId: TENANT_ID,
+  landingPageId: PAGE_ID,
+  userId: "00000000-0000-0000-0000-000000000003",
+  businessName: "Café Züri",
+  vertical: "cafe",
+  city: "Zürich",
+  locale: "de-CH",
+  userPrompt: "Zeig unsere saisonalen Kuchen und Kaffeespezialitäten",
   idempotencyKey: "00000000-0000-0000-0000-000000000010",
-  promptId:       "landing-page-brief-v1",
-  promptVersion:  1,
+  promptId: "landing-page-brief-v1",
+  promptVersion: 1,
   costBudgetCents: 50,
-  step:           "brief" as "brief" | "copy" | "layout" | "publish",
+  step: "brief" as "brief" | "copy" | "layout" | "publish",
 };
 
 function makeJob(data = BASE_DATA) {
@@ -209,19 +252,20 @@ function injectMockRouter(): void {
 
 describe("handleLandingPageJob — unit", () => {
   beforeEach(() => {
-    _redisPlan   = "trial";
+    _redisPlan = "trial";
     _redisBudget = "0";
     _landingPage = {
-      id:               PAGE_ID,
-      tenantId:         TENANT_ID,
-      slug:             "test-cafe-page",
-      title:            "Café Züri",
-      status:           "draft",
+      id: PAGE_ID,
+      tenantId: TENANT_ID,
+      slug: "test-cafe-page",
+      title: "Café Züri",
+      status: "draft",
       currentVersionId: null,
-      stepData:         {},
+      stepData: {},
     };
     mockRoute.mockClear();
     mockRouteWithTools.mockClear();
+    mockBuildUserPrompt.mockClear();
     injectMockRouter();
   });
 
@@ -250,21 +294,54 @@ describe("handleLandingPageJob — unit", () => {
     expect(mockRoute).not.toHaveBeenCalled();
   });
 
+  it("copy step: includes design-plan intent in wizard brand hints", async () => {
+    _landingPage = {
+      ..._landingPage,
+      stepData: {
+        brief: { text: "Modern agency brief.", aiUsageId: "usage-001" },
+        wizardPayload: {
+          goal: "lead_capture",
+          paletteKey: "sky-startup",
+          siteMode: "website",
+          vibe: { minimalBold: 0.7, classicModern: 0.8, calmEnergetic: 0.2 },
+        },
+      },
+    };
+
+    await handleLandingPageJob(
+      makeJob({
+        ...BASE_DATA,
+        step: "copy",
+        businessName: "Studio Nord",
+        vertical: "service",
+        userPrompt: "Modern web design agency for Swiss SMEs.",
+      }),
+    );
+
+    expect(mockBuildUserPrompt).toHaveBeenCalledOnce();
+    expect(mockBuildUserPrompt.mock.calls[0]?.[0]).toMatchObject({
+      brandHints: expect.stringContaining("Design plan: agency-digital"),
+    });
+    expect(mockBuildUserPrompt.mock.calls[0]?.[0].brandHints).toContain(
+      "image direction portfolio-proof",
+    );
+  });
+
   it("publish step: inserts version row without calling route or routeWithTools", async () => {
     _landingPage = {
       ..._landingPage,
-      status:           "draft",
+      status: "draft",
       currentVersionId: null,
       stepData: {
-        brief:  { text: "brief text", aiUsageId: "u1" },
-        copy:   { sections: [], aiUsageId: "u2" },
+        brief: { text: "brief text", aiUsageId: "u1" },
+        copy: { sections: [], aiUsageId: "u2" },
         layout: {
           composition: {
             title: "Café Züri",
             locale: "de-CH",
             sections: [
-              { type: "hero",      order: 0, heading: "Willkommen" },
-              { type: "lead_form", order: 1, heading: "Kontakt"    },
+              { type: "hero", order: 0, heading: "Willkommen" },
+              { type: "lead_form", order: 1, heading: "Kontakt" },
             ],
           },
           aiUsageId: "u3",
@@ -278,14 +355,107 @@ describe("handleLandingPageJob — unit", () => {
 
   it("monthly budget exceeded: throws UnrecoverableError without calling route", async () => {
     _redisBudget = "99.0"; // 99 USD >> 10 USD cap
-    await expect(
-      handleLandingPageJob(makeJob()),
-    ).rejects.toThrow("Monthly AI budget exceeded");
+    await expect(handleLandingPageJob(makeJob())).rejects.toThrow("Monthly AI budget exceeded");
     expect(mockRoute).not.toHaveBeenCalled();
   });
 
   it("re-throws provider errors so BullMQ can retry", async () => {
     mockRoute.mockRejectedValueOnce(new Error("anthropic timeout"));
     await expect(handleLandingPageJob(makeJob())).rejects.toThrow("anthropic timeout");
+  });
+});
+
+describe("enrichConversionSections", () => {
+  const basePlan: LandingPageDesignPlan = {
+    subvertical: "agency-digital",
+    archetype: "bold-agency",
+    conversionGoal: "lead_capture",
+    sectionTopology: "conversion-first",
+    heroTreatment: "gradient-spotlight",
+    navStyle: "bold-pill",
+    motionStyle: "soft-reveal",
+    density: "balanced",
+    imageDirection: "portfolio-proof",
+    styleContract: {
+      era: "modern",
+      navStyle: "bold-pill",
+      heroVariants: ["agency-bento"],
+      sectionOrder: ["hero", "offer", "lead_form"],
+      variantPools: {},
+      palettePool: [],
+      fontPairPool: [],
+      rhythmStyle: "balanced-contrast",
+      spacing: "balanced",
+      motionStyle: "soft-reveal",
+    },
+    uniquenessSeed: "seed",
+    uniquenessFingerprint: "fingerprint",
+  };
+
+  function composition(locale = "en"): LandingPageComposition {
+    return {
+      title: "Test Page",
+      locale,
+      sections: [
+        { type: "hero", order: 0, heading: "Hero" },
+        {
+          type: "offer",
+          order: 1,
+          heading: "Start here",
+          body: "Generic offer copy.",
+          extras: { ctaText: "Request quote" },
+        },
+        { type: "lead_form", order: 2, heading: "Get in touch" },
+      ],
+      site: {
+        mode: "website",
+        pages: [
+          {
+            slug: "contact",
+            title: "Contact",
+            sections: [
+              { type: "offer", order: 0, heading: "Generic", body: "Generic" },
+              { type: "lead_form", order: 1, heading: "Contact" },
+            ],
+          },
+        ],
+      },
+    };
+  }
+
+  it("tailors offer and lead-form copy for agency lead-capture pages", () => {
+    const enriched = enrichConversionSections(composition("en"), basePlan);
+    const offer = enriched.sections.find((section) => section.type === "offer");
+    const leadForm = enriched.sections.find((section) => section.type === "lead_form");
+
+    expect(offer?.heading).toContain("qualified leads");
+    expect(offer?.body).toContain("right visitors");
+    expect(offer?.extras).toMatchObject({ ctaText: "Request quote", ctaHref: "#lp-lead-form" });
+    expect(leadForm?.heading).toBe("Start with a short project brief");
+  });
+
+  it("uses localized clinic copy and enriches website subpage sections", () => {
+    const plan: LandingPageDesignPlan = { ...basePlan, subvertical: "clinic-trust" };
+    const enriched = enrichConversionSections(composition("de-CH"), plan);
+    const offer = enriched.sections.find((section) => section.type === "offer");
+    const subpageOffer = enriched.site?.pages?.[0]?.sections.find(
+      (section) => section.type === "offer",
+    );
+
+    expect(offer?.heading).toContain("Konsultation");
+    expect(offer?.body).toContain("Anliegen");
+    expect(subpageOffer?.heading).toBe(offer?.heading);
+  });
+
+  it("keeps generated copy for unknown future subverticals", () => {
+    const plan: LandingPageDesignPlan = { ...basePlan, subvertical: "future-specialist" };
+    const enriched = enrichConversionSections(composition("en"), plan);
+    const offer = enriched.sections.find((section) => section.type === "offer");
+    const leadForm = enriched.sections.find((section) => section.type === "lead_form");
+
+    expect(offer?.heading).toBe("Start here");
+    expect(offer?.body).toBe("Generic offer copy.");
+    expect(offer?.extras).toMatchObject({ ctaText: "Request quote" });
+    expect(leadForm?.heading).toBe("Get in touch");
   });
 });

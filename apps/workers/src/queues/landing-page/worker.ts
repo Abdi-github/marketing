@@ -810,6 +810,347 @@ function applyLeadCapturePresetToComposition(
   };
 }
 
+type ConversionCopy = {
+  offerHeading: string;
+  offerBody: string;
+  leadHeading: string;
+  leadBody: string;
+};
+
+function conversionCopyForPlan(plan: LandingPageDesignPlan, locale: string): ConversionCopy | null {
+  const lang = locale.toLowerCase();
+  const subvertical = plan.subvertical;
+
+  if (subvertical === "agency-digital" || subvertical === "software-saas") {
+    if (lang.startsWith("de")) {
+      return {
+        offerHeading: "Aus Website-Besuchern werden qualifizierte Anfragen",
+        offerBody:
+          "Wir klaeren Ziel, Angebot und naechsten Schritt, damit Ihre Seite nicht nur gut aussieht, sondern messbar mehr passende Kontakte ausloest.",
+        leadHeading: "Starten Sie mit einem kurzen Projektbriefing",
+        leadBody:
+          "Teilen Sie uns Ziel, Ausgangslage und Wunschzeitraum mit. Danach erhalten Sie eine klare Einschaetzung fuer den naechsten Schritt.",
+      };
+    }
+    if (lang.startsWith("fr")) {
+      return {
+        offerHeading: "Transformez votre site en chemin de conversion clair",
+        offerBody:
+          "Nous clarifions l'offre, le message et l'action suivante pour attirer des demandes mieux qualifiees.",
+        leadHeading: "Demarrez avec un court briefing",
+        leadBody:
+          "Partagez votre objectif, votre situation actuelle et le delai souhaite. Vous recevez une prochaine etape concrete.",
+      };
+    }
+    if (lang.startsWith("it")) {
+      return {
+        offerHeading: "Trasformiamo il sito in un percorso di conversione chiaro",
+        offerBody:
+          "Chiariremo offerta, messaggio e prossima azione per generare richieste piu qualificate.",
+        leadHeading: "Inizia con un breve briefing",
+        leadBody:
+          "Condividi obiettivo, situazione attuale e tempi desiderati. Riceverai un prossimo passo concreto.",
+      };
+    }
+    return {
+      offerHeading: "Turn your website into a clearer path to qualified leads",
+      offerBody:
+        "We clarify the offer, message, and next action so the page does more than look good: it helps the right visitors enquire.",
+      leadHeading: "Start with a short project brief",
+      leadBody:
+        "Share the goal, current situation, and timeline. The team can reply with a practical next step.",
+    };
+  }
+
+  if (subvertical.startsWith("real-estate")) {
+    if (lang.startsWith("de")) {
+      return {
+        offerHeading: "Der passende Immobilienweg beginnt mit klarer Beratung",
+        offerBody:
+          "Ob Suche, Verkauf oder Besichtigung: wir klaeren Prioritaeten, Lage und Zeitplan, bevor der naechste Schritt empfohlen wird.",
+        leadHeading: "Beschreiben Sie Ihr Immobilienziel",
+        leadBody:
+          "Teilen Sie mit, ob Sie kaufen, verkaufen oder eine Besichtigung wuenschen. Wir melden uns mit einer passenden Empfehlung.",
+      };
+    }
+    if (lang.startsWith("fr")) {
+      return {
+        offerHeading: "Un projet immobilier commence par un conseil clair",
+        offerBody:
+          "Achat, vente ou visite: nous clarifions les priorites, le lieu et le calendrier avant de proposer la suite.",
+        leadHeading: "Decrivez votre objectif immobilier",
+        leadBody:
+          "Indiquez si vous souhaitez acheter, vendre ou organiser une visite. L'equipe revient avec une recommandation adaptee.",
+      };
+    }
+    if (lang.startsWith("it")) {
+      return {
+        offerHeading: "Il percorso immobiliare giusto parte da una consulenza chiara",
+        offerBody:
+          "Acquisto, vendita o visita: chiariremo priorita, zona e tempi prima di proporre il prossimo passo.",
+        leadHeading: "Descrivi il tuo obiettivo immobiliare",
+        leadBody:
+          "Indica se vuoi comprare, vendere o prenotare una visita. Il team rispondera con una proposta adatta.",
+      };
+    }
+    return {
+      offerHeading: "The right property path starts with clear advice",
+      offerBody:
+        "Whether buying, selling, or booking a viewing, the first step is to clarify priorities, location, and timing.",
+      leadHeading: "Tell us your property goal",
+      leadBody:
+        "Share whether you want to buy, sell, or arrange a viewing. The team can respond with a relevant next step.",
+    };
+  }
+
+  if (subvertical.startsWith("clinic")) {
+    if (lang.startsWith("de")) {
+      return {
+        offerHeading: "Klarer Ablauf fuer Ihre naechste Konsultation",
+        offerBody:
+          "Wir machen den ersten Schritt einfach: Anliegen schildern, passenden Termin finden und mit ruhiger Beratung starten.",
+        leadHeading: "Fragen Sie einen Termin an",
+        leadBody:
+          "Beschreiben Sie kurz Ihr Anliegen. Das Praxisteam meldet sich mit dem passenden naechsten Schritt.",
+      };
+    }
+    if (lang.startsWith("fr")) {
+      return {
+        offerHeading: "Un parcours clair pour votre prochaine consultation",
+        offerBody:
+          "Expliquez votre besoin, trouvez le bon rendez-vous et commencez avec un accompagnement rassurant.",
+        leadHeading: "Demandez un rendez-vous",
+        leadBody:
+          "Decrivez brievement votre besoin. L'equipe vous recontacte avec la prochaine etape adaptee.",
+      };
+    }
+    if (lang.startsWith("it")) {
+      return {
+        offerHeading: "Un percorso chiaro per la prossima consulenza",
+        offerBody:
+          "Descrivi la tua esigenza, trova l'appuntamento adatto e inizia con una guida serena.",
+        leadHeading: "Richiedi un appuntamento",
+        leadBody:
+          "Descrivi brevemente la tua esigenza. Il team ti ricontattera con il prossimo passo adatto.",
+      };
+    }
+    return {
+      offerHeading: "A clear path to your next consultation",
+      offerBody:
+        "Describe the concern, find the right appointment option, and start with calm guidance from the team.",
+      leadHeading: "Request an appointment",
+      leadBody:
+        "Share a short note about what you need. The clinic team can follow up with the right next step.",
+    };
+  }
+
+  if (subvertical === "local-trades") {
+    if (lang.startsWith("de")) {
+      return {
+        offerHeading: "Schneller zur passenden Offerte",
+        offerBody:
+          "Beschreiben Sie Auftrag, Ort und Dringlichkeit. So kann das Team den Aufwand besser einschaetzen und gezielt antworten.",
+        leadHeading: "Fordern Sie eine Offerte an",
+        leadBody:
+          "Senden Sie die wichtigsten Angaben zum Projekt. Sie erhalten eine klare Rueckmeldung zum naechsten Schritt.",
+      };
+    }
+    if (lang.startsWith("fr")) {
+      return {
+        offerHeading: "Obtenez plus vite une offre adaptee",
+        offerBody:
+          "Decrivez le travail, le lieu et l'urgence pour permettre une reponse plus precise.",
+        leadHeading: "Demandez une offre",
+        leadBody:
+          "Envoyez les informations essentielles du projet. Vous recevez une reponse claire pour la suite.",
+      };
+    }
+    if (lang.startsWith("it")) {
+      return {
+        offerHeading: "Arriva prima al preventivo giusto",
+        offerBody:
+          "Descrivi lavoro, luogo e urgenza per aiutare il team a rispondere in modo piu preciso.",
+        leadHeading: "Richiedi un preventivo",
+        leadBody:
+          "Invia le informazioni principali del progetto. Riceverai una risposta chiara sul prossimo passo.",
+      };
+    }
+    return {
+      offerHeading: "Get to the right quote faster",
+      offerBody:
+        "Describe the job, location, and urgency so the team can estimate the work and respond with a clear next step.",
+      leadHeading: "Request a quote",
+      leadBody:
+        "Send the essential project details. The team can reply with a practical recommendation.",
+    };
+  }
+
+  if (subvertical === "event-venue") {
+    if (lang.startsWith("de")) {
+      return {
+        offerHeading: "Planen Sie ein Event mit einem klaren Rahmen",
+        offerBody:
+          "Teilen Sie Anlass, Gaestezahl und Wunschdatum. Das Team kann Verfuegbarkeit, Raumoptionen und den passenden Ablauf einschaetzen.",
+        leadHeading: "Fragen Sie Ihr Wunschdatum an",
+        leadBody:
+          "Senden Sie die wichtigsten Eckdaten. Sie erhalten eine konkrete Rueckmeldung zu Verfuegbarkeit und naechstem Schritt.",
+      };
+    }
+    if (lang.startsWith("fr")) {
+      return {
+        offerHeading: "Planifiez un evenement avec un cadre clair",
+        offerBody:
+          "Partagez le type d'evenement, le nombre d'invites et la date souhaitee pour recevoir une proposition adaptee.",
+        leadHeading: "Demandez votre date",
+        leadBody:
+          "Envoyez les details essentiels. L'equipe revient avec disponibilite, options et prochaine etape.",
+      };
+    }
+    if (lang.startsWith("it")) {
+      return {
+        offerHeading: "Pianifica l'evento con un quadro chiaro",
+        offerBody:
+          "Condividi tipo di evento, numero di ospiti e data desiderata per ricevere una proposta adatta.",
+        leadHeading: "Richiedi la tua data",
+        leadBody:
+          "Invia i dettagli principali. Il team rispondera con disponibilita, opzioni e prossimo passo.",
+      };
+    }
+    return {
+      offerHeading: "Plan the event around a clearer brief",
+      offerBody:
+        "Share the occasion, guest count, and preferred date so the team can recommend the right space and next step.",
+      leadHeading: "Ask about your preferred date",
+      leadBody:
+        "Send the key event details and the team can reply with availability, options, and a practical next step.",
+    };
+  }
+
+  if (subvertical.startsWith("restaurant") || subvertical.startsWith("cafe")) {
+    if (lang.startsWith("de")) {
+      return {
+        offerHeading: "Reservieren, anfragen oder das passende Angebot finden",
+        offerBody:
+          "Ob Tisch, Gruppe oder saisonales Angebot: ein kurzer Hinweis genuegt, damit das Team passend reagieren kann.",
+        leadHeading: "Senden Sie Ihre Anfrage",
+        leadBody:
+          "Teilen Sie Datum, Personenanzahl und Wunsch mit. Das Team meldet sich mit einer passenden Antwort.",
+      };
+    }
+    if (lang.startsWith("fr")) {
+      return {
+        offerHeading: "Reserver, demander ou trouver la bonne offre",
+        offerBody:
+          "Table, groupe ou offre de saison: quelques details suffisent pour une reponse adaptee.",
+        leadHeading: "Envoyez votre demande",
+        leadBody:
+          "Indiquez la date, le nombre de personnes et votre souhait. L'equipe revient avec une reponse utile.",
+      };
+    }
+    if (lang.startsWith("it")) {
+      return {
+        offerHeading: "Prenota, chiedi o trova l'offerta giusta",
+        offerBody:
+          "Tavolo, gruppo o proposta stagionale: bastano pochi dettagli per ricevere una risposta adatta.",
+        leadHeading: "Invia la tua richiesta",
+        leadBody:
+          "Indica data, numero di persone e preferenza. Il team rispondera con una proposta utile.",
+      };
+    }
+    return {
+      offerHeading: "Book, enquire, or find the right offer",
+      offerBody:
+        "Whether it is a table, group request, or seasonal offer, a few details help the team respond with the right option.",
+      leadHeading: "Send your request",
+      leadBody:
+        "Share the date, party size, and what you need. The team can follow up with a useful answer.",
+    };
+  }
+
+  if (subvertical.startsWith("retail")) {
+    if (lang.startsWith("de")) {
+      return {
+        offerHeading: "Entdecken Sie das passende Stueck mit persoenlicher Beratung",
+        offerBody:
+          "Fragen Sie Verfuegbarkeit, Groesse oder eine Empfehlung an, bevor Sie vorbeikommen oder bestellen.",
+        leadHeading: "Fragen Sie Produkt oder Beratung an",
+        leadBody: "Teilen Sie mit, wonach Sie suchen. Das Team meldet sich mit passenden Optionen.",
+      };
+    }
+    if (lang.startsWith("fr")) {
+      return {
+        offerHeading: "Trouvez la bonne piece avec un conseil personnel",
+        offerBody:
+          "Demandez disponibilite, taille ou recommandation avant de passer en boutique ou de commander.",
+        leadHeading: "Demandez un produit ou un conseil",
+        leadBody: "Expliquez ce que vous cherchez. L'equipe revient avec des options adaptees.",
+      };
+    }
+    if (lang.startsWith("it")) {
+      return {
+        offerHeading: "Trova il pezzo giusto con una consulenza personale",
+        offerBody:
+          "Chiedi disponibilita, taglia o consiglio prima di passare in negozio o ordinare.",
+        leadHeading: "Richiedi prodotto o consulenza",
+        leadBody: "Racconta cosa stai cercando. Il team rispondera con opzioni adatte.",
+      };
+    }
+    return {
+      offerHeading: "Find the right piece with personal guidance",
+      offerBody:
+        "Ask about availability, sizing, or a recommendation before you visit the shop or place an order.",
+      leadHeading: "Ask about a product or recommendation",
+      leadBody: "Share what you are looking for and the team can reply with relevant options.",
+    };
+  }
+
+  return null;
+}
+
+export function enrichConversionSections(
+  composition: LandingPageComposition,
+  designPlan: LandingPageDesignPlan,
+): LandingPageComposition {
+  const copy = conversionCopyForPlan(designPlan, composition.locale);
+  if (!copy) return composition;
+
+  const enrich = (section: LandingPageSection): LandingPageSection => {
+    if (section.type === "offer") {
+      return {
+        ...section,
+        heading: copy.offerHeading,
+        body: copy.offerBody,
+        extras: {
+          ...(section.extras ?? {}),
+          ctaHref: (section.extras as { ctaHref?: string } | undefined)?.ctaHref ?? "#lp-lead-form",
+        },
+      } as LandingPageSection;
+    }
+    if (section.type === "lead_form") {
+      return {
+        ...section,
+        heading: copy.leadHeading,
+        body: copy.leadBody,
+      };
+    }
+    return section;
+  };
+
+  return {
+    ...composition,
+    sections: composition.sections.map(enrich),
+    site: composition.site
+      ? {
+          ...composition.site,
+          pages: composition.site.pages?.map((page) => ({
+            ...page,
+            sections: page.sections.map(enrich),
+          })),
+        }
+      : composition.site,
+  };
+}
+
 function applyBusinessContactDetails(
   composition: LandingPageComposition,
   businessAddress: string | undefined,
@@ -1039,6 +1380,27 @@ async function handleCopy(
         leadCapturePreset?: string;
       }
     | undefined;
+  const copyDesignPlan =
+    wizardPayload &&
+    ((stepData["designPlan"] as LandingPageDesignPlan | undefined) ??
+      createLandingPageDesignPlan({
+        tenantId: ctx.tenantId,
+        landingPageId: data.landingPageId,
+        businessName: data.businessName,
+        vertical: data.vertical,
+        city: data.city,
+        locale: data.locale,
+        userPrompt: data.userPrompt,
+        goals: wizardPayload.goals ?? (wizardPayload.goal ? [wizardPayload.goal] : []),
+        vibe: wizardPayload.vibe ?? null,
+        imageStrategy: wizardPayload.imageStrategy ?? null,
+      }));
+  if (copyDesignPlan && !stepData["designPlan"]) {
+    await updateStepDataPatch(ctx, data.landingPageId, {
+      designPlan: copyDesignPlan,
+      uniquenessFingerprint: copyDesignPlan.uniquenessFingerprint,
+    });
+  }
 
   let promptId: string;
   let sectionsList: string;
@@ -1121,6 +1483,17 @@ async function handleCopy(
   }
   if (wizardPayload?.leadCapturePreset) {
     hintsParts.push(`Lead capture preset: ${wizardPayload.leadCapturePreset.replace(/_/g, " ")}.`);
+  }
+  if (copyDesignPlan) {
+    hintsParts.push(
+      [
+        `Design plan: ${copyDesignPlan.subvertical}`,
+        `archetype ${copyDesignPlan.archetype}`,
+        `topology ${copyDesignPlan.sectionTopology}`,
+        `image direction ${copyDesignPlan.imageDirection}`,
+        `hero ${copyDesignPlan.heroTreatment}`,
+      ].join("; ") + ".",
+    );
   }
 
   const prompt = getPrompt(promptId);
@@ -1345,7 +1718,18 @@ async function handleLayout(
   // Auto-inject curated Unsplash images for sections that need visuals but have
   // none yet. Skipped if FLUX ai-strategy already placed a backgroundImageUrl.
   {
-    const bundle = pickBundleForVertical(data.vertical ?? "");
+    const bundle = pickBundleForVertical(
+      [
+        designPlan.subvertical,
+        designPlan.archetype,
+        designPlan.imageDirection,
+        data.vertical,
+        wizardPayload?.brief,
+        data.userPrompt,
+      ]
+        .filter(Boolean)
+        .join(" "),
+    );
     const heroPhotos = bundle.photos.filter((p) => p.role === "hero");
     const lifestyle = bundle.photos.filter((p) => p.role === "lifestyle");
     const gallerySet = bundle.photos.filter((p) => p.role === "gallery").slice(0, 6);
@@ -1449,6 +1833,7 @@ async function handleLayout(
       composition,
       resolveLeadCapturePreset(wizardPayload.leadCapturePreset),
     );
+    composition = enrichConversionSections(composition, designPlan);
   }
   composition = applyBusinessContactDetails(composition, data.businessAddress);
 

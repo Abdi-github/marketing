@@ -2610,6 +2610,10 @@ export const landingPagesRouter = router({
         pageId: z.string().uuid(),
         themeKey: z.string().min(1).max(60).nullable(),
         fontPairKey: z.string().min(1).max(60).optional().nullable(),
+        backgroundStyle: z
+          .enum(["clean", "paper", "grid", "subtle-noise", "spotlight", "image-led"])
+          .optional()
+          .nullable(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -2625,12 +2629,15 @@ export const landingPagesRouter = router({
         .set({ themeKey: input.themeKey, updatedAt: new Date() })
         .where(and(eq(landingPages.tenantId, tenantId), eq(landingPages.id, input.pageId)));
 
-      // fontPairKey is stored in stepData.themeFontPair for now (no dedicated column).
-      if (input.fontPairKey !== undefined) {
+      // font/background overrides are stored in stepData for now (no dedicated columns).
+      if (input.fontPairKey !== undefined || input.backgroundStyle !== undefined) {
+        const patch: Record<string, string | null> = {};
+        if (input.fontPairKey !== undefined) patch.themeFontPair = input.fontPairKey;
+        if (input.backgroundStyle !== undefined) patch.backgroundStyle = input.backgroundStyle;
         await db
           .update(landingPages)
           .set({
-            stepData: sql`COALESCE(${landingPages.stepData}, '{}'::jsonb) || ${JSON.stringify({ themeFontPair: input.fontPairKey })}::jsonb`,
+            stepData: sql`COALESCE(${landingPages.stepData}, '{}'::jsonb) || ${JSON.stringify(patch)}::jsonb`,
           })
           .where(and(eq(landingPages.tenantId, tenantId), eq(landingPages.id, input.pageId)));
       }

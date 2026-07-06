@@ -319,3 +319,76 @@ export function GalleryFeatureSide({ section, brandPrimary }: Props) {
     </>
   );
 }
+
+export function GalleryPortfolioBento({ section, brandPrimary }: Props) {
+  const images: ImgItem[] = (section.extras?.images ?? []).filter((i) => i.url).slice(0, 6);
+  const tiles = images.length > 0 ? images : Array.from<ImgItem | null>({ length: 6 }).fill(null);
+  return (
+    <>
+      <style>{`
+        .lp-gpb { position:relative; overflow:hidden; background:var(--lp-card,#fff); padding:6.5rem 0; }
+        .lp-gpb::before { content:""; position:absolute; inset:0; pointer-events:none; background:radial-gradient(circle at 18% 8%, ${brandPrimary}12, transparent 32%), radial-gradient(circle at 92% 16%, ${brandPrimary}0d, transparent 26%); }
+        .lp-gpb__inner { position:relative; z-index:1; max-width:1200px; margin:0 auto; padding:0 1.5rem; }
+        .lp-gpb__head { display:grid; grid-template-columns:minmax(0,0.9fr) minmax(260px,0.38fr); gap:2rem; align-items:end; margin-bottom:2rem; }
+        .lp-gpb__eyebrow { font-size:0.72rem; font-weight:800; letter-spacing:0.14em; text-transform:uppercase; color:${brandPrimary}; margin:0 0 0.75rem; }
+        .lp-gpb__h2 { font-family:var(--font-heading,system-ui); font-size:clamp(2rem,4.5vw,3.7rem); font-weight:850; line-height:1.02; letter-spacing:-0.035em; color:var(--lp-text,#111827); margin:0; max-width:11ch; }
+        .lp-gpb__body { color:var(--lp-muted,#6b7280); font-size:1rem; line-height:1.75; margin:0; }
+        .lp-gpb__grid { display:grid; grid-template-columns:1.25fr 0.8fr 0.8fr; grid-auto-rows:minmax(170px, 1fr); gap:0.9rem; }
+        .lp-gpb__tile { position:relative; min-height:190px; overflow:hidden; border-radius:var(--lp-radius-lg,18px); background:linear-gradient(135deg,${brandPrimary}12,var(--lp-subtle,#f3f4f6)); border:1px solid var(--lp-border,rgba(17,24,39,0.1)); box-shadow:var(--lp-shadow-card,0 12px 34px rgba(17,24,39,0.08)); }
+        .lp-gpb__tile:nth-child(1) { grid-row:span 2; min-height:390px; }
+        .lp-gpb__tile:nth-child(4) { grid-column:span 2; }
+        .lp-gpb__tile img { transform:scale(1.01); transition:transform 420ms ease; }
+        .lp-gpb__tile:hover img { transform:scale(1.045); }
+        .lp-gpb__shade { position:absolute; inset:0; background:linear-gradient(to top,rgba(0,0,0,0.58),rgba(0,0,0,0.04) 58%,transparent); pointer-events:none; }
+        .lp-gpb__caption { position:absolute; left:0.9rem; right:0.9rem; bottom:0.9rem; display:flex; align-items:flex-end; justify-content:space-between; gap:0.8rem; color:#fff; }
+        .lp-gpb__caption span:first-child { font-weight:800; font-size:0.92rem; line-height:1.25; text-shadow:0 1px 16px rgba(0,0,0,0.35); }
+        .lp-gpb__tag { flex:0 0 auto; border-radius:999px; background:rgba(255,255,255,0.16); border:1px solid rgba(255,255,255,0.2); padding:0.34rem 0.55rem; font-size:0.68rem; font-weight:800; backdrop-filter:blur(10px); }
+        .lp-gpb__placeholder { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:${brandPrimary}; }
+        .lp-gpb__placeholder::before { content:""; width:42%; aspect-ratio:1; border-radius:999px; background:${brandPrimary}18; box-shadow:0 0 0 44px ${brandPrimary}08; }
+        @media(max-width:900px){ .lp-gpb__head{grid-template-columns:1fr;} .lp-gpb__h2{max-width:14ch;} .lp-gpb__grid{grid-template-columns:1fr 1fr;} .lp-gpb__tile:nth-child(1){grid-column:span 2;} .lp-gpb__tile:nth-child(4){grid-column:span 1;} }
+        @media(max-width:640px){ .lp-gpb{padding:5rem 0;} .lp-gpb__inner{padding:0 1rem;} .lp-gpb__grid{grid-template-columns:1fr;} .lp-gpb__tile,.lp-gpb__tile:nth-child(1),.lp-gpb__tile:nth-child(4){grid-column:auto;grid-row:auto;min-height:260px;} }
+      `}</style>
+      <section className="lp-gpb">
+        <div className="lp-gpb__inner">
+          <div className="lp-gpb__head">
+            <div>
+              <p className="lp-gpb__eyebrow">Selected work</p>
+              <h2 className="lp-gpb__h2">{renderRich(section.heading)}</h2>
+            </div>
+            {section.body && <p className="lp-gpb__body">{renderRich(section.body)}</p>}
+          </div>
+          <div className="lp-gpb__grid">
+            {tiles.map((img, i) => (
+              <figure key={img?.url ?? i} className="lp-gpb__tile" style={{ margin: 0 }}>
+                {img ? (
+                  <>
+                    <LpImage
+                      src={img.url}
+                      alt={img.caption ?? ""}
+                      brandPrimary={brandPrimary}
+                      emoji="📷"
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                      }}
+                    />
+                    <div className="lp-gpb__shade" />
+                  </>
+                ) : (
+                  <div className="lp-gpb__placeholder" aria-hidden="true" />
+                )}
+                <figcaption className="lp-gpb__caption">
+                  <span>{img?.caption ?? `Project ${i + 1}`}</span>
+                  <span className="lp-gpb__tag">{i === 0 ? "Featured" : "Proof"}</span>
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+        </div>
+      </section>
+    </>
+  );
+}

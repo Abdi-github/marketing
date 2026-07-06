@@ -7,6 +7,9 @@ export type { SpacingScale, RadiusScale, RadiusDensity, ShadowKey, TypeRatio } f
 export { PALETTES, PALETTES_BY_KEY, getPalette } from "./palettes";
 export type { Palette, PaletteKey } from "./palettes";
 
+export { BACKGROUND_STYLES, isBackgroundStyleKey } from "./backgrounds";
+export type { BackgroundStyleKey } from "./backgrounds";
+
 export {
   FONT_PAIRS,
   FONT_PAIRS_BY_KEY,

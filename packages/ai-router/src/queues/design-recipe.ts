@@ -49,10 +49,14 @@ const STYLE: Record<string, [number, number, number]> = {
   "hero:split-form-right": [0.0, 0.2, 0.5],
   "hero:editorial-bold": [0.9, 0.8, 0.4],
   "hero:gradient-spotlight": [0.4, 0.9, 0.6],
+  "hero:agency-bento": [0.7, 0.95, 0.45],
+  "hero:property-showcase": [0.35, 0.65, -0.1],
+  "hero:clinic-trust": [-0.25, 0.35, -0.45],
   // about
   "about:text-image-split": [-0.2, 0.0, -0.2],
   "about:team-grid": [0.0, 0.4, 0.0],
   "about:values-3col": [-0.3, 0.3, 0.0],
+  "about:trust-proof": [-0.15, 0.55, -0.2],
   // menu_preview
   "menu_preview:list-borders": [-0.3, 0.0, -0.1],
   "menu_preview:cards-grid": [0.1, 0.4, 0.1],
@@ -61,11 +65,13 @@ const STYLE: Record<string, [number, number, number]> = {
   "offer:banner-centered": [0.5, 0.0, 0.3],
   "offer:split-image-price": [-0.1, 0.3, 0.0],
   "offer:countdown-bold": [0.8, 0.2, 0.7],
+  "offer:quote-path": [0.15, 0.65, 0.15],
   // gallery
   "gallery:masonry-3": [0.0, 0.5, 0.0],
   "gallery:grid-2x2": [-0.4, 0.1, -0.1],
   "gallery:carousel-strip": [0.1, 0.4, 0.5],
   "gallery:feature-side": [0.1, 0.3, 0.0],
+  "gallery:portfolio-bento": [0.45, 0.85, 0.15],
   // testimonials
   "testimonials:cards-3col": [0.0, 0.0, 0.0],
   "testimonials:large-quote": [0.2, 0.4, -0.2],
@@ -83,6 +89,7 @@ const STYLE: Record<string, [number, number, number]> = {
   "lead_form:card-centered": [0.0, 0.0, 0.0],
   "lead_form:split-side-image": [-0.1, 0.4, 0.0],
   "lead_form:full-width-bar": [0.5, 0.1, 0.3],
+  "lead_form:consultation-panel": [0.25, 0.7, -0.05],
   // whatsapp_cta
   "whatsapp_cta:centered-button": [0.0, 0.0, 0.0],
   "whatsapp_cta:banner-strip": [0.3, 0.1, 0.2],
@@ -92,11 +99,15 @@ const STYLE: Record<string, [number, number, number]> = {
 const GOAL_BOOST: Record<string, Record<string, number>> = {
   lead_capture: {
     "hero:split-form-right": 0.5,
+    "offer:quote-path": 0.35,
+    "lead_form:consultation-panel": 0.35,
     "lead_form:split-side-image": 0.4,
     "lead_form:full-width-bar": 0.3,
   },
   appointment_booking: {
     "hero:split-form-right": 0.5,
+    "offer:quote-path": 0.25,
+    "lead_form:consultation-panel": 0.35,
     "lead_form:card-centered": 0.3,
     "contact:cards-row": 0.3,
   },
@@ -121,6 +132,8 @@ const ARCHETYPE_BOOST: Record<string, Record<string, number>> = {
   "conversion-split": {
     "hero:split-form-right": 0.35,
     "hero:split-image-right": 0.2,
+    "offer:quote-path": 0.25,
+    "lead_form:consultation-panel": 0.3,
     "lead_form:split-side-image": 0.3,
     "contact:cards-row": 0.15,
   },
@@ -144,6 +157,7 @@ const ARCHETYPE_BOOST: Record<string, Record<string, number>> = {
   },
   "trust-first": {
     "hero:split-form-right": 0.2,
+    "about:trust-proof": 0.35,
     "about:team-grid": 0.25,
     "testimonials:list-with-avatars": 0.3,
     "faq:accordion": 0.2,
@@ -156,7 +170,9 @@ const ARCHETYPE_BOOST: Record<string, Record<string, number>> = {
   },
   "calm-service": {
     "hero:split-image-right": 0.25,
+    "about:trust-proof": 0.3,
     "about:text-image-split": 0.25,
+    "offer:quote-path": 0.3,
     "faq:two-column": 0.2,
     "contact:split-map": 0.15,
   },
@@ -167,23 +183,31 @@ const ARCHETYPE_BOOST: Record<string, Record<string, number>> = {
     "testimonials:cards-3col": 0.2,
   },
   "bold-agency": {
+    "hero:agency-bento": 0.6,
     "hero:gradient-spotlight": 0.45,
     "hero:editorial-bold": 0.35,
+    "gallery:portfolio-bento": 0.55,
     "gallery:feature-side": 0.3,
     "testimonials:marquee": 0.2,
     "lead_form:full-width-bar": 0.25,
   },
   "property-showcase": {
+    "hero:property-showcase": 0.65,
     "hero:image-bg-overlay": 0.4,
     "hero:split-image-right": 0.25,
+    "gallery:portfolio-bento": 0.3,
     "gallery:feature-side": 0.35,
     "gallery:grid-2x2": 0.25,
     "testimonials:large-quote": 0.2,
     "contact:split-map": 0.2,
   },
   "clinic-trust": {
+    "hero:clinic-trust": 0.65,
     "hero:split-form-right": 0.35,
+    "about:trust-proof": 0.45,
+    "offer:quote-path": 0.35,
     "about:team-grid": 0.3,
+    "lead_form:consultation-panel": 0.3,
     "testimonials:list-with-avatars": 0.35,
     "faq:accordion": 0.25,
     "lead_form:card-centered": 0.25,
@@ -209,7 +233,11 @@ const PLAN_SIGNAL_BOOST: Record<string, Record<string, number>> = {
   "hero-treatment:image-overlay": { "hero:image-bg-overlay": 0.35 },
   "hero-treatment:split-media": { "hero:split-image-right": 0.35 },
   "hero-treatment:centered-statement": { "hero:centered": 0.35 },
-  "hero-treatment:form-first": { "hero:split-form-right": 0.45, "lead_form:card-centered": 0.2 },
+  "hero-treatment:form-first": {
+    "hero:split-form-right": 0.45,
+    "lead_form:consultation-panel": 0.3,
+    "lead_form:card-centered": 0.2,
+  },
   "hero-treatment:editorial-headline": { "hero:editorial-bold": 0.45 },
   "hero-treatment:gradient-spotlight": { "hero:gradient-spotlight": 0.45 },
   "topology:catalog-first": {
@@ -219,17 +247,21 @@ const PLAN_SIGNAL_BOOST: Record<string, Record<string, number>> = {
   },
   "topology:conversion-first": {
     "hero:split-form-right": 0.25,
+    "offer:quote-path": 0.25,
     "lead_form:full-width-bar": 0.2,
     "offer:banner-centered": 0.15,
   },
   "topology:proof-first": {
+    "about:trust-proof": 0.25,
     "testimonials:list-with-avatars": 0.2,
     "testimonials:large-quote": 0.2,
     "faq:numbered-list": 0.15,
   },
   "image-direction:product-detail": { "gallery:grid-2x2": 0.2, "menu_preview:cards-grid": 0.2 },
   "image-direction:property-showcase": {
+    "hero:property-showcase": 0.35,
     "hero:image-bg-overlay": 0.2,
+    "gallery:portfolio-bento": 0.25,
     "gallery:feature-side": 0.35,
     "gallery:grid-2x2": 0.2,
     "contact:split-map": 0.15,

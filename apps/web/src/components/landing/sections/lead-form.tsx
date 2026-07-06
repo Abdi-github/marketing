@@ -195,3 +195,62 @@ export function LeadFormFullWidthBar({
     </>
   );
 }
+
+export function LeadFormConsultationPanel({ section, brandPrimary, formContent }: Props) {
+  return (
+    <>
+      <style>{`
+        .lp-lcp { position:relative; overflow:hidden; background:var(--lp-card,#fff); padding:6.5rem 0; }
+        .lp-lcp::before { content:""; position:absolute; inset:0; pointer-events:none; background:radial-gradient(circle at 16% 12%, ${brandPrimary}12, transparent 34%), radial-gradient(circle at 86% 16%, ${brandPrimary}0d, transparent 28%); }
+        .lp-lcp__inner { position:relative; z-index:1; max-width:1120px; margin:0 auto; padding:0 1.5rem; display:grid; grid-template-columns:minmax(0,0.82fr) minmax(360px,0.72fr); gap:2.5rem; align-items:center; }
+        .lp-lcp__eyebrow { display:inline-flex; align-items:center; gap:0.55rem; margin:0 0 1rem; color:${brandPrimary}; font-size:0.72rem; font-weight:850; letter-spacing:0.14em; text-transform:uppercase; }
+        .lp-lcp__eyebrow::before { content:""; width:2rem; height:2px; background:${brandPrimary}; }
+        .lp-lcp__h2 { font-family:var(--font-heading,system-ui); color:var(--lp-text,#111827); font-size:clamp(2rem,4.6vw,3.7rem); line-height:1.04; letter-spacing:-0.035em; font-weight:850; max-width:12ch; margin:0 0 1.25rem; }
+        .lp-lcp__body { color:var(--lp-muted,#6b7280); font-size:1.03rem; line-height:1.78; max-width:600px; margin:0 0 2rem; }
+        .lp-lcp__proof { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:0.8rem; max-width:620px; }
+        .lp-lcp__proof-item { border:1px solid var(--lp-border,rgba(17,24,39,0.1)); border-radius:var(--lp-radius-lg,16px); background:var(--lp-surface,#f9fafb); padding:0.9rem; }
+        .lp-lcp__proof-item strong { display:block; color:var(--lp-text,#111827); font-size:1rem; }
+        .lp-lcp__proof-item span { display:block; color:var(--lp-muted,#6b7280); font-size:0.78rem; line-height:1.35; margin-top:0.28rem; }
+        .lp-lcp__panel { border:1px solid var(--lp-border,rgba(17,24,39,0.1)); border-radius:var(--lp-radius-xl,24px); background:var(--lp-surface,#f9fafb); padding:0.75rem; box-shadow:0 24px 80px rgba(17,24,39,0.1); }
+        .lp-lcp__panel-head { border-radius:calc(var(--lp-radius-xl,24px) - 8px); background:linear-gradient(135deg,${brandPrimary},color-mix(in srgb,${brandPrimary} 64%,#111827)); color:var(--lp-on-primary,#fff); padding:1.2rem; margin-bottom:0.75rem; }
+        .lp-lcp__panel-title { font-family:var(--font-heading,system-ui); font-size:1.15rem; font-weight:850; margin:0; line-height:1.25; }
+        .lp-lcp__panel-sub { color:rgba(255,255,255,0.78); font-size:0.86rem; line-height:1.55; margin:0.45rem 0 0; }
+        .lp-lcp__form { border-radius:calc(var(--lp-radius-xl,24px) - 8px); background:var(--lp-card,#fff); padding:1.35rem; border:1px solid rgba(255,255,255,0.7); }
+        @media(max-width:900px){ .lp-lcp__inner{grid-template-columns:1fr;} .lp-lcp__h2{max-width:14ch;} }
+        @media(max-width:640px){ .lp-lcp{padding:5rem 0;} .lp-lcp__inner{padding:0 1rem;} .lp-lcp__proof{grid-template-columns:1fr;} .lp-lcp__form{padding:1rem;} }
+      `}</style>
+      <section className="lp-lcp">
+        <div className="lp-lcp__inner">
+          <div>
+            <p className="lp-lcp__eyebrow">Request a consultation</p>
+            <h2 className="lp-lcp__h2">{renderRich(section.heading)}</h2>
+            {section.body && <p className="lp-lcp__body">{renderRich(section.body)}</p>}
+            <div className="lp-lcp__proof" aria-label="Form assurances">
+              <div className="lp-lcp__proof-item">
+                <strong>Fast reply</strong>
+                <span>Your request reaches the team directly.</span>
+              </div>
+              <div className="lp-lcp__proof-item">
+                <strong>No pressure</strong>
+                <span>Start with a simple, non-binding inquiry.</span>
+              </div>
+              <div className="lp-lcp__proof-item">
+                <strong>Clear next step</strong>
+                <span>Get a practical response matched to your need.</span>
+              </div>
+            </div>
+          </div>
+          <div className="lp-lcp__panel">
+            <div className="lp-lcp__panel-head">
+              <p className="lp-lcp__panel-title">Tell us what you need</p>
+              <p className="lp-lcp__panel-sub">
+                A few details are enough to route your request to the right person.
+              </p>
+            </div>
+            <div className="lp-lcp__form">{formContent}</div>
+          </div>
+        </div>
+      </section>
+    </>
+  );
+}

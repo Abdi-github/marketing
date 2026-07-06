@@ -954,7 +954,11 @@ export function pickBundleForVertical(vertical: string): ImageBundle {
 
   // Food & beverage
   if (/café|cafe|kaffee|coffee|barista|espresso/.test(v)) return CAFE_WARM_BRUNCH;
-  if (/restaurant|gastro|bistro|trattoria|pizza|brasserie|dining|food|cuisine|ristorante/.test(v))
+  if (
+    /restaurant|gastro|bistro|trattoria|pizza|brasserie|dining|food|cuisine|ristorante|event-venue|private dining|wedding venue|venue|banquet/.test(
+      v,
+    )
+  )
     return RESTAURANT_FINE_DINING;
   if (/bakery|boulangerie|pâtisserie|patisserie|bäckerei|konditorei/.test(v))
     return CAFE_WARM_BRUNCH;
@@ -975,7 +979,16 @@ export function pickBundleForVertical(vertical: string): ImageBundle {
   if (/artisan|craft|handmade|maker|atelier|keramik|céramique/.test(v)) return RETAIL_ARTISAN_GOODS;
 
   // Professional services
-  if (/studio|creative|design|agency|agence/.test(v)) return SERVICE_CREATIVE_STUDIO;
+  if (
+    /agency-digital|software-saas|studio|creative|design|agency|agence|branding|web design|website|saas|software|startup|portfolio-proof/.test(
+      v,
+    )
+  )
+    return SERVICE_CREATIVE_STUDIO;
+  if (
+    /real-estate|property|immobilier|immobilien|realtor|broker|local-trades|quote-service/.test(v)
+  )
+    return SERVICE_CONSULTING_PRO;
 
   // Default: professional service
   return SERVICE_CONSULTING_PRO;

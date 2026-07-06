@@ -15,6 +15,7 @@ import { ImageSwapModal } from "../../../../../../components/landing/editor/imag
 import { CodePreviewPanel } from "../../../../../../components/landing/editor/code-preview-panel";
 import { renderRich } from "../../../../../../components/landing/rich-text";
 import type { LandingPageComposition, SectionType } from "@marketing/ai-router";
+import { isBackgroundStyleKey, type BackgroundStyleKey } from "@marketing/landing-design-system";
 import {
   LANDING_PAGE_LOCALES,
   normalizeLandingLanguagePreferences,
@@ -1757,12 +1758,17 @@ export default function EditLandingPage() {
 
   // Theme swap
   const handleThemeChange = useCallback(
-    async (palette: string | null, fontPair: string | null) => {
+    async (
+      palette: string | null,
+      fontPair: string | null,
+      backgroundStyle?: BackgroundStyleKey | null,
+    ) => {
       try {
         await trpc.landingPages.updateTheme.mutate({
           pageId,
           themeKey: palette,
           fontPairKey: fontPair,
+          backgroundStyle,
         });
         await loadPage();
       } catch {
@@ -1791,6 +1797,11 @@ export default function EditLandingPage() {
 
   const sections = composition?.sections.slice().sort((a, b) => a.order - b.order) ?? [];
   const currentFontPair = (pageMeta?.stepData?.themeFontPair as string | null) ?? null;
+  const rawBackgroundStyle = pageMeta?.stepData?.backgroundStyle;
+  const currentBackgroundStyle =
+    typeof rawBackgroundStyle === "string" && isBackgroundStyleKey(rawBackgroundStyle)
+      ? rawBackgroundStyle
+      : null;
   const languagePreferences = normalizeLandingLanguagePreferences(
     pageMeta?.stepData?.languagePreferences,
     composition?.locale ?? "de-CH",
@@ -1944,6 +1955,7 @@ export default function EditLandingPage() {
           <ThemePickerButton
             currentPalette={pageMeta.themeKey}
             currentFontPair={currentFontPair}
+            currentBackgroundStyle={currentBackgroundStyle}
             onChange={handleThemeChange}
           />
 
