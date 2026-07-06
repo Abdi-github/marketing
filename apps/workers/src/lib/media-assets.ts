@@ -45,7 +45,6 @@ export async function registerStoredMediaAsset(input: RegisterStoredMediaAssetIn
     .onConflictDoUpdate({
       target: mediaAssets.objectKey,
       set: {
-        publicUrl,
         originalFilename: input.originalFilename,
         contentType: input.contentType,
         byteSize: input.byteSize,
@@ -62,9 +61,17 @@ export async function registerStoredMediaAsset(input: RegisterStoredMediaAssetIn
     throw new Error(`Could not register media asset for object key ${input.storageKey}.`);
   }
 
+  const canonicalPublicUrl = `/api/media/assets/${asset.id}`;
+  if (asset.publicUrl !== canonicalPublicUrl) {
+    await db
+      .update(mediaAssets)
+      .set({ publicUrl: canonicalPublicUrl, updatedAt: now })
+      .where(eq(mediaAssets.id, asset.id));
+  }
+
   return {
     assetId: asset.id,
-    publicUrl: asset.publicUrl ?? `/api/media/assets/${asset.id}`,
+    publicUrl: canonicalPublicUrl,
   };
 }
 

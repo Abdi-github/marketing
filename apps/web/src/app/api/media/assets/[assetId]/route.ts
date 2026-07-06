@@ -16,7 +16,7 @@ export async function GET(
 ): Promise<Response> {
   const { assetId } = await params;
 
-  const [asset] = await db
+  const [assetById] = await db
     .select({
       id: mediaAssets.id,
       objectKey: mediaAssets.objectKey,
@@ -26,6 +26,20 @@ export async function GET(
     })
     .from(mediaAssets)
     .where(eq(mediaAssets.id, assetId));
+
+  const [assetByPublicUrl] = assetById
+    ? []
+    : await db
+        .select({
+          id: mediaAssets.id,
+          objectKey: mediaAssets.objectKey,
+          contentType: mediaAssets.contentType,
+          visibility: mediaAssets.visibility,
+          status: mediaAssets.status,
+        })
+        .from(mediaAssets)
+        .where(eq(mediaAssets.publicUrl, `/api/media/assets/${assetId}`));
+  const asset = assetById ?? assetByPublicUrl;
 
   if (!asset || asset.visibility !== "public" || asset.status !== "uploaded") {
     return new Response("Not found", { status: 404 });
