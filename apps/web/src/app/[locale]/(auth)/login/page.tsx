@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { Suspense, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useSearchParams } from "next/navigation";
 
@@ -38,7 +38,7 @@ async function classifySignInFailure(res: Response): Promise<LoginErrorKind> {
   return "server";
 }
 
-export default function LoginPage() {
+function LoginForm() {
   const locale = useLocale();
   const t = useTranslations("Login");
   const searchParams = useSearchParams();
@@ -177,5 +177,13 @@ export default function LoginPage() {
         </a>
       </p>
     </form>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="h-80 w-full animate-pulse bg-gray-50" />}>
+      <LoginForm />
+    </Suspense>
   );
 }
