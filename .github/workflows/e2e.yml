@@ -63,7 +63,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Run DB migrations
-        run: pnpm --filter @marketing/db drizzle:migrate
+        run: pnpm --filter @marketing/db db:migrate
 
       - name: Install Playwright browsers
         run: pnpm --filter @marketing/web e2e:install-browsers
