@@ -21,7 +21,21 @@ export async function GET(
   req: Request,
   { params }: { params: Promise<{ jobId: string }> },
 ): Promise<Response> {
-  const { jobId } = await params;
+  try {
+    return await renderCreativeImage(req, await params);
+  } catch (error) {
+    if (isDatabasePoolExhaustion(error)) {
+      console.error("[social-creatives] Database pool exhausted", { err: String(error) });
+      return new Response("Temporarily unavailable", {
+        status: 503,
+        headers: { "cache-control": "no-store", "retry-after": "2" },
+      });
+    }
+    throw error;
+  }
+}
+
+async function renderCreativeImage(req: Request, { jobId }: { jobId: string }): Promise<Response> {
   const requestOrigin = new URL(req.url).origin;
 
   const [post] = await db
@@ -144,6 +158,12 @@ export async function GET(
       secondary: brand?.colorSecondary ?? "#f59e0b",
     });
   }
+}
+
+function isDatabasePoolExhaustion(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const code = "code" in error ? String(error.code) : "";
+  return code === "XX000" || /EMAXCONNSESSION|max clients reached/i.test(error.message);
 }
 
 async function resolveOgImageSrc(
