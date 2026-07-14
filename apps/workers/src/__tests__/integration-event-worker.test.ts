@@ -9,13 +9,25 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { UnrecoverableError as _UnrecoverableError } from "bullmq";
 
+// ─── Hoisted mock helpers ─────────────────────────────────────────────────────
+// These must be declared via vi.hoisted so they are available inside vi.mock
+// factory functions (which are hoisted to the top of the file by vitest).
+
+const { mockDbAdd, mockDbUpdateWhere } = vi.hoisted(() => ({
+  mockDbAdd: vi.fn().mockResolvedValue(undefined),
+  mockDbUpdateWhere: vi.fn().mockResolvedValue([]),
+}));
+
 // ─── Module mocks (hoisted) ───────────────────────────────────────────────────
 
 vi.mock("bullmq", () => ({
   Worker: vi.fn().mockImplementation(() => ({ on: vi.fn() })),
   Queue: vi.fn().mockImplementation(() => ({ add: vi.fn(), on: vi.fn() })),
   UnrecoverableError: class UnrecoverableError extends Error {
-    constructor(msg: string) { super(msg); this.name = "UnrecoverableError"; }
+    constructor(msg: string) {
+      super(msg);
+      this.name = "UnrecoverableError";
+    }
   },
 }));
 
@@ -47,8 +59,6 @@ vi.mock("@marketing/ai-router", () => ({
 // Shared DB state for tests.
 let _dbSelectResults: unknown[][] = [];
 let _selectIdx = 0;
-const mockDbAdd = vi.fn().mockResolvedValue(undefined);
-const mockDbUpdateWhere = vi.fn().mockResolvedValue([]);
 
 vi.mock("@marketing/db", () => ({
   db: {
@@ -100,11 +110,7 @@ const BIZ_PROFILE_FITNESS = {
   locale: "de-CH",
 };
 
-function makeJob(
-  provider: string,
-  eventType: string,
-  payload: Record<string, unknown> = {},
-) {
+function makeJob(provider: string, eventType: string, payload: Record<string, unknown> = {}) {
   return {
     id: "bullmq-job-1",
     data: { tenantId: TENANT_ID, webhookEventId: EVENT_ID, provider, eventType, payload },
@@ -136,9 +142,7 @@ describe("handleIntegrationEventJob — gastrofix reservation.created", () => {
       [BIZ_PROFILE],
     ];
 
-    await handleIntegrationEventJob(
-      makeJob("gastrofix", "reservation.created", { guestCount: 4 }),
-    );
+    await handleIntegrationEventJob(makeJob("gastrofix", "reservation.created", { guestCount: 4 }));
 
     expect(mockDbAdd).toHaveBeenCalledOnce();
     const [, jobData] = mockDbAdd.mock.calls[0] as [string, Record<string, unknown>];
@@ -187,10 +191,7 @@ describe("handleIntegrationEventJob — idempotency", () => {
 
 describe("handleIntegrationEventJob — suspended tenant", () => {
   it("throws UnrecoverableError and does not enqueue a job", async () => {
-    _dbSelectResults = [
-      [{ id: EVENT_ID, processedAt: null }],
-      [{ suspended: true }],
-    ];
+    _dbSelectResults = [[{ id: EVENT_ID, processedAt: null }], [{ suspended: true }]];
 
     await expect(
       handleIntegrationEventJob(makeJob("gastrofix", "reservation.created")),

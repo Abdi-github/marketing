@@ -2,7 +2,6 @@ import { db } from "@marketing/db";
 import {
   tenants,
   aiUsage,
-  users,
   businessProfiles,
   socialPosts,
   leads,
@@ -19,12 +18,8 @@ import { authedProcedure, router } from "../trpc";
 // Ops procedures are gated to users with platformRole = 'super_admin'.
 // This is NOT a tenant role — it is a platform-wide operator role.
 
-const opsProcedure = authedProcedure.use(async ({ ctx, next }) => {
-  const [row] = await db
-    .select({ platformRole: users.platformRole })
-    .from(users)
-    .where(eq(users.id, ctx.session.user.id));
-  if (row?.platformRole !== "super_admin") {
+const opsProcedure = authedProcedure.use(({ ctx, next }) => {
+  if (ctx.session.user.platformRole !== "super_admin") {
     throw new TRPCError({ code: "FORBIDDEN", message: "Requires super_admin platform role" });
   }
   return next({ ctx });
@@ -82,8 +77,7 @@ export function computeConversionRate(
   return {
     eligibleCount: eligible.length,
     convertedCount: converted,
-    conversionRate:
-      eligible.length === 0 ? 0 : Math.round((converted / eligible.length) * 100),
+    conversionRate: eligible.length === 0 ? 0 : Math.round((converted / eligible.length) * 100),
   };
 }
 
@@ -110,11 +104,13 @@ async function computeRetention(
     const counts = { d7: { num: 0, den: 0 }, d30: { num: 0, den: 0 }, d60: { num: 0, den: 0 } };
 
     for (const p of group) {
-      const daysSinceTrial = Math.floor(
-        (now.getTime() - p.trialStartAt.getTime()) / 86_400_000,
-      );
+      const daysSinceTrial = Math.floor((now.getTime() - p.trialStartAt.getTime()) / 86_400_000);
 
-      for (const [key, n] of [["d7", 7], ["d30", 30], ["d60", 60]] as const) {
+      for (const [key, n] of [
+        ["d7", 7],
+        ["d30", 30],
+        ["d60", 60],
+      ] as const) {
         if (daysSinceTrial < n + 1) continue; // too new — exclude from denominator
         counts[key].den++;
 
@@ -254,8 +250,7 @@ export const opsRouter = router({
     }));
 
     // 4. Compute trial→paid conversion rate (ADR-0016 §D1).
-    const { conversionRate, convertedCount, eligibleCount } =
-      computeConversionRate(partners);
+    const { conversionRate, convertedCount, eligibleCount } = computeConversionRate(partners);
 
     // 5. Compute D7/D30/D60 retention per vertical (ADR-0016 §D1).
     const retentionByVertical = await computeRetention(
