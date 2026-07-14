@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { db, mediaAssets } from "@marketing/db";
-import { eq } from "drizzle-orm";
+import { env } from "@marketing/shared";
+import { and, eq } from "drizzle-orm";
 import { storeGeneratedBinaryAsset } from "./social-creative-storage";
 
 export type MediaAssetScope = "logo" | "section-image" | "social-creative" | "form-attachment";
@@ -89,6 +92,11 @@ export async function ingestRemoteImageToMediaAsset(input: {
   contentType: string;
   byteSize: number;
 }> {
+  const tenantPrefix = `${input.tenantId}/`;
+  if (!input.storageKeyPrefix.startsWith(tenantPrefix)) {
+    throw new Error("Generated media storage keys must use the tenant prefix.");
+  }
+
   const response = await fetch(input.sourceUrl, {
     headers: {
       accept: "image/*",
@@ -159,4 +167,50 @@ export async function findMediaAssetPublicUrlByObjectKey(
     .where(eq(mediaAssets.objectKey, objectKey));
   if (!asset) return null;
   return asset.publicUrl ?? `/api/media/assets/${asset.id}`;
+}
+
+export async function resolveMediaAssetForImageInput(input: {
+  tenantId: string;
+  imageUrl: string;
+}): Promise<string> {
+  if (/^https?:\/\//i.test(input.imageUrl) || input.imageUrl.startsWith("data:")) {
+    return input.imageUrl;
+  }
+
+  const [asset] = await db
+    .select({
+      objectKey: mediaAssets.objectKey,
+      contentType: mediaAssets.contentType,
+    })
+    .from(mediaAssets)
+    .where(
+      and(eq(mediaAssets.tenantId, input.tenantId), eq(mediaAssets.publicUrl, input.imageUrl)),
+    );
+
+  if (!asset) {
+    throw new Error("The source image could not be found.");
+  }
+
+  if (!asset.objectKey.startsWith("local:")) {
+    return new URL(input.imageUrl, env.APP_URL).toString();
+  }
+
+  const relativeKey = asset.objectKey.slice("local:".length).replace(/\\/g, "/");
+  const candidates = [
+    path.resolve(process.cwd(), "..", "web", "public", "generated"),
+    path.resolve(process.cwd(), "apps", "web", "public", "generated"),
+  ];
+
+  for (const baseDir of candidates) {
+    const filePath = path.resolve(baseDir, relativeKey);
+    if (!filePath.startsWith(baseDir)) continue;
+    try {
+      const bytes = await readFile(filePath);
+      return `data:${asset.contentType};base64,${bytes.toString("base64")}`;
+    } catch {
+      // Try the next development layout.
+    }
+  }
+
+  throw new Error("The source image file could not be read.");
 }

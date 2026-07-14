@@ -1,7 +1,17 @@
 import { z } from "zod";
 
 export const socialImageActionSchema = z.enum(["generate", "edit"]);
-export const socialImageAspectRatioSchema = z.enum(["1:1", "4:3", "3:4", "4:5", "16:9", "9:16"]);
+export const socialImageAspectRatioSchema = z.enum([
+  "1:1",
+  "4:3",
+  "3:4",
+  "4:5",
+  "16:9",
+  "9:16",
+  "match_input_image",
+]);
+
+const mediaAssetPathSchema = z.string().regex(/^\/api\/media\/assets\/[0-9a-f-]{36}$/i);
 
 export const socialImageJobSchema = z.object({
   tenantId: z.string().uuid(),
@@ -10,7 +20,7 @@ export const socialImageJobSchema = z.object({
   action: socialImageActionSchema,
   prompt: z.string().min(5).max(500),
   aspectRatio: socialImageAspectRatioSchema.default("1:1"),
-  inputImageUrl: z.string().url().optional(),
+  inputImageUrl: z.union([z.string().url(), mediaAssetPathSchema]).optional(),
   idempotencyKey: z.string().uuid(),
   promptId: z.string().default("social-post-image-v1"),
   promptVersion: z.number().int().positive().default(1),

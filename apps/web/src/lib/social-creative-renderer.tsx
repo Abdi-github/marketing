@@ -455,7 +455,13 @@ function renderTestimonialCreative(input: {
           </div>
           <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 30 }}>
             <div
-              style={{ fontSize: 92, lineHeight: 0.94, fontWeight: 950, color: input.colors.ink }}
+              style={{
+                display: "flex",
+                fontSize: 92,
+                lineHeight: 0.94,
+                fontWeight: 950,
+                color: input.colors.ink,
+              }}
             >
               “{input.input.plan.headline}”
             </div>

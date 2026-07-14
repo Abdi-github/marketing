@@ -19,6 +19,7 @@ type SocialCreativeTemplate =
   | "product-hero"
   | "testimonial-proof"
   | "carousel-cover";
+type VisualMode = "photo" | "graphic";
 
 type ThreadPost = {
   jobId: string;
@@ -184,6 +185,7 @@ function NewPostPageContent() {
   const [creativeTemplate, setCreativeTemplate] = useState<SocialCreativeTemplate>("auto");
   const [creativeDirection, setCreativeDirection] = useState("");
   const [generatingCreativeJobId, setGeneratingCreativeJobId] = useState<string | null>(null);
+  const [visualMode, setVisualMode] = useState<VisualMode>("graphic");
 
   // Copy state
   const [copiedJobId, setCopiedJobId] = useState<string | null>(null);
@@ -319,7 +321,11 @@ function NewPostPageContent() {
     return () => clearInterval(interval);
   }, [thread, threadId]);
 
-  async function waitForImageRefresh(jobId: string, previousUrl?: string | null): Promise<string> {
+  async function waitForImageRefresh(
+    jobId: string,
+    previousUrl: string | null | undefined,
+    imageJobId: string,
+  ): Promise<string> {
     const startedAt = Date.now();
     while (Date.now() - startedAt < ACTIVE_JOB_TIMEOUT_MS) {
       await new Promise((resolve) => setTimeout(resolve, 2500));
@@ -340,6 +346,16 @@ function NewPostPageContent() {
           ),
         );
         return post.imageUrl;
+      }
+      const imageJob = await trpc.content.socialImageJobStatus.query({
+        imageJobId,
+        postJobId: jobId,
+      });
+      if (imageJob.state === "failed") {
+        throw new Error(imageJob.failedReason || t("imageGenError"));
+      }
+      if (imageJob.state === "completed" && !post?.imageUrl) {
+        throw new Error(t("imageResultMissing"));
       }
     }
     throw new Error(t("generationTimeout"));
@@ -395,7 +411,7 @@ function NewPostPageContent() {
               ? await trpc.content.editPostImage.mutate({
                   jobId: latestCompleted.jobId,
                   editInstruction: intent.imagePrompt,
-                  aspectRatio: "1:1",
+                  aspectRatio: "match_input_image",
                 })
               : await trpc.content.generatePostImage.mutate({
                   jobId: latestCompleted.jobId,
@@ -403,7 +419,11 @@ function NewPostPageContent() {
                   aspectRatio: "1:1",
                 });
           if (res.status === "pending") {
-            await waitForImageRefresh(latestCompleted.jobId, latestCompleted.imageUrl);
+            await waitForImageRefresh(
+              latestCompleted.jobId,
+              latestCompleted.imageUrl,
+              res.imageJobId,
+            );
           }
           setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
         } catch (err) {
@@ -508,6 +528,7 @@ function NewPostPageContent() {
     setCreativeTemplate("auto");
     setCreativeDirection("");
     setGeneratingCreativeJobId(null);
+    setVisualMode("graphic");
     setEditingTextJobId(null);
     setEditTextError(null);
     setPreviewPost(null);
@@ -532,8 +553,13 @@ function NewPostPageContent() {
       setImagePrompt("");
     } finally {
       setSuggestingPromptJobId(null);
-      setImagePromptJobId(post.jobId);
     }
+  }
+
+  function openVisualEditor(post: ThreadPost) {
+    setImagePromptJobId(post.jobId);
+    setVisualMode("graphic");
+    setFormError(null);
   }
 
   async function handleGenerateImage(jobId: string) {
@@ -548,7 +574,7 @@ function NewPostPageContent() {
       });
       if (result.status === "pending") {
         const previousUrl = thread.find((p) => p.jobId === jobId)?.imageUrl;
-        await waitForImageRefresh(jobId, previousUrl);
+        await waitForImageRefresh(jobId, previousUrl, result.imageJobId);
       }
     } catch (err) {
       setFormError(err instanceof Error ? err.message : t("imageGenError"));
@@ -570,7 +596,7 @@ function NewPostPageContent() {
       });
       if (result.status === "pending") {
         const previousUrl = thread.find((p) => p.jobId === jobId)?.imageUrl;
-        await waitForImageRefresh(jobId, previousUrl);
+        await waitForImageRefresh(jobId, previousUrl, result.imageJobId);
       }
     } catch (err) {
       setFormError(err instanceof Error ? err.message : t("imageGenError"));
@@ -604,9 +630,9 @@ function NewPostPageContent() {
             : p,
         ),
       );
+      setImagePromptJobId(null);
     } catch (err) {
       setFormError(err instanceof Error ? err.message : t("creativeError"));
-    } finally {
       setGeneratingCreativeJobId(null);
     }
   }
@@ -823,8 +849,264 @@ function NewPostPageContent() {
                     {/* Actions */}
                     {idx === renderPosts.length - 1 && (
                       <div className="space-y-3">
+                        <div className="border-t border-gray-100 pt-4">
+                          {imagePromptJobId !== post.jobId && (
+                            <div className="flex flex-wrap items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => openVisualEditor(post)}
+                                disabled={
+                                  generatingImageJobId === post.jobId ||
+                                  generatingCreativeJobId === post.jobId ||
+                                  post.creativeStatus === "pending"
+                                }
+                                className="rounded bg-black px-3 py-2 text-xs font-medium text-white disabled:opacity-50"
+                              >
+                                {post.imageUrl || getDisplayCreativeUrl(post)
+                                  ? t("changeVisual")
+                                  : t("createVisual")}
+                              </button>
+                              {generatingImageJobId === post.jobId && (
+                                <span className="text-xs text-gray-500">
+                                  {t("generatingImage")}
+                                </span>
+                              )}
+                              {(generatingCreativeJobId === post.jobId ||
+                                post.creativeStatus === "pending") && (
+                                <span className="text-xs text-gray-500">
+                                  {t("generatingGraphic")}
+                                </span>
+                              )}
+                              {post.imageUrl && applyingEditJobId !== post.jobId && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditImageJobId(post.jobId);
+                                      setEditAspectRatio("1:1");
+                                      setEditInstruction("");
+                                    }}
+                                    className="rounded border px-3 py-1.5 text-xs hover:bg-gray-50"
+                                  >
+                                    {t("editImage")}
+                                  </button>
+                                  <a
+                                    href={post.imageUrl}
+                                    download
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="rounded border px-3 py-1.5 text-xs hover:bg-gray-50"
+                                  >
+                                    {t("downloadImage")}
+                                  </a>
+                                </>
+                              )}
+                              {getDisplayCreativeUrl(post) && (
+                                <a
+                                  href={getDisplayCreativeUrl(post) ?? ""}
+                                  download={`social-graphic-${post.jobId}.png`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="rounded border px-3 py-1.5 text-xs hover:bg-gray-50"
+                                >
+                                  {t("downloadGraphic")}
+                                </a>
+                              )}
+                            </div>
+                          )}
+
+                          {imagePromptJobId === post.jobId && (
+                            <div className="space-y-4 bg-gray-50 p-4">
+                              <div className="flex items-center justify-between gap-3">
+                                <p className="text-sm font-semibold text-gray-900">
+                                  {t("visualEditorTitle")}
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => setImagePromptJobId(null)}
+                                  className="text-xs text-gray-500 hover:text-gray-900"
+                                >
+                                  {t("cancelImagePrompt")}
+                                </button>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-2" role="tablist">
+                                {(["graphic", "photo"] as const).map((mode) => (
+                                  <button
+                                    key={mode}
+                                    type="button"
+                                    role="tab"
+                                    aria-selected={visualMode === mode}
+                                    onClick={() => {
+                                      setVisualMode(mode);
+                                      if (
+                                        mode === "photo" &&
+                                        !imagePrompt.trim() &&
+                                        suggestingPromptJobId !== post.jobId
+                                      ) {
+                                        void openImagePrompt(post);
+                                      }
+                                    }}
+                                    className={`border px-3 py-3 text-left transition-colors ${
+                                      visualMode === mode
+                                        ? "border-black bg-white text-black"
+                                        : "border-gray-200 text-gray-600 hover:border-gray-400"
+                                    }`}
+                                  >
+                                    <span className="block text-sm font-semibold">
+                                      {mode === "graphic" ? t("visualGraphic") : t("visualPhoto")}
+                                    </span>
+                                    <span className="mt-1 block text-xs text-gray-500">
+                                      {mode === "graphic"
+                                        ? t("visualGraphicHint")
+                                        : t("visualPhotoHint")}
+                                    </span>
+                                  </button>
+                                ))}
+                              </div>
+
+                              <div className="space-y-2">
+                                <p className="text-xs font-medium text-gray-700">
+                                  {t("visualFormat")}
+                                </p>
+                                <div className="flex flex-wrap gap-1">
+                                  {SOCIAL_GRAPHIC_ASPECT_RATIOS.map((ar) => {
+                                    const selected =
+                                      visualMode === "graphic"
+                                        ? creativeAspectRatio === ar.value
+                                        : aspectRatio === ar.value;
+                                    return (
+                                      <button
+                                        key={ar.value}
+                                        type="button"
+                                        onClick={() => {
+                                          setCreativeAspectRatio(ar.value);
+                                          setAspectRatio(ar.value);
+                                        }}
+                                        className={`rounded border px-2.5 py-1 text-xs ${
+                                          selected
+                                            ? "border-black bg-black text-white"
+                                            : "border-gray-200 bg-white hover:border-gray-400"
+                                        }`}
+                                      >
+                                        {ar.label}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+
+                              {visualMode === "photo" ? (
+                                <div className="space-y-2">
+                                  <label className="text-xs font-medium text-gray-700">
+                                    {t("photoDirectionLabel")}
+                                  </label>
+                                  <textarea
+                                    value={imagePrompt}
+                                    onChange={(e) => setImagePrompt(e.target.value)}
+                                    placeholder={t("imagePlaceholder")}
+                                    rows={3}
+                                    maxLength={500}
+                                    className="w-full resize-none rounded border bg-white px-3 py-2 text-sm"
+                                  />
+                                  {suggestingPromptJobId === post.jobId && (
+                                    <p className="text-xs text-gray-500">{t("suggestingPrompt")}</p>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleGenerateImage(post.jobId)}
+                                    disabled={
+                                      !imagePrompt.trim() || suggestingPromptJobId === post.jobId
+                                    }
+                                    className="rounded bg-black px-3 py-2 text-xs font-medium text-white disabled:opacity-50"
+                                  >
+                                    {post.imageUrl ? t("replacePhoto") : t("createPhoto")}
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                  <label className="space-y-1 text-xs font-medium text-gray-700">
+                                    <span>{t("visualStyle")}</span>
+                                    <select
+                                      value={creativeTemplate}
+                                      onChange={(e) =>
+                                        setCreativeTemplate(
+                                          e.target.value as SocialCreativeTemplate,
+                                        )
+                                      }
+                                      className="w-full rounded border bg-white px-3 py-2 text-sm"
+                                    >
+                                      {SOCIAL_GRAPHIC_TEMPLATES.map((tpl) => (
+                                        <option key={tpl.value} value={tpl.value}>
+                                          {t(tpl.labelKey)}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                  <label className="space-y-1 text-xs font-medium text-gray-700">
+                                    <span>{t("creativeDirectionLabel")}</span>
+                                    <input
+                                      value={creativeDirection}
+                                      onChange={(e) => setCreativeDirection(e.target.value)}
+                                      placeholder={t("creativeDirectionShortPlaceholder")}
+                                      maxLength={600}
+                                      className="w-full rounded border bg-white px-3 py-2 text-sm"
+                                    />
+                                  </label>
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleGenerateCreative(post.jobId)}
+                                    disabled={
+                                      generatingCreativeJobId === post.jobId ||
+                                      post.creativeStatus === "pending"
+                                    }
+                                    className="w-fit rounded bg-black px-3 py-2 text-xs font-medium text-white disabled:opacity-50 sm:col-span-2"
+                                  >
+                                    {getDisplayCreativeUrl(post)
+                                      ? t("replaceGraphic")
+                                      : t("createGraphic")}
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {editImageJobId === post.jobId && (
+                            <div className="mt-3 space-y-2 bg-gray-50 p-4">
+                              <textarea
+                                value={editInstruction}
+                                onChange={(e) => setEditInstruction(e.target.value)}
+                                placeholder={t("editImagePlaceholder")}
+                                rows={2}
+                                maxLength={500}
+                                className="w-full resize-none rounded border bg-white px-3 py-2 text-sm"
+                              />
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => void handleEditImage(post.jobId)}
+                                  disabled={!editInstruction.trim()}
+                                  className="rounded bg-black px-3 py-1.5 text-xs text-white disabled:opacity-50"
+                                >
+                                  {t("applyEdit")}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditImageJobId(null)}
+                                  className="rounded border px-3 py-1.5 text-xs hover:bg-white"
+                                >
+                                  {t("cancelImagePrompt")}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {post.creativeStatus === "failed" && !getDisplayCreativeUrl(post) && (
+                            <p className="mt-2 text-xs text-red-600">{t("creativeError")}</p>
+                          )}
+                        </div>
                         {/* â”€â”€ Image section â”€â”€ */}
-                        <div className="space-y-2">
+                        <div className="hidden">
                           {/* Image action buttons */}
                           <div className="flex flex-wrap gap-2">
                             {/* Generate image (when no image yet) */}
@@ -992,7 +1274,7 @@ function NewPostPageContent() {
 
                         {/* â”€â”€ Designed graphic + publish actions â”€â”€ */}
                         <div className="flex flex-wrap gap-2">
-                          <div className="w-full space-y-2 rounded-lg border border-gray-100 bg-gray-50 p-3">
+                          <div className="hidden">
                             <div className="flex items-center justify-between gap-2">
                               <div>
                                 <p className="text-xs font-semibold text-gray-900">
@@ -1080,10 +1362,8 @@ function NewPostPageContent() {
                                   ? t("regenerateGraphic")
                                   : t("generateGraphic")}
                             </button>
-                            {post.creativeStatus === "failed" && (
-                              <p className="text-xs text-red-600">
-                                {post.creativeError ?? t("creativeError")}
-                              </p>
+                            {post.creativeStatus === "failed" && !getDisplayCreativeUrl(post) && (
+                              <p className="text-xs text-red-600">{t("creativeError")}</p>
                             )}
                           </div>
 

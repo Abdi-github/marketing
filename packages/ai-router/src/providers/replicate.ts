@@ -117,7 +117,7 @@ const IMAGE_MODEL_CHAIN: ModelConfig[] = [
     buildInput: (input) => ({
       prompt: input.prompt,
       aspect_ratio: input.aspectRatio ?? "1:1",
-      output_format: "webp",
+      output_format: "png",
     }),
     costUsd: 0.04,
   },
@@ -130,7 +130,7 @@ const KONTEXT_MODEL: ModelConfig = {
     prompt: input.prompt,
     input_image: input.inputImageUrl,
     aspect_ratio: input.aspectRatio ?? "1:1",
-    output_format: "webp",
+    output_format: "png",
   }),
   costUsd: 0.04,
 };

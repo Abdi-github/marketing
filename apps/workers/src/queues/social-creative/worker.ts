@@ -315,11 +315,13 @@ export async function handleSocialCreativeJob(job: Job<SocialCreativeJob>): Prom
       tenantIdHash: hashId(data.tenantId),
     });
   } catch (err) {
+    const maxAttempts = job.opts.attempts ?? 1;
+    const isFinalAttempt = job.attemptsMade + 1 >= maxAttempts;
     await db
       .update(socialPosts)
       .set({
-        creativeStatus: "failed",
-        creativeError: String(err).slice(0, 500),
+        creativeStatus: isFinalAttempt ? "failed" : "pending",
+        creativeError: isFinalAttempt ? "We couldn't render this design. Please try again." : null,
         creativeUpdatedAt: new Date(),
         updatedAt: new Date(),
       })

@@ -1899,13 +1899,22 @@ async function generateHeroImage(
     { prompt: fluxPrompt, aspectRatio: "16:9" },
     { tenantId: ctx.tenantId, jobId },
   );
-  const durableImage = await ingestRemoteImageToMediaAsset({
-    tenantId: ctx.tenantId,
-    scope: "section-image",
-    sourceUrl: imageResult.url,
-    originalFilenameBase: `landing-hero-${data.landingPageId}`,
-    storageKeyPrefix: `generated/landing-heroes/${ctx.tenantId}`,
-  });
+  let durableImage: Awaited<ReturnType<typeof ingestRemoteImageToMediaAsset>>;
+  try {
+    durableImage = await ingestRemoteImageToMediaAsset({
+      tenantId: ctx.tenantId,
+      scope: "section-image",
+      sourceUrl: imageResult.url,
+      originalFilenameBase: `landing-hero-${data.landingPageId}`,
+      storageKeyPrefix: `${ctx.tenantId}/generated/landing-heroes`,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/Scaleway object upload failed \((401|403)\)/.test(message)) {
+      throw new UnrecoverableError("Object storage rejected the generated image upload.");
+    }
+    throw error;
+  }
 
   logger.info(
     { jobId, costUsd: imageResult.costUsd, model: imageResult.model },

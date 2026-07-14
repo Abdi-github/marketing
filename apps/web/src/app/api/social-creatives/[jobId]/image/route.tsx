@@ -113,7 +113,7 @@ export async function GET(
 
   const businessName = profile?.businessName ?? "My Business";
   try {
-    return new ImageResponse(
+    const rendered = new ImageResponse(
       renderSocialCreative({
         plan,
         imageUrl,
@@ -122,6 +122,10 @@ export async function GET(
       }),
       { width, height },
     );
+    // ImageResponse renders lazily. Consuming it here keeps stream-time errors
+    // inside this try/catch so clients never receive an empty response.
+    const png = new Uint8Array(await rendered.arrayBuffer());
+    return pngResponse(png);
   } catch (err) {
     console.error("[social-creatives] ImageResponse render failed", {
       jobId,
@@ -404,6 +408,7 @@ function svgFallbackResponse(input: {
     headers: {
       "cache-control": "public, max-age=300",
       "content-type": "image/svg+xml; charset=utf-8",
+      "x-social-creative-render": "fallback",
     },
   });
 }

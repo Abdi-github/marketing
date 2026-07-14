@@ -101,7 +101,7 @@ export type EmbedOutput = {
 
 // ─── Image generation types ───────────────────────────────────────────────────
 
-export type AspectRatio = "1:1" | "4:3" | "3:4" | "4:5" | "16:9" | "9:16";
+export type AspectRatio = "1:1" | "4:3" | "3:4" | "4:5" | "16:9" | "9:16" | "match_input_image";
 
 export type ImageInput = {
   prompt: string;

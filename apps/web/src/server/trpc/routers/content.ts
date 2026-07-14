@@ -12,14 +12,12 @@ import { TRPCError } from "@trpc/server";
 import { and, eq, asc, desc, isNull, isNotNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
-  buildSocialCreativePlan,
   getSocialCreativePath,
-  parsePromptInput,
   type SocialCreativeAspectRatio,
   type SocialCreativeTemplate,
 } from "../../../lib/social-creative";
 import { enqueueSocialCreativeJob } from "../../queues/social-creative";
-import { enqueueSocialImageJob } from "../../queues/social-image";
+import { enqueueSocialImageJob, getSocialImageJobStatus } from "../../queues/social-image";
 import { enqueueSocialPostJob } from "../../queues/social-post";
 import { tenantProcedure, router } from "../trpc";
 
@@ -41,6 +39,10 @@ function selectPrompt(locale: string, isRefinement: boolean): string {
 }
 
 const aiImageAspectRatioSchema = z.enum(["1:1", "4:3", "3:4", "4:5", "16:9", "9:16"]);
+const aiImageEditAspectRatioSchema = z.union([
+  aiImageAspectRatioSchema,
+  z.literal("match_input_image"),
+]);
 const socialCreativeAspectRatioSchema = z.enum(["1:1", "4:5", "9:16"]);
 const socialCreativeTemplateSchema = z.enum([
   "auto",
@@ -130,7 +132,7 @@ async function enqueueSocialImage(input: {
   postJobId: string;
   action: "generate" | "edit";
   prompt: string;
-  aspectRatio: z.infer<typeof aiImageAspectRatioSchema>;
+  aspectRatio: z.infer<typeof aiImageEditAspectRatioSchema>;
   inputImageUrl?: string | null;
 }): Promise<string> {
   const idempotencyKey = crypto.randomUUID();
@@ -519,9 +521,10 @@ export const contentRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: "Post is not yet completed." });
 
       let creativePatch: Record<string, unknown> = {};
-      let creativeUrl: string | null = null;
+      const creativeUrl: string | null = null;
       let creativeStatus: string | null = null;
-      if (post.creativePlan || post.creativeImageUrl) {
+      const refreshCreative = Boolean(post.creativePlan || post.creativeImageUrl);
+      if (refreshCreative) {
         const creativeUpdatedAt = new Date();
         creativeStatus = "pending";
         creativePatch = {
@@ -532,14 +535,6 @@ export const contentRouter = router({
           creativeError: null,
           creativeUpdatedAt,
         };
-        await enqueueSocialCreative({
-          tenantId,
-          userId,
-          postJobId: input.jobId,
-          aspectRatio: normalizeCreativeAspectRatio(post.creativeAspectRatio),
-          template: normalizeCreativeTemplate(post.creativeTemplate),
-          renderAppUrl: ctx.requestOrigin,
-        });
       }
 
       await db
@@ -547,12 +542,34 @@ export const contentRouter = router({
         .set({ generatedText: input.text, updatedAt: new Date(), ...creativePatch })
         .where(and(eq(socialPosts.tenantId, tenantId), eq(socialPosts.jobId, input.jobId)));
 
+      if (refreshCreative) {
+        try {
+          await enqueueSocialCreative({
+            tenantId,
+            userId,
+            postJobId: input.jobId,
+            aspectRatio: normalizeCreativeAspectRatio(post.creativeAspectRatio),
+            template: normalizeCreativeTemplate(post.creativeTemplate),
+            renderAppUrl: ctx.requestOrigin,
+          });
+        } catch (error) {
+          creativeStatus = "failed";
+          await db
+            .update(socialPosts)
+            .set({
+              creativeStatus: "failed",
+              creativeError: error instanceof Error ? error.message.slice(0, 500) : "Queue failed",
+              creativeUpdatedAt: new Date(),
+              updatedAt: new Date(),
+            })
+            .where(and(eq(socialPosts.tenantId, tenantId), eq(socialPosts.jobId, input.jobId)));
+        }
+      }
+
       return { text: input.text, creativeUrl, creativeStatus };
     }),
 
   // Create or refresh a designed graphic for a completed post.
-  // This uses the registered server-side graphic renderer immediately so demos
-  // do not depend on a background worker being healthy before a preview appears.
   generateSocialCreative: tenantProcedure
     .input(
       z.object({
@@ -563,14 +580,12 @@ export const contentRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const { tenantId } = ctx.tenantCtx;
+      const { tenantId, userId } = ctx.tenantCtx;
 
       const [post] = await db
         .select({
           status: socialPosts.status,
           generatedText: socialPosts.generatedText,
-          imageUrl: socialPosts.imageUrl,
-          promptInput: socialPosts.promptInput,
         })
         .from(socialPosts)
         .where(and(eq(socialPosts.tenantId, tenantId), eq(socialPosts.jobId, input.jobId)));
@@ -580,53 +595,64 @@ export const contentRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: "Post is not yet completed." });
       }
 
-      const [profile] = await db
-        .select({
-          businessName: businessProfiles.businessName,
-          vertical: businessProfiles.vertical,
-          city: businessProfiles.addressCity,
-        })
-        .from(businessProfiles)
-        .where(eq(businessProfiles.tenantId, tenantId));
-
       const now = new Date();
-      const promptInput = parsePromptInput(post.promptInput);
-      const creativePlan = buildSocialCreativePlan({
-        businessName: profile?.businessName ?? "My Business",
-        vertical: profile?.vertical,
-        city: profile?.city,
-        topic: promptInput.topic,
-        highlights: promptInput.highlights,
-        postText: post.generatedText,
-        imageUrl: post.imageUrl,
-        aspectRatio: input.aspectRatio,
-        template: input.template,
-        creativeDirection: input.creativeDirection,
-      });
-
       await db
         .update(socialPosts)
         .set({
           creativeTemplate: input.template,
           creativeAspectRatio: input.aspectRatio,
-          creativePlan,
+          creativePlan: null,
           creativeImageUrl: null,
           creativeStorageKey: null,
-          creativeStatus: "completed",
+          creativeStatus: "pending",
           creativeError: null,
           creativeUpdatedAt: now,
           updatedAt: now,
         })
         .where(and(eq(socialPosts.tenantId, tenantId), eq(socialPosts.jobId, input.jobId)));
 
-      return {
-        creativeJobId: null,
-        creativeTemplate: input.template,
-        creativeAspectRatio: input.aspectRatio,
-        creativeStatus: "completed",
-        creativeUpdatedAt: now,
-        creativeUrl: getSocialCreativePath(input.jobId, now),
-      };
+      try {
+        const creativeJobId = await enqueueSocialCreative({
+          tenantId,
+          userId,
+          postJobId: input.jobId,
+          aspectRatio: input.aspectRatio,
+          template: input.template,
+          creativeDirection: input.creativeDirection,
+          renderAppUrl: ctx.requestOrigin,
+        });
+
+        return {
+          creativeJobId,
+          creativeTemplate: input.template,
+          creativeAspectRatio: input.aspectRatio,
+          creativeStatus: "pending" as const,
+          creativeUpdatedAt: now,
+          creativeUrl: null,
+        };
+      } catch (error) {
+        await db
+          .update(socialPosts)
+          .set({
+            creativeStatus: "failed",
+            creativeError: error instanceof Error ? error.message.slice(0, 500) : "Queue failed",
+            creativeUpdatedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(and(eq(socialPosts.tenantId, tenantId), eq(socialPosts.jobId, input.jobId)));
+        throw error;
+      }
+    }),
+
+  socialImageJobStatus: tenantProcedure
+    .input(z.object({ imageJobId: z.string().uuid(), postJobId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const job = await getSocialImageJobStatus(input.imageJobId);
+      if (!job) return { state: "missing" as const, failedReason: null };
+      if (job.tenantId !== ctx.tenantCtx.tenantId || job.postJobId !== input.postJobId) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Image job not found." });
+      }
+      return { state: job.state, failedReason: null };
     }),
 
   // Generate an AI image for a completed post on demand.
@@ -652,8 +678,7 @@ export const contentRouter = router({
       if (!env.REPLICATE_API_TOKEN) {
         throw new TRPCError({
           code: "PRECONDITION_FAILED",
-          message:
-            "AI photo generation is not configured in this environment. Add REPLICATE_API_TOKEN in Vercel, or use Create graphic for a branded social image.",
+          message: "AI photo generation is not available right now. Try a branded design instead.",
         });
       }
 
@@ -675,7 +700,7 @@ export const contentRouter = router({
       z.object({
         jobId: z.string().uuid(),
         editInstruction: z.string().min(5).max(500),
-        aspectRatio: aiImageAspectRatioSchema.default("1:1"),
+        aspectRatio: aiImageEditAspectRatioSchema.default("match_input_image"),
       }),
     )
     .mutation(async ({ ctx, input }) => {

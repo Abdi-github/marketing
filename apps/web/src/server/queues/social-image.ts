@@ -32,3 +32,34 @@ export async function enqueueSocialImageJob(
     await queue.close();
   }
 }
+
+export async function getSocialImageJobStatus(jobId: string): Promise<{
+  state: string;
+  failedReason: string | null;
+  tenantId: string | null;
+  postJobId: string | null;
+} | null> {
+  const connection = new IORedis(env.REDIS_URL, {
+    maxRetriesPerRequest: 2,
+    enableReadyCheck: false,
+    connectTimeout: 5000,
+    commandTimeout: 8000,
+  });
+  const queue = new Queue(SOCIAL_IMAGE_QUEUE_NAME, {
+    connection,
+    defaultJobOptions: DEFAULT_JOB_OPTIONS,
+  });
+  try {
+    const job = await queue.getJob(jobId);
+    if (!job) return null;
+    const data = job.data as { tenantId?: unknown; postJobId?: unknown };
+    return {
+      state: await job.getState(),
+      failedReason: job.failedReason || null,
+      tenantId: typeof data.tenantId === "string" ? data.tenantId : null,
+      postJobId: typeof data.postJobId === "string" ? data.postJobId : null,
+    };
+  } finally {
+    await queue.close();
+  }
+}

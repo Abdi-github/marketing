@@ -44,10 +44,26 @@ export async function storeGeneratedBinaryAsset(
   input: StoreGeneratedBinaryAssetInput,
 ): Promise<{ storageKey: string }> {
   if (hasScalewayStorageConfig()) {
-    return putScalewayObject(input);
+    try {
+      return await putScalewayObject(input);
+    } catch (error) {
+      if (env.NODE_ENV !== "production" && isObjectStorageAuthorizationError(error)) {
+        logger.warn(
+          { key: input.key },
+          "[media-storage] Scaleway rejected the upload; using local development storage",
+        );
+        return storeLocalPublicAsset(input);
+      }
+      throw error;
+    }
   }
 
   return storeLocalPublicAsset(input);
+}
+
+function isObjectStorageAuthorizationError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /Scaleway object upload failed \((401|403)\)/.test(message);
 }
 
 function hasScalewayStorageConfig(): boolean {

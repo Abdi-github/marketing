@@ -15,7 +15,10 @@ import type { TenantContext } from "@marketing/tenancy";
 import { and, eq, sql } from "drizzle-orm";
 import type { Job } from "bullmq";
 import { UnrecoverableError, Worker } from "bullmq";
-import { ingestRemoteImageToMediaAsset } from "../../lib/media-assets";
+import {
+  ingestRemoteImageToMediaAsset,
+  resolveMediaAssetForImageInput,
+} from "../../lib/media-assets";
 import { connection } from "./queue";
 
 function planCacheKey(tenantId: string): string {
@@ -132,26 +135,42 @@ export async function handleSocialImageJob(job: Job<SocialImageJob>): Promise<vo
   }
 
   const provider = createReplicateProvider(env.REPLICATE_API_TOKEN);
-  const result = await provider.generateImage(
-    {
-      prompt: data.prompt,
-      aspectRatio: data.aspectRatio,
-      inputImageUrl:
-        data.action === "edit" ? (data.inputImageUrl ?? post.imageUrl ?? undefined) : undefined,
-      preferredModelId: data.action === "generate" ? REPLICATE_MODEL_FLUX_2_PRO : undefined,
-      allowedModelIds:
-        data.action === "generate"
-          ? [
-              REPLICATE_MODEL_FLUX_2_PRO,
-              REPLICATE_MODEL_NANO_BANANA_2,
-              "google/imagen-4",
-              "ideogram-ai/ideogram-v3-turbo",
-              "black-forest-labs/flux-1.1-pro",
-            ]
-          : undefined,
-    },
-    { tenantId: data.tenantId, jobId: data.idempotencyKey },
-  );
+  const inputImageUrl =
+    data.action === "edit"
+      ? await resolveMediaAssetForImageInput({
+          tenantId: data.tenantId,
+          imageUrl: data.inputImageUrl ?? post.imageUrl!,
+        })
+      : undefined;
+
+  let result: Awaited<ReturnType<typeof provider.generateImage>>;
+  try {
+    result = await provider.generateImage(
+      {
+        prompt: data.prompt,
+        aspectRatio: data.aspectRatio,
+        inputImageUrl,
+        preferredModelId: data.action === "generate" ? REPLICATE_MODEL_FLUX_2_PRO : undefined,
+        allowedModelIds:
+          data.action === "generate"
+            ? [
+                REPLICATE_MODEL_FLUX_2_PRO,
+                REPLICATE_MODEL_NANO_BANANA_2,
+                "google/imagen-4",
+                "ideogram-ai/ideogram-v3-turbo",
+                "black-forest-labs/flux-1.1-pro",
+              ]
+            : undefined,
+      },
+      { tenantId: data.tenantId, jobId: data.idempotencyKey },
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/Replicate API error 4\d\d:/.test(message) && !/Replicate API error 429:/.test(message)) {
+      throw new UnrecoverableError("The image provider rejected the generation request.");
+    }
+    throw error;
+  }
 
   if (result.costUsd * 100 > Math.min(data.costBudgetCents, planCaps.perJobBudgetCents)) {
     throw new Error(
@@ -172,13 +191,22 @@ export async function handleSocialImageJob(job: Job<SocialImageJob>): Promise<vo
   });
   await incrementMonthlySpend(data.tenantId, result.costUsd);
 
-  const durableImage = await ingestRemoteImageToMediaAsset({
-    tenantId: data.tenantId,
-    scope: "social-creative",
-    sourceUrl: result.url,
-    originalFilenameBase: `social-post-${data.postJobId}`,
-    storageKeyPrefix: `generated/social-images/${data.tenantId}`,
-  });
+  let durableImage: Awaited<ReturnType<typeof ingestRemoteImageToMediaAsset>>;
+  try {
+    durableImage = await ingestRemoteImageToMediaAsset({
+      tenantId: data.tenantId,
+      scope: "social-creative",
+      sourceUrl: result.url,
+      originalFilenameBase: `social-post-${data.postJobId}`,
+      storageKeyPrefix: `${data.tenantId}/generated/social-images`,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/Scaleway object upload failed \((401|403)\)/.test(message)) {
+      throw new UnrecoverableError("Object storage rejected the generated image upload.");
+    }
+    throw error;
+  }
 
   await db
     .update(socialPosts)
