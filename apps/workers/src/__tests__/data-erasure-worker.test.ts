@@ -11,6 +11,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("bullmq", () => ({
   Worker: vi.fn().mockImplementation(() => ({ on: vi.fn() })),
+  Queue: vi.fn().mockImplementation(() => ({ add: vi.fn(), on: vi.fn() })),
 }));
 
 vi.mock("ioredis", () => ({
@@ -142,8 +143,9 @@ describe("handleDataErasureJob — full erasure flow", () => {
   it("anonymizes user email and name", async () => {
     await handleDataErasureJob(makeJob());
     const userUpdate = updatedValues.find(
-      (v) => typeof (v as Record<string, unknown>).email === "string" &&
-              ((v as Record<string, unknown>).email as string).endsWith("@deleted.invalid"),
+      (v) =>
+        typeof (v as Record<string, unknown>).email === "string" &&
+        ((v as Record<string, unknown>).email as string).endsWith("@deleted.invalid"),
     );
     expect(userUpdate).toBeDefined();
     expect(userUpdate?.name).toBe("DELETED");

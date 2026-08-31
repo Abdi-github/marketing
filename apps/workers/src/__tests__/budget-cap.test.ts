@@ -19,7 +19,7 @@ vi.mock("ioredis", () => ({
   default: vi.fn().mockImplementation(() => ({
     ping: vi.fn(),
     on: vi.fn(),
-    get: vi.fn().mockResolvedValue(null),     // Redis miss → DB fallback
+    get: vi.fn().mockResolvedValue(null), // Redis miss → DB fallback
     set: vi.fn().mockResolvedValue("OK"),
     incrbyfloat: vi.fn().mockResolvedValue("0.0004"),
     expire: vi.fn().mockResolvedValue(1),
@@ -64,8 +64,10 @@ vi.mock("@marketing/ai-router", () => ({
 
 vi.mock("@marketing/billing", () => ({
   getPlanCaps: vi.fn((plan: string) => {
-    if (plan === "trial") return { monthlyAiBudgetUsd: 1.0, perJobBudgetCents: 50, displayName: "Trial" };
-    if (plan === "starter") return { monthlyAiBudgetUsd: 10.0, perJobBudgetCents: 50, displayName: "Starter" };
+    if (plan === "trial")
+      return { monthlyAiBudgetUsd: 1.0, perJobBudgetCents: 50, displayName: "Trial" };
+    if (plan === "starter")
+      return { monthlyAiBudgetUsd: 10.0, perJobBudgetCents: 50, displayName: "Starter" };
     return { monthlyAiBudgetUsd: 40.0, perJobBudgetCents: 50, displayName: "Growth" };
   }),
   monthlyBudgetKey: vi.fn().mockReturnValue("budget:monthly:t1:2026-05"),
@@ -84,6 +86,13 @@ vi.mock("@marketing/shared", () => ({
     OTEL_SERVICE_NAME: "test",
   },
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+  recordMetric: vi.fn(),
+  hashId: (id: string) => `hashed:${id}`,
+  TENANT_LIFECYCLE_EVENTS: {
+    FIRST_POST_EMITTED: "tenant.first_post_emitted",
+    FIRST_PAID_AT: "tenant.first_paid_at",
+    CHURNED: "tenant.churned",
+  },
 }));
 
 let _selectCall = 0;
@@ -111,18 +120,22 @@ vi.mock("@marketing/db", () => ({
         onConflictDoNothing: vi.fn().mockReturnValue({
           returning: vi.fn().mockResolvedValue([{ id: "usage-id-001" }]),
         }),
+        onConflictDoUpdate: vi.fn().mockResolvedValue([]),
       }),
     }),
     update: vi.fn().mockReturnValue({
       set: vi.fn().mockReturnValue({
-        where: vi.fn().mockResolvedValue([]),
+        where: vi.fn().mockReturnValue({
+          returning: vi.fn().mockResolvedValue([]),
+        }),
       }),
     }),
   },
   aiUsage: { jobId: {}, tenantId: {}, createdAt: {} },
-  socialPosts: { jobId: {}, tenantId: {} },
-  tenants: {},
+  socialPosts: { jobId: {}, tenantId: {}, status: {}, createdAt: {} },
+  tenants: { id: {}, firstPostAt: {} },
   outbox: {},
+  tenantMetricsDaily: { tenantId: {}, dayDate: {}, postsGenerated: {} },
 }));
 
 vi.mock("drizzle-orm", () => ({
@@ -130,6 +143,7 @@ vi.mock("drizzle-orm", () => ({
   and: vi.fn().mockReturnValue({}),
   sql: vi.fn().mockReturnValue({}),
   gte: vi.fn().mockReturnValue({}),
+  isNull: vi.fn().mockReturnValue({}),
 }));
 
 // ─── Import handler after mocks ───────────────────────────────────────────────
